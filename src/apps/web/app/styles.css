@@ -136,3 +136,118 @@ main {
   font-weight: 700;
   margin-bottom: 18px;
 }
+
+.workspace {
+  max-width: 1240px;
+}
+
+.hero.compact h1 {
+  font-size: clamp(34px, 5vw, 52px);
+}
+
+.two-column {
+  align-items: start;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) 340px;
+}
+
+.summary-grid,
+.choice-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
+.label {
+  color: var(--muted);
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.choice,
+.primary-button {
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.choice {
+  background: #fff;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  text-align: left;
+}
+
+.choice span {
+  color: var(--muted);
+}
+
+.choice.selected {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(36, 87, 214, 0.12);
+}
+
+.primary-button {
+  background: var(--blue);
+  border: 0;
+  color: white;
+  font-weight: 700;
+  padding: 10px 14px;
+  width: fit-content;
+}
+
+.primary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.checklist {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  padding: 0;
+}
+
+.checklist li {
+  color: var(--muted);
+}
+
+.checklist li.complete {
+  color: var(--green);
+  font-weight: 700;
+}
+
+.warning-panel {
+  border-color: #f0c36d;
+}
+
+.checkbox-row {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.result-box {
+  background: #eef4ff;
+  border: 1px solid #c9d8ff;
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.error-text {
+  color: #b42318;
+  font-weight: 700;
+}
+
+@media (max-width: 860px) {
+  .two-column {
+    grid-template-columns: 1fr;
+  }
+}

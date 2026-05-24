@@ -1,5 +1,5 @@
-import { DemoPage } from "../../components/DemoPage";
+import { ProviderDocumentationWizard } from "../../components/provider-documentation/ProviderDocumentationWizard";
 
 export default function ProviderDocumentationPage() {
-  return <DemoPage slug="provider-documentation" />;
+  return <ProviderDocumentationWizard />;
 }
