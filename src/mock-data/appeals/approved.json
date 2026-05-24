@@ -1,0 +1,19 @@
+{
+  "evaluationType": "appeals_packet_quality",
+  "submitter": {
+    "type": "appeals_delegate",
+    "id": "summit-appeals-ops"
+  },
+  "requestObject": {
+    "appealId": "synthetic-appeal-8831",
+    "packetSubmittedWithinSla": true,
+    "requiredDocumentsPresent": true,
+    "clinicalRationaleIncluded": true,
+    "policyCitationIncluded": true,
+    "evidenceIndexComplete": true,
+    "qualityAuditPassed": true,
+    "appealOutcomeUsed": false,
+    "costSavingsMetricUsed": false,
+    "containsPhi": false
+  }
+}

@@ -9,11 +9,18 @@
 
 # Node modules and dependency files
 /node_modules/
-/package-lock.json
 /yarn.lock
+/pnpm-lock.yaml
+
+# Next.js
+/.next/
+src/apps/web/.next/
+src/apps/web/out/
+.superpowers/
 
 # Environment files
 /.env
+/.env.local
 
 # Angular CLI and build artefacts
 /.angular-cli.json

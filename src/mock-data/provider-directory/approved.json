@@ -1,0 +1,18 @@
+{
+  "evaluationType": "provider_directory_quality",
+  "submitter": {
+    "type": "roster_vendor",
+    "id": "clearpath-rosters"
+  },
+  "requestObject": {
+    "rosterBatchId": "synthetic-roster-2026-06",
+    "submittedBeforeDeadline": true,
+    "npiValidationPassed": true,
+    "tinValidationPassed": true,
+    "addressValidationPassed": true,
+    "specialtyValidationPassed": true,
+    "referralVolumeMetricUsed": false,
+    "networkSteeringMetricUsed": false,
+    "containsPhi": false
+  }
+}

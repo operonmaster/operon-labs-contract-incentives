@@ -1,0 +1,15 @@
+{
+  "evaluationType": "delegate_um_sla_bonus",
+  "submitter": {
+    "type": "delegate_vendor",
+    "id": "northstar-um"
+  },
+  "requestObject": {
+    "caseId": "synthetic-pa-10492",
+    "completedWithinSla": true,
+    "documentationComplete": true,
+    "qualityAuditPassed": true,
+    "denialOutcomeUsed": false,
+    "containsPhi": false
+  }
+}

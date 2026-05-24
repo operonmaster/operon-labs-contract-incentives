@@ -1,0 +1,23 @@
+id: provider-documentation-completeness-v1
+evaluationType: provider_documentation_completeness
+currency: USDC
+submitterRules:
+  allowedSubmitterTypes:
+    - provider_admin_team
+  allowedSubmitters:
+    - lakeside-provider-admin
+  walletMap:
+    lakeside-provider-admin: "0.0.23456"
+requiredEvidence:
+  - caseId
+  - attachmentChecklistComplete
+  - submittedBeforeInitialDecision
+  - fhirFieldsPresent
+  - approvalOutcomeUsed
+  - referralVolumeMetricUsed
+  - containsPhi
+paymentFormula:
+  baseAmount: 3
+  maxPerRequest: 3
+  monthlyCap: 300
+requiresHumanApproval: true

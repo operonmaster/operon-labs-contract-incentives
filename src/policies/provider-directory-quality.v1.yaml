@@ -1,0 +1,25 @@
+id: provider-directory-quality-v1
+evaluationType: provider_directory_quality
+currency: HBAR
+submitterRules:
+  allowedSubmitterTypes:
+    - roster_vendor
+  allowedSubmitters:
+    - clearpath-rosters
+  walletMap:
+    clearpath-rosters: "0.0.34567"
+requiredEvidence:
+  - rosterBatchId
+  - submittedBeforeDeadline
+  - npiValidationPassed
+  - tinValidationPassed
+  - addressValidationPassed
+  - specialtyValidationPassed
+  - referralVolumeMetricUsed
+  - networkSteeringMetricUsed
+  - containsPhi
+paymentFormula:
+  baseAmount: 4
+  maxPerRequest: 4
+  monthlyCap: 400
+requiresHumanApproval: true

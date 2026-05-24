@@ -1,0 +1,26 @@
+id: appeals-packet-quality-v1
+evaluationType: appeals_packet_quality
+currency: USDC
+submitterRules:
+  allowedSubmitterTypes:
+    - appeals_delegate
+  allowedSubmitters:
+    - summit-appeals-ops
+  walletMap:
+    summit-appeals-ops: "0.0.54321"
+requiredEvidence:
+  - appealId
+  - packetSubmittedWithinSla
+  - requiredDocumentsPresent
+  - clinicalRationaleIncluded
+  - policyCitationIncluded
+  - evidenceIndexComplete
+  - qualityAuditPassed
+  - appealOutcomeUsed
+  - costSavingsMetricUsed
+  - containsPhi
+paymentFormula:
+  baseAmount: 6
+  maxPerRequest: 6
+  monthlyCap: 600
+requiresHumanApproval: true

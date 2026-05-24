@@ -1,0 +1,36 @@
+{
+  "name": "operon-labs-contract-incentives",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Policy-gated healthcare operations incentives demo using Hedera Agent Kit.",
+  "type": "module",
+  "workspaces": [
+    "src/apps/web",
+    "src/packages/*"
+  ],
+  "scripts": {
+    "dev": "npm --workspace @operon-labs/web run dev",
+    "build": "npm --workspace @operon-labs/web run build",
+    "lint": "npm --workspace @operon-labs/web run lint",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit -p tsconfig.json && npm --workspace @operon-labs/web run typecheck"
+  },
+  "dependencies": {
+    "yaml": "2.9.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@types/node": "25.9.1",
+    "@types/react": "19.2.15",
+    "@types/react-dom": "19.2.3",
+    "eslint": "^9.39.4",
+    "eslint-config-next": "16.2.6",
+    "typescript": "6.0.3",
+    "vitest": "4.1.7"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}
