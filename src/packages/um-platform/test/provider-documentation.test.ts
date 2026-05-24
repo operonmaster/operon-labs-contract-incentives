@@ -92,6 +92,28 @@ describe("provider documentation UM Platform", () => {
     });
   });
 
+  it("does not let returned PAS events mutate stored events", () => {
+    const platform = createInMemoryUmPlatform();
+    platform.submitPriorAuth({
+      serviceCode: "knee_mri",
+      dtr: {
+        symptomDurationConfirmed: true,
+        conservativeTherapyConfirmed: true,
+        examFindingsConfirmed: true,
+        clinicalNoteAttached: true
+      }
+    });
+
+    platform.listEvents()[0]!.caseId = "synthetic-pa-mutated";
+
+    expect(platform.listEvents()).toEqual([
+      {
+        eventType: "PAS_SUBMITTED",
+        caseId: "synthetic-pa-20931"
+      }
+    ]);
+  });
+
   it("submits full-body wellness MRI with denial reason and zero-eligible evidence", () => {
     const platform = createInMemoryUmPlatform();
     platform.submitPriorAuth({
@@ -128,6 +150,12 @@ describe("provider documentation UM Platform", () => {
       referralVolumeMetricUsed: false,
       containsPhi: false
     });
+  });
+
+  it("returns null for missing case evidence", () => {
+    const platform = createInMemoryUmPlatform();
+
+    expect(platform.getEvidence("synthetic-pa-missing")).toBeNull();
   });
 
   it("does not let returned prior auth records mutate stored evidence", () => {

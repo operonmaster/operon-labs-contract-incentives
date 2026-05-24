@@ -73,7 +73,7 @@ export interface UmPlatform {
   submitPriorAuth(input: PriorAuthSubmissionInput): PriorAuthRecord;
   listPriorAuths(): PriorAuthRecord[];
   listEvents(): PasSubmittedEvent[];
-  getEvidence(caseId: string): ProviderDocumentationEvidence;
+  getEvidence(caseId: string): ProviderDocumentationEvidence | null;
 }
 
 const kneeMriRequirements: CoverageRequirements = {
@@ -158,13 +158,13 @@ export function createInMemoryUmPlatform(): UmPlatform {
       return [...records.values()].map(copyPriorAuthRecord);
     },
     listEvents() {
-      return [...events];
+      return events.map(copyPasSubmittedEvent);
     },
     getEvidence(caseId) {
       const record = records.get(caseId);
 
       if (!record) {
-        throw new Error(`Prior auth case not found: ${caseId}`);
+        return null;
       }
 
       const dtrTemplateCompleted = record.serviceCode === "knee_mri" ? isCompleteDtr(record.dtr) : false;
@@ -192,6 +192,10 @@ export function createInMemoryUmPlatform(): UmPlatform {
       };
     }
   };
+}
+
+function copyPasSubmittedEvent(event: PasSubmittedEvent): PasSubmittedEvent {
+  return { ...event };
 }
 
 function copyPriorAuthRecord(record: PriorAuthRecord): PriorAuthRecord {
