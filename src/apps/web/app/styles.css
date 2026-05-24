@@ -120,6 +120,11 @@ main {
   color: var(--amber);
 }
 
+.status.pending {
+  background: #eef4ff;
+  color: var(--blue);
+}
+
 .mono {
   background: #101828;
   border-radius: 8px;
@@ -268,5 +273,130 @@ main {
 @media (max-width: 860px) {
   .two-column {
     grid-template-columns: 1fr;
+  }
+}
+
+.toolbar {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.toolbar p {
+  margin: 6px 0 0;
+}
+
+.secondary-button {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  color: var(--blue);
+}
+
+.table-wrap {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow-x: auto;
+  width: 100%;
+}
+
+.worklist {
+  border-collapse: collapse;
+  min-width: 980px;
+  width: 100%;
+}
+
+.worklist th,
+.worklist td {
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+  line-height: 1.45;
+  padding: 12px 14px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.worklist th {
+  background: #f1f5fb;
+  color: #344054;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.worklist tbody tr {
+  cursor: pointer;
+}
+
+.worklist tbody tr:hover,
+.worklist tbody tr.selected {
+  background: #eef4ff;
+}
+
+.worklist tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.mono-cell {
+  font-family: "SFMono-Regular", Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+
+.detail-panel {
+  margin-top: 18px;
+}
+
+.detail-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  margin: 0;
+}
+
+.detail-grid div {
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.detail-grid dt {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+
+.detail-grid dd {
+  margin: 0;
+}
+
+.action-status {
+  background: #eef4ff;
+  border: 1px solid #c9d8ff;
+  border-radius: 8px;
+  color: #1d3f95;
+  font-weight: 700;
+  margin: 0;
+  padding: 12px;
+}
+
+.empty-state {
+  color: var(--muted);
+  margin: 0;
+}
+
+@media (max-width: 680px) {
+  .toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .toolbar .primary-button {
+    width: 100%;
   }
 }
