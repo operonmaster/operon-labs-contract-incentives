@@ -16,6 +16,7 @@
     "paths": {
       "@operon-labs/policy-engine": ["src/packages/policy-engine/src/index.ts"],
       "@operon-labs/incentive-agent": ["src/packages/incentive-agent/src/index.ts"],
+      "@operon-labs/um-platform": ["src/packages/um-platform/src/index.ts"],
       "@operon-labs/hedera-executor": ["src/packages/hedera-executor/src/index.ts"],
       "@operon-labs/audit-log": ["src/packages/audit-log/src/index.ts"]
     }
