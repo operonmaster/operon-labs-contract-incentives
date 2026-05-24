@@ -36,11 +36,14 @@ Open two browser pages:
 
 Demo sequence:
 
-1. In the provider portal, submit `Knee MRI after injury`.
-2. In the plan console, refresh events and review the eligible `3 USDC` incentive row.
-3. Approve the testnet payment and inspect the audit/transaction details.
-4. Return to the provider portal and submit `Full-body wellness MRI screening` after acknowledging the not-covered warning.
-5. In the plan console, refresh events and review the `0 USDC` not-eligible row with `BENEFIT_NOT_COVERED`.
+1. In the provider portal, select `Maya Chen`, `Acme Health PPO`, and `Knee MRI after injury`.
+2. Check requirements, complete the assessment, and submit the prior authorization.
+3. In the plan console, refresh events and review the eligible `3 USDC` incentive row.
+4. Approve the testnet payment and inspect the audit/transaction details.
+5. Return to the provider portal and submit a second `Knee MRI after injury` request, but skip the assessment.
+6. In the plan console, refresh events and review the `0 USDC` not-eligible row with missing documentation reasons.
+7. Return to the provider portal and submit `Full-body wellness MRI screening` after acknowledging the not-covered warning.
+8. In the plan console, refresh events and review the `0 USDC` not-eligible row with `BENEFIT_NOT_COVERED`.
 
 ## API Routes
 
