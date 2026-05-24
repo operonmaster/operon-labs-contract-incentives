@@ -21,6 +21,33 @@ export interface ServiceOptionContent {
   details: string[];
 }
 
+export type AssessmentAnswerValue = "yes" | "no";
+export type AssessmentAnswerMap = Partial<Record<string, AssessmentAnswerValue>>;
+
+export interface AssessmentAnswerOption {
+  value: AssessmentAnswerValue;
+  label: string;
+}
+
+export interface AssessmentQuestionContent {
+  id: string;
+  prompt: string;
+  helper: string;
+  answerOptions: AssessmentAnswerOption[];
+}
+
+export interface AssessmentAnswerSummary {
+  answeredCount: number;
+  totalCount: number;
+  allAnswered: boolean;
+  supportsMedicalNecessity: boolean;
+}
+
+const yesNoAnswerOptions: AssessmentAnswerOption[] = [
+  { value: "yes", label: "Yes" },
+  { value: "no", label: "No" }
+];
+
 export const wizardSteps: WizardStepContent[] = [
   { id: "setup", label: "Patient & Plan" },
   { id: "service", label: "Service" },
@@ -70,9 +97,54 @@ export const serviceOptions: Record<ServiceCode, ServiceOptionContent> = {
   }
 };
 
-export const assessmentQuestions = [
-  "Has a knee x-ray been completed or reviewed for this episode of care?",
-  "Was there an acute twisting injury, direct trauma, or persistent focal knee pain?",
-  "Are there objective exam findings such as effusion, instability, locking, or a positive meniscal test?",
-  "Has conservative treatment been attempted, or are acute mechanical findings documented?"
+export const assessmentQuestions: AssessmentQuestionContent[] = [
+  {
+    id: "knee_xray",
+    prompt: "Has a knee x-ray report been completed or reviewed for this episode of care?",
+    helper: "Most knee MRI policies expect initial radiographs or a documented reason they are not useful.",
+    answerOptions: yesNoAnswerOptions
+  },
+  {
+    id: "clinical_indication",
+    prompt: "Is the requested MRI for acute traumatic knee pain or persistent focal knee pain after initial evaluation?",
+    helper: "This separates a diagnostic knee MRI from generalized or screening imaging.",
+    answerOptions: yesNoAnswerOptions
+  },
+  {
+    id: "mechanical_symptoms",
+    prompt: "Does the chart document mechanical symptoms such as locking, catching, instability, or inability to fully extend the knee?",
+    helper: "Mechanical symptoms support suspected meniscal, ligament, or internal derangement pathology.",
+    answerOptions: yesNoAnswerOptions
+  },
+  {
+    id: "objective_exam",
+    prompt:
+      "Does the exam document objective findings such as joint effusion, joint-line tenderness, positive McMurray/Apley, or ligament laxity testing?",
+    helper: "Plans commonly look for physical exam findings rather than pain alone.",
+    answerOptions: yesNoAnswerOptions
+  },
+  {
+    id: "treatment_or_surgical_planning",
+    prompt: "Has conservative treatment failed, or is the MRI needed for surgical planning after an acute injury?",
+    helper: "Conservative care or surgical planning is a common branch in knee MRI medical-necessity review.",
+    answerOptions: yesNoAnswerOptions
+  },
+  {
+    id: "clinical_documentation",
+    prompt: "Is the clinical note or encounter documentation available to support these answers?",
+    helper: "The PA can be submitted without it, but the documentation-completeness incentive should not pass.",
+    answerOptions: yesNoAnswerOptions
+  }
 ];
+
+export function summarizeAssessmentAnswers(answers: AssessmentAnswerMap): AssessmentAnswerSummary {
+  const answeredCount = assessmentQuestions.filter((question) => answers[question.id] !== undefined).length;
+  const allAnswered = answeredCount === assessmentQuestions.length;
+
+  return {
+    answeredCount,
+    totalCount: assessmentQuestions.length,
+    allAnswered,
+    supportsMedicalNecessity: allAnswered && assessmentQuestions.every((question) => answers[question.id] === "yes")
+  };
+}

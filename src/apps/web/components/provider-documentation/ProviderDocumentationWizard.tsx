@@ -4,9 +4,12 @@ import type { DtrAnswers, PriorAuthRecord, ServiceCode } from "@operon-labs/um-p
 import Link from "next/link";
 import { useRef, useState } from "react";
 import {
+  summarizeAssessmentAnswers,
   assessmentQuestions,
   serviceOptions,
   stepContextByStep,
+  type AssessmentAnswerMap,
+  type AssessmentAnswerValue,
   type PortalStep,
   wizardSteps
 } from "./provider-portal-content";
@@ -14,7 +17,7 @@ import {
 /* eslint-disable no-unused-vars -- Callback parameter names document select and checkbox values. */
 type PatientId = "patient-maya-chen";
 type PlanId = "acme-health-ppo";
-type AssessmentStatus = "not_required" | "not_started" | "complete" | "skipped";
+type AssessmentStatus = "not_required" | "not_started" | "complete" | "incomplete" | "skipped";
 
 const completeDtr: DtrAnswers = {
   symptomDurationConfirmed: true,
@@ -35,12 +38,14 @@ export function ProviderDocumentationWizard() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [assessmentModalOpen, setAssessmentModalOpen] = useState(false);
+  const [assessmentAnswers, setAssessmentAnswers] = useState<AssessmentAnswerMap>({});
   const submitRequestRef = useRef(0);
   const selectedPathRef = useRef("");
 
   const selectedPath = `${patientId ?? ""}:${planId ?? ""}:${serviceCode ?? ""}`;
   const currentStepIndex = wizardSteps.findIndex((candidate) => candidate.id === step);
   const service = serviceCode ? serviceOptions[serviceCode] : null;
+  const assessmentSummary = summarizeAssessmentAnswers(assessmentAnswers);
   const isKneeMri = serviceCode === "knee_mri";
   const isFullBody = serviceCode === "full_body_wellness_mri";
   const context = submitted
@@ -59,6 +64,7 @@ export function ProviderDocumentationWizard() {
   function resetAfterService() {
     setRequirementsChecked(false);
     setAssessmentStatus("not_started");
+    setAssessmentAnswers({});
     setAcknowledgedNotCovered(false);
     setSubmitted(null);
     setError(null);
@@ -103,7 +109,11 @@ export function ProviderDocumentationWizard() {
   }
 
   function saveAssessment() {
-    setAssessmentStatus("complete");
+    if (!assessmentSummary.allAnswered) {
+      return;
+    }
+
+    setAssessmentStatus(assessmentSummary.supportsMedicalNecessity ? "complete" : "incomplete");
     setAssessmentModalOpen(false);
     setSubmitted(null);
     setError(null);
@@ -111,7 +121,15 @@ export function ProviderDocumentationWizard() {
 
   function skipAssessment() {
     setAssessmentStatus("skipped");
+    setAssessmentAnswers({});
     setAssessmentModalOpen(false);
+    setSubmitted(null);
+    setError(null);
+  }
+
+  function answerAssessmentQuestion(questionId: string, value: AssessmentAnswerValue) {
+    setAssessmentAnswers((currentAnswers) => ({ ...currentAnswers, [questionId]: value }));
+    setAssessmentStatus("not_started");
     setSubmitted(null);
     setError(null);
   }
@@ -133,6 +151,7 @@ export function ProviderDocumentationWizard() {
     setServiceCode(null);
     setRequirementsChecked(false);
     setAssessmentStatus("not_started");
+    setAssessmentAnswers({});
     setAcknowledgedNotCovered(false);
     setSubmitted(null);
     setSubmitting(false);
@@ -277,30 +296,87 @@ export function ProviderDocumentationWizard() {
       </section>
 
       {assessmentModalOpen ? (
-        <div className="modal-backdrop" role="presentation">
-          <section aria-modal="true" className="modal" role="dialog" aria-labelledby="assessment-title">
-            <h2 id="assessment-title">Knee MRI medical necessity assessment</h2>
-            <p>Confirm the documentation that supports this imaging request, or skip and submit with incomplete documentation.</p>
-            <div className="assessment-list">
-              {assessmentQuestions.map((item) => (
-                <label key={item} className="checkbox-row">
-                  <input checked readOnly type="checkbox" />
-                  {item}
-                </label>
-              ))}
-            </div>
-            <div className="button-row">
-              <button className="primary-button" type="button" onClick={saveAssessment}>
-                Save assessment
-              </button>
-              <button className="primary-button secondary-button" type="button" onClick={skipAssessment}>
-                Skip assessment
-              </button>
-            </div>
-          </section>
-        </div>
+        <AssessmentModal
+          answers={assessmentAnswers}
+          summary={assessmentSummary}
+          onAnswerChange={answerAssessmentQuestion}
+          onSave={saveAssessment}
+          onSkip={skipAssessment}
+        />
       ) : null}
     </main>
+  );
+}
+
+function AssessmentModal({
+  answers,
+  summary,
+  onAnswerChange,
+  onSave,
+  onSkip
+}: {
+  answers: AssessmentAnswerMap;
+  summary: ReturnType<typeof summarizeAssessmentAnswers>;
+  onAnswerChange: (questionId: string, value: AssessmentAnswerValue) => void;
+  onSave: () => void;
+  onSkip: () => void;
+}) {
+  const unansweredCount = summary.totalCount - summary.answeredCount;
+  const progressClassName = summary.allAnswered ? (summary.supportsMedicalNecessity ? "complete" : "warning") : "";
+  const progressText = summary.allAnswered
+    ? summary.supportsMedicalNecessity
+      ? "All answers support medical necessity for this demo policy."
+      : "One or more answers are No. The PA can still be submitted, but documentation is incomplete."
+    : `Answer ${unansweredCount} more ${unansweredCount === 1 ? "question" : "questions"} to save the assessment.`;
+
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <section aria-modal="true" className="modal assessment-modal" role="dialog" aria-labelledby="assessment-title">
+        <h2 id="assessment-title">Knee MRI medical necessity assessment</h2>
+        <p>Answer each payer-requested documentation question. These answers determine whether the request has complete supporting documentation.</p>
+        <ol className="assessment-list">
+          {assessmentQuestions.map((question, index) => (
+            <li key={question.id} className="assessment-question">
+              <fieldset>
+                <legend>
+                  <span className="question-number">{index + 1}</span>
+                  <span>{question.prompt}</span>
+                </legend>
+                <p>{question.helper}</p>
+                <div className="radio-group">
+                  {question.answerOptions.map((answerOption) => (
+                    <label
+                      key={answerOption.value}
+                      className={`radio-card ${answers[question.id] === answerOption.value ? "selected" : ""}`}
+                    >
+                      <input
+                        checked={answers[question.id] === answerOption.value}
+                        name={`assessment-${question.id}`}
+                        type="radio"
+                        value={answerOption.value}
+                        onChange={() => onAnswerChange(question.id, answerOption.value)}
+                      />
+                      <span>{answerOption.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            </li>
+          ))}
+        </ol>
+        <p className={`assessment-progress ${progressClassName}`}>
+          {summary.answeredCount} of {summary.totalCount} answered. {progressText}
+        </p>
+        <div className="button-row">
+          <button className="primary-button" disabled={!summary.allAnswered} type="button" onClick={onSave}>
+            Save assessment
+          </button>
+          <button className="primary-button secondary-button" type="button" onClick={onSkip}>
+            Skip assessment
+          </button>
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -482,6 +558,9 @@ function ReviewStep({
       {assessmentStatus === "skipped" ? (
         <p className="action-status warning-copy">Assessment was skipped. The request can still be submitted, but supporting documentation is incomplete.</p>
       ) : null}
+      {assessmentStatus === "incomplete" ? (
+        <p className="action-status warning-copy">Assessment includes at least one No answer. The request can still be submitted, but supporting documentation is incomplete.</p>
+      ) : null}
       {serviceCode === "full_body_wellness_mri" && acknowledgedNotCovered ? (
         <p className="action-status warning-copy">The request will be submitted with a not-covered benefit reason.</p>
       ) : null}
@@ -559,6 +638,8 @@ function formatAssessmentStatus(status: AssessmentStatus) {
   switch (status) {
     case "complete":
       return "Complete";
+    case "incomplete":
+      return "Incomplete";
     case "skipped":
       return "Skipped";
     case "not_required":

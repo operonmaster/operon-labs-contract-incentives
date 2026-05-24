@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  summarizeAssessmentAnswers,
   assessmentQuestions,
   serviceOptions,
   stepContextByStep,
+  type AssessmentAnswerMap,
   wizardSteps
 } from "./provider-portal-content";
 
@@ -26,11 +28,37 @@ describe("provider portal content", () => {
   });
 
   it("uses medical-necessity-oriented assessment questions for knee MRI", () => {
-    expect(assessmentQuestions).toEqual([
-      "Has a knee x-ray been completed or reviewed for this episode of care?",
-      "Was there an acute twisting injury, direct trauma, or persistent focal knee pain?",
-      "Are there objective exam findings such as effusion, instability, locking, or a positive meniscal test?",
-      "Has conservative treatment been attempted, or are acute mechanical findings documented?"
+    expect(assessmentQuestions).toHaveLength(6);
+    expect(assessmentQuestions.map((question) => question.prompt)).toEqual([
+      "Has a knee x-ray report been completed or reviewed for this episode of care?",
+      "Is the requested MRI for acute traumatic knee pain or persistent focal knee pain after initial evaluation?",
+      "Does the chart document mechanical symptoms such as locking, catching, instability, or inability to fully extend the knee?",
+      "Does the exam document objective findings such as joint effusion, joint-line tenderness, positive McMurray/Apley, or ligament laxity testing?",
+      "Has conservative treatment failed, or is the MRI needed for surgical planning after an acute injury?",
+      "Is the clinical note or encounter documentation available to support these answers?"
     ]);
+    expect(assessmentQuestions.every((question) => question.answerOptions.map((answer) => answer.value).join("/") === "yes/no")).toBe(true);
+  });
+
+  it("summarizes complete and incomplete assessment answers", () => {
+    const allYes: AssessmentAnswerMap = Object.fromEntries(assessmentQuestions.map((question) => [question.id, "yes"]));
+    const oneNo: AssessmentAnswerMap = { ...allYes, clinical_documentation: "no" };
+
+    expect(summarizeAssessmentAnswers({})).toMatchObject({
+      answeredCount: 0,
+      totalCount: assessmentQuestions.length,
+      allAnswered: false,
+      supportsMedicalNecessity: false
+    });
+    expect(summarizeAssessmentAnswers(allYes)).toMatchObject({
+      answeredCount: assessmentQuestions.length,
+      allAnswered: true,
+      supportsMedicalNecessity: true
+    });
+    expect(summarizeAssessmentAnswers(oneNo)).toMatchObject({
+      answeredCount: assessmentQuestions.length,
+      allAnswered: true,
+      supportsMedicalNecessity: false
+    });
   });
 });
