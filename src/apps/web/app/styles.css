@@ -480,6 +480,71 @@ main {
   gap: 7px;
 }
 
+.request-type-fieldset {
+  border: 0;
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+}
+
+.request-type-fieldset legend {
+  color: #344054;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 0;
+}
+
+.request-type-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.request-type-card {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  cursor: pointer;
+  display: grid;
+  gap: 6px;
+  min-height: 118px;
+  padding: 12px;
+  text-align: left;
+}
+
+.request-type-card strong,
+.request-type-card span,
+.request-type-card em {
+  display: block;
+}
+
+.request-type-card span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.request-type-card em {
+  color: var(--amber);
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.request-type-card.selected {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(36, 87, 214, 0.12);
+}
+
+.request-type-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .form-row span {
   color: #344054;
   font-size: 13px;
@@ -685,6 +750,25 @@ main {
   width: min(100%, 760px);
 }
 
+.plan-audit-modal {
+  max-height: calc(100vh - 40px);
+  max-width: 920px;
+  overflow: auto;
+  width: min(100%, 920px);
+}
+
+.modal-toolbar {
+  align-items: start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.modal-toolbar > div {
+  display: grid;
+  gap: 8px;
+}
+
 .modal h2,
 .modal p {
   margin: 0;
@@ -795,6 +879,10 @@ main {
   }
 
   .provider-stage-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .request-type-grid {
     grid-template-columns: 1fr;
   }
 
@@ -927,6 +1015,66 @@ main {
   gap: 12px;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   margin: 0;
+}
+
+.plan-audit-grid {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.policy-criteria-toggle {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
+.policy-criteria-toggle summary {
+  color: var(--op-blue-2);
+  cursor: pointer;
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.policy-criteria-table-wrap {
+  overflow-x: auto;
+}
+
+.policy-criteria-table {
+  border-collapse: collapse;
+  min-width: 760px;
+  width: 100%;
+}
+
+.policy-criteria-table th,
+.policy-criteria-table td {
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  padding: 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.policy-criteria-table th {
+  color: var(--muted);
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.policy-criteria-table strong,
+.policy-criteria-table span {
+  display: block;
+}
+
+.policy-criteria-table td > span:not(.status) {
+  color: var(--muted);
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+  margin-top: 4px;
 }
 
 .detail-grid div {
@@ -1112,6 +1260,7 @@ body {
 .service-card,
 .coverage-card,
 .confirmation-panel,
+.request-type-card,
 .readonly-fields div,
 .review-list div,
 .detail-grid div,
@@ -1292,6 +1441,7 @@ body {
 .primary-button:focus-visible,
 .row-action:focus-visible,
 .select-control:focus-visible,
+.request-type-card:focus-visible,
 .radio-card:focus-within {
   outline: 2px solid var(--op-blue-2);
   outline-offset: 2px;
@@ -1373,6 +1523,7 @@ body {
 }
 
 .form-row span,
+.request-type-fieldset legend,
 .worklist th,
 .readonly-fields dt,
 .review-list dt,
@@ -1464,6 +1615,21 @@ body {
 .radio-card {
   background: rgba(5, 8, 22, 0.64);
   border-color: var(--op-line);
+}
+
+.request-type-card {
+  background: rgba(5, 8, 22, 0.64);
+  border-color: var(--op-line);
+  color: var(--op-ink);
+}
+
+.request-type-card span {
+  color: var(--op-muted);
+}
+
+.request-type-card.selected {
+  border-color: var(--op-blue-2);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.16);
 }
 
 .radio-card.selected {

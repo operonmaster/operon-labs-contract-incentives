@@ -69,7 +69,10 @@ export function evaluateProviderDocumentationEvent(
     submitter: evidence.submitter,
     requestObject: {
       caseId: evidence.caseId,
+      requestType: evidence.requestType,
       serviceCode: evidence.serviceCode,
+      codingSystem: evidence.codingSystem,
+      billingCode: evidence.billingCode,
       crdCoverageChecked: evidence.crdCoverageChecked,
       crdCoveredBenefit: evidence.crdCoveredBenefit,
       dtrTemplateCompleted: evidence.dtrTemplateCompleted,
@@ -134,6 +137,7 @@ const demoPolicies: Record<string, IncentivePolicy> = {
     },
     requiredEvidence: [
       "caseId",
+      "requestType",
       "crdCoverageChecked",
       "crdCoveredBenefit",
       "dtrTemplateCompleted",
@@ -147,6 +151,12 @@ const demoPolicies: Record<string, IncentivePolicy> = {
       "containsPhi"
     ],
     approvalRules: [
+      {
+        field: "requestType",
+        operator: "in",
+        value: ["outpatient_service", "pharmacy_benefit"],
+        reasonCode: "REQUEST_TYPE_NOT_ELIGIBLE"
+      },
       { field: "crdCoverageChecked", operator: "equals", value: true, reasonCode: "CRD_COVERAGE_NOT_CHECKED" },
       { field: "crdCoveredBenefit", operator: "equals", value: true, reasonCode: "SERVICE_NOT_COVERED" },
       { field: "dtrTemplateCompleted", operator: "equals", value: true, reasonCode: "DTR_TEMPLATE_INCOMPLETE" },
@@ -233,7 +243,10 @@ const demoRequests: Record<string, EvaluationRequest> = {
     submitter: { type: "provider_admin_team", id: "lakeside-provider-admin" },
     requestObject: {
       caseId: "synthetic-pa-20931",
+      requestType: "outpatient_service",
       serviceCode: "knee_mri",
+      codingSystem: "CPT",
+      billingCode: "73721",
       crdCoverageChecked: true,
       crdCoveredBenefit: true,
       dtrTemplateCompleted: true,

@@ -9,6 +9,9 @@ describe("provider documentation UM Platform", () => {
   it("returns covered PA-required CRD requirements for knee MRI", () => {
     expect(getCoverageRequirements("knee_mri")).toMatchObject({
       serviceCode: "knee_mri",
+      requestType: "outpatient_service",
+      codingSystem: "CPT",
+      billingCode: "73721",
       coveredBenefit: true,
       priorAuthRequired: true,
       documentationTemplateId: "knee-mri-pa-dtr-v1",
@@ -19,6 +22,7 @@ describe("provider documentation UM Platform", () => {
   it("returns not-covered CRD requirements for full-body wellness MRI", () => {
     expect(getCoverageRequirements("full_body_wellness_mri")).toMatchObject({
       serviceCode: "full_body_wellness_mri",
+      requestType: "outpatient_service",
       coveredBenefit: false,
       priorAuthRequired: true,
       documentationTemplateId: null,
@@ -26,9 +30,35 @@ describe("provider documentation UM Platform", () => {
     });
   });
 
+  it("returns NDC-coded pharmacy benefit requirements for medication prior authorization", () => {
+    expect(getCoverageRequirements("wegovy_semaglutide")).toMatchObject({
+      serviceCode: "wegovy_semaglutide",
+      requestType: "pharmacy_benefit",
+      serviceLabel: "Wegovy (semaglutide) injection",
+      codingSystem: "NDC",
+      billingCode: "0169-4525-14",
+      coveredBenefit: true,
+      priorAuthRequired: true,
+      documentationTemplateId: "pharmacy-weight-management-pa-v1",
+      reasonCode: null
+    });
+  });
+
+  it("rejects request type and selected item mismatches", () => {
+    const platform = createInMemoryUmPlatform();
+
+    expect(() =>
+      platform.submitPriorAuth({
+        requestType: "pharmacy_benefit",
+        serviceCode: "knee_mri"
+      })
+    ).toThrow("REQUEST_TYPE_SERVICE_MISMATCH");
+  });
+
   it("requires acknowledgement before full-body wellness MRI submission", () => {
     const platform = createInMemoryUmPlatform();
     const input: PriorAuthSubmissionInput = {
+      requestType: "outpatient_service",
       serviceCode: "full_body_wellness_mri",
       acknowledgedNotCovered: false
     };
@@ -39,10 +69,11 @@ describe("provider documentation UM Platform", () => {
   it("allows knee MRI submission when assessment is skipped and exposes incomplete evidence", () => {
     const platform = createInMemoryUmPlatform();
 
-    const submitted = platform.submitPriorAuth({ serviceCode: "knee_mri" });
+    const submitted = platform.submitPriorAuth({ requestType: "outpatient_service", serviceCode: "knee_mri" });
 
     expect(submitted).toMatchObject({
       caseId: "synthetic-pa-20931",
+      requestType: "outpatient_service",
       serviceCode: "knee_mri",
       paResult: "submitted_pending",
       denialReason: null,
@@ -50,6 +81,7 @@ describe("provider documentation UM Platform", () => {
     });
     expect(platform.getEvidence("synthetic-pa-20931")).toMatchObject({
       serviceCode: "knee_mri",
+      requestType: "outpatient_service",
       crdCoveredBenefit: true,
       dtrTemplateCompleted: false,
       attachmentChecklistComplete: false,
@@ -63,6 +95,7 @@ describe("provider documentation UM Platform", () => {
     const platform = createInMemoryUmPlatform();
 
     platform.submitPriorAuth({
+      requestType: "outpatient_service",
       serviceCode: "knee_mri",
       dtr: {
         symptomDurationConfirmed: true,
@@ -83,6 +116,7 @@ describe("provider documentation UM Platform", () => {
     const platform = createInMemoryUmPlatform();
 
     const submitted = platform.submitPriorAuth({
+      requestType: "outpatient_service",
       serviceCode: "knee_mri",
       dtr: {
         symptomDurationConfirmed: true,
@@ -94,6 +128,7 @@ describe("provider documentation UM Platform", () => {
 
     expect(submitted).toMatchObject({
       caseId: "synthetic-pa-20931",
+      requestType: "outpatient_service",
       serviceCode: "knee_mri",
       paResult: "submitted_pending"
     });
@@ -105,6 +140,7 @@ describe("provider documentation UM Platform", () => {
     ]);
     expect(platform.getEvidence("synthetic-pa-20931")).toMatchObject({
       caseId: "synthetic-pa-20931",
+      requestType: "outpatient_service",
       serviceCode: "knee_mri",
       crdCoverageChecked: true,
       crdCoveredBenefit: true,
@@ -119,9 +155,42 @@ describe("provider documentation UM Platform", () => {
     });
   });
 
+  it("submits pharmacy benefit requests and exposes request-type evidence", () => {
+    const platform = createInMemoryUmPlatform();
+
+    const submitted = platform.submitPriorAuth({
+      requestType: "pharmacy_benefit",
+      serviceCode: "wegovy_semaglutide",
+      dtr: {
+        symptomDurationConfirmed: true,
+        conservativeTherapyConfirmed: true,
+        examFindingsConfirmed: true,
+        clinicalNoteAttached: true
+      }
+    });
+
+    expect(submitted).toMatchObject({
+      caseId: "synthetic-pa-20931",
+      requestType: "pharmacy_benefit",
+      serviceCode: "wegovy_semaglutide",
+      serviceLabel: "Wegovy (semaglutide) injection",
+      paResult: "submitted_pending"
+    });
+    expect(platform.getEvidence("synthetic-pa-20931")).toMatchObject({
+      requestType: "pharmacy_benefit",
+      serviceCode: "wegovy_semaglutide",
+      crdCoveredBenefit: true,
+      dtrTemplateCompleted: true,
+      attachmentChecklistComplete: true,
+      fhirFieldsPresent: true,
+      pasSubmitted: true
+    });
+  });
+
   it("does not let returned PAS events mutate stored events", () => {
     const platform = createInMemoryUmPlatform();
     platform.submitPriorAuth({
+      requestType: "outpatient_service",
       serviceCode: "knee_mri",
       dtr: {
         symptomDurationConfirmed: true,
@@ -144,6 +213,7 @@ describe("provider documentation UM Platform", () => {
   it("submits full-body wellness MRI with denial reason and zero-eligible evidence", () => {
     const platform = createInMemoryUmPlatform();
     platform.submitPriorAuth({
+      requestType: "outpatient_service",
       serviceCode: "knee_mri",
       dtr: {
         symptomDurationConfirmed: true,
@@ -154,18 +224,21 @@ describe("provider documentation UM Platform", () => {
     });
 
     const submitted = platform.submitPriorAuth({
+      requestType: "outpatient_service",
       serviceCode: "full_body_wellness_mri",
       acknowledgedNotCovered: true
     });
 
     expect(submitted).toMatchObject({
       caseId: "synthetic-pa-20932",
+      requestType: "outpatient_service",
       serviceCode: "full_body_wellness_mri",
       paResult: "denied_not_covered",
       denialReason: "BENEFIT_NOT_COVERED"
     });
     expect(platform.getEvidence("synthetic-pa-20932")).toMatchObject({
       serviceCode: "full_body_wellness_mri",
+      requestType: "outpatient_service",
       crdCoveredBenefit: false,
       dtrTemplateCompleted: false,
       attachmentChecklistComplete: false,
@@ -188,6 +261,7 @@ describe("provider documentation UM Platform", () => {
   it("does not let returned prior auth records mutate stored evidence", () => {
     const platform = createInMemoryUmPlatform();
     const submitted = platform.submitPriorAuth({
+      requestType: "outpatient_service",
       serviceCode: "knee_mri",
       dtr: {
         symptomDurationConfirmed: true,

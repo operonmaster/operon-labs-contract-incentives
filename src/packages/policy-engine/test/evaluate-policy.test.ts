@@ -91,4 +91,49 @@ describe("evaluatePolicy", () => {
       reasonCodes: ["SUBMITTER_NOT_ALLOWED", "WALLET_NOT_APPROVED"]
     });
   });
+
+  it("supports membership rules for request type eligibility", () => {
+    const policy: IncentivePolicy = {
+      ...basePolicy,
+      requiredEvidence: [...basePolicy.requiredEvidence, "requestType"],
+      approvalRules: [
+        ...basePolicy.approvalRules,
+        {
+          field: "requestType",
+          operator: "in",
+          value: ["outpatient_service", "pharmacy_benefit"],
+          reasonCode: "REQUEST_TYPE_NOT_ELIGIBLE"
+        }
+      ]
+    };
+
+    const approved = evaluatePolicy({
+      policy,
+      request: {
+        ...approvedRequest,
+        requestObject: {
+          ...approvedRequest.requestObject,
+          requestType: "pharmacy_benefit"
+        }
+      },
+      monthToDateAmount: 0
+    });
+    const blocked = evaluatePolicy({
+      policy,
+      request: {
+        ...approvedRequest,
+        requestObject: {
+          ...approvedRequest.requestObject,
+          requestType: "inpatient_admission"
+        }
+      },
+      monthToDateAmount: 0
+    });
+
+    expect(approved.reasonCodes).toEqual([]);
+    expect(blocked).toMatchObject({
+      decision: "blocked",
+      reasonCodes: expect.arrayContaining(["REQUEST_TYPE_NOT_ELIGIBLE"])
+    });
+  });
 });

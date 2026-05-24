@@ -9,6 +9,7 @@ describe("provider documentation API routes", () => {
       new Request("http://localhost/api/um/prior-auths", {
         method: "POST",
         body: JSON.stringify({
+          requestType: "outpatient_service",
           serviceCode: "knee_mri",
           dtr: {
             symptomDurationConfirmed: true,
@@ -37,7 +38,7 @@ describe("provider documentation API routes", () => {
     const submittedResponse = await submitPriorAuth(
       new Request("http://localhost/api/um/prior-auths", {
         method: "POST",
-        body: JSON.stringify({ serviceCode: "knee_mri" })
+        body: JSON.stringify({ requestType: "outpatient_service", serviceCode: "knee_mri" })
       })
     );
     const submitted = (await submittedResponse.json()) as { dtr: unknown; paResult: string };

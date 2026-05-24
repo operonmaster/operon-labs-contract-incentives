@@ -1,10 +1,15 @@
-export type ServiceCode = "knee_mri" | "full_body_wellness_mri";
+export type RequestType = "outpatient_service" | "pharmacy_benefit" | "inpatient_admission";
+export type ServiceCode = "knee_mri" | "full_body_wellness_mri" | "wegovy_semaglutide" | "humira_adalimumab";
+export type CodingSystem = "CPT" | "NDC";
 export type PaResult = "submitted_pending" | "denied_not_covered";
 export type PasEventType = "PAS_SUBMITTED";
 
 export interface CoverageRequirements {
+  requestType: RequestType;
   serviceCode: ServiceCode;
   serviceLabel: string;
+  codingSystem: CodingSystem;
+  billingCode: string;
   coveredBenefit: boolean;
   priorAuthRequired: boolean;
   documentationTemplateId: string | null;
@@ -20,6 +25,7 @@ export interface DtrAnswers {
 }
 
 export interface PriorAuthSubmissionInput {
+  requestType: RequestType;
   serviceCode: ServiceCode;
   dtr?: DtrAnswers;
   acknowledgedNotCovered?: boolean;
@@ -31,8 +37,11 @@ export interface PriorAuthRecord {
   patientDisplay: "Maya Chen";
   providerGroupId: "lakeside-provider-admin";
   providerGroupDisplay: "Lakeside Provider Admin";
+  requestType: RequestType;
   serviceCode: ServiceCode;
   serviceLabel: string;
+  codingSystem: CodingSystem;
+  billingCode: string;
   submittedAt: string;
   coverage: CoverageRequirements;
   dtr: DtrAnswers | null;
@@ -53,7 +62,10 @@ export interface ProviderDocumentationEvidence {
     type: "provider_admin_team";
     id: "lakeside-provider-admin";
   };
+  requestType: RequestType;
   serviceCode: ServiceCode;
+  codingSystem: CodingSystem;
+  billingCode: string;
   crdCoverageChecked: boolean;
   crdCoveredBenefit: boolean;
   dtrTemplateCompleted: boolean;
@@ -77,8 +89,11 @@ export interface UmPlatform {
 }
 
 const kneeMriRequirements: CoverageRequirements = {
+  requestType: "outpatient_service",
   serviceCode: "knee_mri",
   serviceLabel: "Knee MRI after injury",
+  codingSystem: "CPT",
+  billingCode: "73721",
   coveredBenefit: true,
   priorAuthRequired: true,
   documentationTemplateId: "knee-mri-pa-dtr-v1",
@@ -92,13 +107,52 @@ const kneeMriRequirements: CoverageRequirements = {
 };
 
 const fullBodyWellnessMriRequirements: CoverageRequirements = {
+  requestType: "outpatient_service",
   serviceCode: "full_body_wellness_mri",
   serviceLabel: "Full-body wellness MRI screening",
+  codingSystem: "CPT",
+  billingCode: "76498",
   coveredBenefit: false,
   priorAuthRequired: true,
   documentationTemplateId: null,
   requiredDocumentation: [],
   reasonCode: "BENEFIT_NOT_COVERED"
+};
+
+const wegovySemaglutideRequirements: CoverageRequirements = {
+  requestType: "pharmacy_benefit",
+  serviceCode: "wegovy_semaglutide",
+  serviceLabel: "Wegovy (semaglutide) injection",
+  codingSystem: "NDC",
+  billingCode: "0169-4525-14",
+  coveredBenefit: true,
+  priorAuthRequired: true,
+  documentationTemplateId: "pharmacy-weight-management-pa-v1",
+  requiredDocumentation: [
+    "diagnosis and indication",
+    "BMI or comorbidity criteria",
+    "prior therapy or lifestyle program documentation",
+    "clinical note attachment"
+  ],
+  reasonCode: null
+};
+
+const humiraAdalimumabRequirements: CoverageRequirements = {
+  requestType: "pharmacy_benefit",
+  serviceCode: "humira_adalimumab",
+  serviceLabel: "Humira (adalimumab) Pen",
+  codingSystem: "NDC",
+  billingCode: "0074-0554-02",
+  coveredBenefit: true,
+  priorAuthRequired: true,
+  documentationTemplateId: "specialty-biologic-pa-v1",
+  requiredDocumentation: [
+    "diagnosis and indication",
+    "prior therapy history",
+    "specialist note attachment",
+    "safety screening attestation"
+  ],
+  reasonCode: null
 };
 
 export function getCoverageRequirements(serviceCode: ServiceCode): CoverageRequirements {
@@ -107,6 +161,10 @@ export function getCoverageRequirements(serviceCode: ServiceCode): CoverageRequi
       return copyCoverageRequirements(kneeMriRequirements);
     case "full_body_wellness_mri":
       return copyCoverageRequirements(fullBodyWellnessMriRequirements);
+    case "wegovy_semaglutide":
+      return copyCoverageRequirements(wegovySemaglutideRequirements);
+    case "humira_adalimumab":
+      return copyCoverageRequirements(humiraAdalimumabRequirements);
     default:
       return assertNever(serviceCode);
   }
@@ -121,6 +179,14 @@ export function createInMemoryUmPlatform(): UmPlatform {
     submitPriorAuth(input) {
       const coverage = getCoverageRequirements(input.serviceCode);
 
+      if (input.requestType === "inpatient_admission") {
+        throw new Error("INPATIENT_ADMISSION_DORMANT");
+      }
+
+      if (input.requestType !== coverage.requestType) {
+        throw new Error("REQUEST_TYPE_SERVICE_MISMATCH");
+      }
+
       if (input.serviceCode === "full_body_wellness_mri" && input.acknowledgedNotCovered !== true) {
         throw new Error("NOT_COVERED_ACKNOWLEDGEMENT_REQUIRED");
       }
@@ -134,8 +200,11 @@ export function createInMemoryUmPlatform(): UmPlatform {
         patientDisplay: "Maya Chen",
         providerGroupId: "lakeside-provider-admin",
         providerGroupDisplay: "Lakeside Provider Admin",
+        requestType: input.requestType,
         serviceCode: input.serviceCode,
         serviceLabel: coverage.serviceLabel,
+        codingSystem: coverage.codingSystem,
+        billingCode: coverage.billingCode,
         submittedAt: new Date().toISOString(),
         coverage,
         dtr: copyDtrAnswers(input.dtr),
@@ -163,7 +232,7 @@ export function createInMemoryUmPlatform(): UmPlatform {
         return null;
       }
 
-      const dtrTemplateCompleted = record.serviceCode === "knee_mri" ? isCompleteDtr(record.dtr) : false;
+      const dtrTemplateCompleted = record.coverage.documentationTemplateId ? isCompleteDtr(record.dtr) : false;
 
       return {
         caseId: record.caseId,
@@ -171,7 +240,10 @@ export function createInMemoryUmPlatform(): UmPlatform {
           type: "provider_admin_team",
           id: "lakeside-provider-admin"
         },
+        requestType: record.requestType,
         serviceCode: record.serviceCode,
+        codingSystem: record.codingSystem,
+        billingCode: record.billingCode,
         crdCoverageChecked: true,
         crdCoveredBenefit: record.coverage.coveredBenefit,
         dtrTemplateCompleted,

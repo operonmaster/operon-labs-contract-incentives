@@ -4,6 +4,8 @@ import {
   canEditHealthPlan,
   summarizeAssessmentAnswers,
   assessmentQuestions,
+  requestTypeOptions,
+  serviceOptionsByRequestType,
   serviceOptions,
   stepContextByStep,
   type AssessmentAnswerMap,
@@ -28,6 +30,17 @@ describe("provider portal content", () => {
   });
 
   it("describes the service options with procedure codes and provider-facing detail", () => {
+    expect(requestTypeOptions.map((option) => option.label)).toEqual([
+      "Outpatient Service",
+      "Pharmacy Benefit",
+      "Inpatient Admission"
+    ]);
+    expect(requestTypeOptions.find((option) => option.id === "inpatient_admission")).toMatchObject({
+      enabled: false
+    });
+    expect(serviceOptionsByRequestType.outpatient_service).toEqual(["knee_mri", "full_body_wellness_mri"]);
+    expect(serviceOptionsByRequestType.pharmacy_benefit).toEqual(["wegovy_semaglutide", "humira_adalimumab"]);
+
     expect(serviceOptions.knee_mri).toMatchObject({
       label: "Knee MRI after injury",
       procedureCode: "CPT 73721",
@@ -37,6 +50,11 @@ describe("provider portal content", () => {
       label: "Full-body wellness MRI screening",
       procedureCode: "CPT 76498",
       procedureSummary: "Unlisted magnetic resonance procedure"
+    });
+    expect(serviceOptions.wegovy_semaglutide).toMatchObject({
+      label: "Wegovy (semaglutide) injection",
+      procedureCode: "NDC 0169-4525-14",
+      procedureSummary: "Glucagon-like peptide-1 receptor agonist"
     });
   });
 

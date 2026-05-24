@@ -26,6 +26,7 @@ describe("provider documentation workflow", () => {
     const workflow = createProviderDocumentationWorkflow();
 
     const submitted = await workflow.submitPriorAuth({
+      requestType: "outpatient_service",
       serviceCode: "knee_mri",
       dtr: {
         symptomDurationConfirmed: true,
@@ -52,9 +53,42 @@ describe("provider documentation workflow", () => {
     expect(rows[0]!.policyControls).toEqual(
       expect.arrayContaining([
         "Allowed submitter and recipient wallet",
+        "Request type limited to outpatient service or pharmacy benefit",
         "3 USDC max per PA request",
         "300 USDC monthly cap",
         "No PHI or prohibited outcome metrics"
+      ])
+    );
+    expect(rows[0]!.policyCriteria).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: "Request type is eligible",
+          expected: "Outpatient Service or Pharmacy Benefit",
+          actual: "Outpatient Service",
+          passed: true,
+          reasonCode: "REQUEST_TYPE_NOT_ELIGIBLE"
+        }),
+        expect.objectContaining({
+          label: "Recipient wallet is approved",
+          expected: "0.0.23456",
+          actual: "0.0.23456",
+          passed: true,
+          reasonCode: "WALLET_NOT_APPROVED"
+        }),
+        expect.objectContaining({
+          label: "Service is covered benefit",
+          expected: "true",
+          actual: "true",
+          passed: true,
+          reasonCode: "SERVICE_NOT_COVERED"
+        }),
+        expect.objectContaining({
+          label: "DTR assessment completed",
+          expected: "true",
+          actual: "true",
+          passed: true,
+          reasonCode: "DTR_TEMPLATE_INCOMPLETE"
+        })
       ])
     );
     expect(executePolicyBoundPaymentMock).toHaveBeenCalledTimes(1);
@@ -70,6 +104,7 @@ describe("provider documentation workflow", () => {
     });
 
     const submitted = await workflow.submitPriorAuth({
+      requestType: "outpatient_service",
       serviceCode: "knee_mri",
       dtr: {
         symptomDurationConfirmed: true,
@@ -87,6 +122,7 @@ describe("provider documentation workflow", () => {
     const workflow = createProviderDocumentationWorkflow();
 
     await workflow.submitPriorAuth({
+      requestType: "outpatient_service",
       serviceCode: "full_body_wellness_mri",
       acknowledgedNotCovered: true
     });
@@ -102,13 +138,68 @@ describe("provider documentation workflow", () => {
       reason: "Non-covered benefit"
     });
     expect(rows[0]!.transactionId).toBeNull();
+    expect(rows[0]!.policyCriteria).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: "Service is covered benefit",
+          expected: "true",
+          actual: "false",
+          passed: false,
+          reasonCode: "SERVICE_NOT_COVERED"
+        }),
+        expect.objectContaining({
+          label: "DTR assessment completed",
+          expected: "true",
+          actual: "false",
+          passed: false,
+          reasonCode: "DTR_TEMPLATE_INCOMPLETE"
+        })
+      ])
+    );
     expect(executePolicyBoundPaymentMock).not.toHaveBeenCalled();
+  });
+
+  it("submits pharmacy medication requests and settles eligible request-type policy payment", async () => {
+    const workflow = createProviderDocumentationWorkflow();
+
+    await workflow.submitPriorAuth({
+      requestType: "pharmacy_benefit",
+      serviceCode: "humira_adalimumab",
+      dtr: {
+        symptomDurationConfirmed: true,
+        conservativeTherapyConfirmed: true,
+        examFindingsConfirmed: true,
+        clinicalNoteAttached: true
+      }
+    });
+    const rows = await workflow.listIncentiveRows();
+
+    expect(rows[0]).toMatchObject({
+      requestType: "pharmacy_benefit",
+      serviceLabel: "Humira (adalimumab) Pen",
+      serviceCode: "humira_adalimumab",
+      incentiveStatus: "paid",
+      paymentStatus: "auto_executed"
+    });
+    expect(rows[0]!.policyCriteria).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: "Request type is eligible",
+          expected: "Outpatient Service or Pharmacy Benefit",
+          actual: "Pharmacy Benefit",
+          passed: true,
+          reasonCode: "REQUEST_TYPE_NOT_ELIGIBLE"
+        })
+      ])
+    );
+    expect(executePolicyBoundPaymentMock).toHaveBeenCalledTimes(1);
   });
 
   it("submits knee MRI with skipped assessment as zero-value blocked policy row", async () => {
     const workflow = createProviderDocumentationWorkflow();
 
     const submitted = await workflow.submitPriorAuth({
+      requestType: "outpatient_service",
       serviceCode: "knee_mri"
     });
     const rows = await workflow.listIncentiveRows();
@@ -135,6 +226,7 @@ describe("provider documentation workflow", () => {
     const workflow = createProviderDocumentationWorkflow();
 
     await workflow.submitPriorAuth({
+      requestType: "outpatient_service",
       serviceCode: "knee_mri",
       dtr: {
         symptomDurationConfirmed: true,
@@ -158,6 +250,7 @@ describe("provider documentation workflow", () => {
     const workflow = createProviderDocumentationWorkflow();
 
     await workflow.submitPriorAuth({
+      requestType: "outpatient_service",
       serviceCode: "knee_mri",
       dtr: {
         symptomDurationConfirmed: true,

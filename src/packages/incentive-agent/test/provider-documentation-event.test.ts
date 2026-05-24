@@ -7,6 +7,7 @@ describe("evaluateProviderDocumentationEvent", () => {
   it("pulls evidence by caseId and approves complete knee MRI documentation", () => {
     const platform = createInMemoryUmPlatform();
     const priorAuth = platform.submitPriorAuth({
+      requestType: "outpatient_service",
       serviceCode: "knee_mri",
       dtr: {
         symptomDurationConfirmed: true,
@@ -25,6 +26,7 @@ describe("evaluateProviderDocumentationEvent", () => {
     expect(getEvidence).toHaveBeenCalledWith("synthetic-pa-20931");
     expect(evaluation.request.requestObject).toMatchObject({
       caseId: "synthetic-pa-20931",
+      requestType: "outpatient_service",
       crdCoveredBenefit: true,
       dtrTemplateCompleted: true,
       pasSubmitted: true
@@ -41,6 +43,7 @@ describe("evaluateProviderDocumentationEvent", () => {
   it("blocks full-body wellness MRI with zero incentive", () => {
     const platform = createInMemoryUmPlatform();
     const priorAuth = platform.submitPriorAuth({
+      requestType: "outpatient_service",
       serviceCode: "full_body_wellness_mri",
       acknowledgedNotCovered: true
     });
@@ -60,6 +63,38 @@ describe("evaluateProviderDocumentationEvent", () => {
         "ATTACHMENT_CHECKLIST_INCOMPLETE",
         "FHIR_FIELDS_MISSING"
       ])
+    });
+  });
+
+  it("approves complete pharmacy benefit documentation when the request type is eligible", () => {
+    const platform = createInMemoryUmPlatform();
+    const priorAuth = platform.submitPriorAuth({
+      requestType: "pharmacy_benefit",
+      serviceCode: "humira_adalimumab",
+      dtr: {
+        symptomDurationConfirmed: true,
+        conservativeTherapyConfirmed: true,
+        examFindingsConfirmed: true,
+        clinicalNoteAttached: true
+      }
+    });
+
+    const evaluation = evaluateProviderDocumentationEvent(
+      { eventType: "PAS_SUBMITTED", caseId: priorAuth.caseId },
+      { getEvidenceByCaseId: platform.getEvidence, monthToDateAmount: 0 }
+    );
+
+    expect(evaluation.request.requestObject).toMatchObject({
+      caseId: "synthetic-pa-20931",
+      requestType: "pharmacy_benefit",
+      serviceCode: "humira_adalimumab",
+      crdCoveredBenefit: true,
+      dtrTemplateCompleted: true
+    });
+    expect(evaluation.result).toMatchObject({
+      decision: "approved",
+      amount: 3,
+      reasonCodes: []
     });
   });
 
@@ -91,7 +126,10 @@ describe("evaluateProviderDocumentationEvent", () => {
     const evidence = {
       caseId: "synthetic-pa-20931",
       submitter: { type: "provider_admin_team", id: "lakeside-provider-admin" },
+      requestType: "outpatient_service",
       serviceCode: "knee_mri",
+      codingSystem: "CPT",
+      billingCode: "73721",
       crdCoverageChecked: true,
       crdCoveredBenefit: true,
       dtrTemplateCompleted: true,

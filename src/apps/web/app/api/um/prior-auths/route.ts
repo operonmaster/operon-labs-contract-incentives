@@ -30,5 +30,13 @@ function isPriorAuthSubmissionInput(value: unknown): value is PriorAuthSubmissio
   }
 
   const candidate = value as Record<string, unknown>;
-  return candidate.serviceCode === "knee_mri" || candidate.serviceCode === "full_body_wellness_mri";
+  const validRequestType =
+    candidate.requestType === "outpatient_service" || candidate.requestType === "pharmacy_benefit";
+  const validServiceCode =
+    candidate.serviceCode === "knee_mri" ||
+    candidate.serviceCode === "full_body_wellness_mri" ||
+    candidate.serviceCode === "wegovy_semaglutide" ||
+    candidate.serviceCode === "humira_adalimumab";
+
+  return validRequestType && validServiceCode;
 }

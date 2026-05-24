@@ -8,18 +8,18 @@ export interface DemoScenario {
 
 export const demoScenarios: DemoScenario[] = [
   {
-    slug: "delegate-um",
-    title: "Delegate UM SLA Bonus",
-    submitter: "Delegated UM vendor",
-    purpose: "Reward timely, complete, audit-ready delegated utilization-management work.",
-    evaluationType: "delegate_um_sla_bonus"
-  },
-  {
     slug: "provider-documentation",
     title: "Provider Documentation Completeness",
     submitter: "Provider administrative team",
     purpose: "Reward complete prior-auth-ready documentation submitted before initial decision.",
     evaluationType: "provider_documentation_completeness"
+  },
+  {
+    slug: "delegate-um",
+    title: "Delegate UM SLA Bonus",
+    submitter: "Delegated UM vendor",
+    purpose: "Reward timely, complete, audit-ready delegated utilization-management work.",
+    evaluationType: "delegate_um_sla_bonus"
   },
   {
     slug: "appeals",

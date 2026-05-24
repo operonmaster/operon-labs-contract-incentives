@@ -19,7 +19,7 @@ export interface SubmitterRules {
 
 export interface ApprovalRule {
   field: string;
-  operator: "equals";
+  operator: "equals" | "in";
   value: unknown;
   reasonCode: string;
 }
@@ -88,6 +88,9 @@ export function evaluatePolicy(input: EvaluatePolicyInput): PolicyEvaluationResu
   for (const rule of policy.approvalRules) {
     const actual = request.requestObject[rule.field];
     if (rule.operator === "equals" && actual !== rule.value) {
+      reasonCodes.push(rule.reasonCode);
+    }
+    if (rule.operator === "in" && (!Array.isArray(rule.value) || !rule.value.includes(actual))) {
       reasonCodes.push(rule.reasonCode);
     }
   }
