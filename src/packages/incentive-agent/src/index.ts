@@ -4,12 +4,18 @@ import {
   type IncentivePolicy,
   type PolicyEvaluationResult
 } from "@operon-labs/policy-engine";
+import type { ProviderDocumentationEvidence, PasSubmittedEvent } from "@operon-labs/um-platform";
 
 export interface DemoEvaluation {
   request: EvaluationRequest;
   policy: IncentivePolicy;
   result: PolicyEvaluationResult;
   explanation: string;
+}
+
+export interface ProviderDocumentationEvaluationDependencies {
+  getEvidenceByCaseId: (caseId: string) => ProviderDocumentationEvidence | null;
+  monthToDateAmount?: number;
 }
 
 export function evaluateDemoScenario(evaluationType: string): DemoEvaluation {
@@ -40,6 +46,54 @@ export function explainDecision(result: PolicyEvaluationResult): string {
   }
 
   return `Policy ${result.policyId} blocked payment because ${result.reasonCodes.join(", ")}.`;
+}
+
+export function evaluateProviderDocumentationEvent(
+  event: PasSubmittedEvent | { eventType: string; caseId: string },
+  dependencies: ProviderDocumentationEvaluationDependencies
+): DemoEvaluation {
+  if (event.eventType !== "PAS_SUBMITTED") {
+    throw new Error("UNSUPPORTED_PROVIDER_DOCUMENTATION_EVENT");
+  }
+
+  const evidence = dependencies.getEvidenceByCaseId(event.caseId);
+  if (!evidence) {
+    throw new Error(`PROVIDER_DOCUMENTATION_EVIDENCE_NOT_FOUND:${event.caseId}`);
+  }
+
+  const policy = demoPolicies.provider_documentation_completeness;
+  const request: EvaluationRequest = {
+    evaluationType: "provider_documentation_completeness",
+    submitter: evidence.submitter,
+    requestObject: {
+      caseId: evidence.caseId,
+      serviceCode: evidence.serviceCode,
+      crdCoverageChecked: evidence.crdCoverageChecked,
+      crdCoveredBenefit: evidence.crdCoveredBenefit,
+      dtrTemplateCompleted: evidence.dtrTemplateCompleted,
+      attachmentChecklistComplete: evidence.attachmentChecklistComplete,
+      fhirFieldsPresent: evidence.fhirFieldsPresent,
+      pasSubmitted: evidence.pasSubmitted,
+      submittedBeforeInitialDecision: evidence.submittedBeforeInitialDecision,
+      paResultUsedForPositivePayment: evidence.paResultUsedForPositivePayment,
+      approvalOutcomeUsed: evidence.approvalOutcomeUsed,
+      referralVolumeMetricUsed: evidence.referralVolumeMetricUsed,
+      containsPhi: evidence.containsPhi
+    }
+  };
+
+  const result = evaluatePolicy({
+    policy,
+    request,
+    monthToDateAmount: dependencies.monthToDateAmount ?? 0
+  });
+
+  return {
+    request,
+    policy,
+    result,
+    explanation: explainDecision(result)
+  };
 }
 
 const demoPolicies: Record<string, IncentivePolicy> = {
@@ -76,11 +130,29 @@ const demoPolicies: Record<string, IncentivePolicy> = {
         "lakeside-provider-admin": "0.0.23456"
       }
     },
-    requiredEvidence: ["caseId", "attachmentChecklistComplete", "submittedBeforeInitialDecision", "fhirFieldsPresent", "approvalOutcomeUsed", "referralVolumeMetricUsed", "containsPhi"],
+    requiredEvidence: [
+      "caseId",
+      "crdCoverageChecked",
+      "crdCoveredBenefit",
+      "dtrTemplateCompleted",
+      "attachmentChecklistComplete",
+      "fhirFieldsPresent",
+      "pasSubmitted",
+      "submittedBeforeInitialDecision",
+      "paResultUsedForPositivePayment",
+      "approvalOutcomeUsed",
+      "referralVolumeMetricUsed",
+      "containsPhi"
+    ],
     approvalRules: [
+      { field: "crdCoverageChecked", operator: "equals", value: true, reasonCode: "CRD_COVERAGE_NOT_CHECKED" },
+      { field: "crdCoveredBenefit", operator: "equals", value: true, reasonCode: "SERVICE_NOT_COVERED" },
+      { field: "dtrTemplateCompleted", operator: "equals", value: true, reasonCode: "DTR_TEMPLATE_INCOMPLETE" },
       { field: "attachmentChecklistComplete", operator: "equals", value: true, reasonCode: "ATTACHMENT_CHECKLIST_INCOMPLETE" },
-      { field: "submittedBeforeInitialDecision", operator: "equals", value: true, reasonCode: "SUBMITTED_AFTER_INITIAL_DECISION" },
       { field: "fhirFieldsPresent", operator: "equals", value: true, reasonCode: "FHIR_FIELDS_MISSING" },
+      { field: "pasSubmitted", operator: "equals", value: true, reasonCode: "PAS_NOT_SUBMITTED" },
+      { field: "submittedBeforeInitialDecision", operator: "equals", value: true, reasonCode: "SUBMITTED_AFTER_INITIAL_DECISION" },
+      { field: "paResultUsedForPositivePayment", operator: "equals", value: false, reasonCode: "PROHIBITED_PA_RESULT_METRIC" },
       { field: "approvalOutcomeUsed", operator: "equals", value: false, reasonCode: "PROHIBITED_OUTCOME_METRIC" },
       { field: "referralVolumeMetricUsed", operator: "equals", value: false, reasonCode: "PROHIBITED_REFERRAL_VOLUME_METRIC" },
       { field: "containsPhi", operator: "equals", value: false, reasonCode: "PHI_BLOCKED" }
@@ -159,9 +231,15 @@ const demoRequests: Record<string, EvaluationRequest> = {
     submitter: { type: "provider_admin_team", id: "lakeside-provider-admin" },
     requestObject: {
       caseId: "synthetic-pa-20931",
+      serviceCode: "knee_mri",
+      crdCoverageChecked: true,
+      crdCoveredBenefit: true,
+      dtrTemplateCompleted: true,
       attachmentChecklistComplete: true,
-      submittedBeforeInitialDecision: true,
       fhirFieldsPresent: true,
+      pasSubmitted: true,
+      submittedBeforeInitialDecision: true,
+      paResultUsedForPositivePayment: false,
       approvalOutcomeUsed: false,
       referralVolumeMetricUsed: false,
       containsPhi: false
