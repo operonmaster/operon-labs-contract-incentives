@@ -2,6 +2,7 @@ import { createAuditRecord, type AuditRecord } from "@operon-labs/audit-log";
 import { executePolicyBoundPayment } from "@operon-labs/hedera-executor";
 import { evaluateProviderDocumentationEvent } from "@operon-labs/incentive-agent";
 import {
+  buildPasFhirBundle,
   createInMemoryUmPlatform,
   getCoverageRequirements,
   type PasSubmittedEvent,
@@ -12,6 +13,7 @@ import {
   type ServiceCode,
   type UmPlatform
 } from "@operon-labs/um-platform";
+import { createPasPersistenceStoreFromEnv, type PasPersistenceStore } from "./pas-persistence";
 
 export type IncentiveStatus = "not_eligible" | "paid" | "payment_failed";
 export type PaymentStatus = "auto_executed" | "blocked_by_policy" | "execution_failed";
@@ -52,20 +54,24 @@ export interface IncentiveWorklistRow {
 export interface ProviderDocumentationWorkflow {
   getCoverageRequirements: typeof getCoverageRequirements;
   submitPriorAuth(input: PriorAuthSubmissionInput): Promise<PriorAuthRecord>;
-  listPriorAuths(): PriorAuthRecord[];
-  getEvidence(caseId: string): ProviderDocumentationEvidence | null;
+  listPriorAuths(): Promise<PriorAuthRecord[]>;
+  getEvidence(caseId: string): Promise<ProviderDocumentationEvidence | null>;
   listIncentiveRows(): Promise<IncentiveWorklistRow[]>;
   getIncentiveRow(caseId: string): Promise<IncentiveWorklistRow | null>;
 }
 /* eslint-enable no-unused-vars */
 
-export function createProviderDocumentationWorkflow(platform: UmPlatform = createInMemoryUmPlatform()): ProviderDocumentationWorkflow {
+export function createProviderDocumentationWorkflow(
+  platform: UmPlatform = createInMemoryUmPlatform(),
+  persistence: PasPersistenceStore | undefined = createPasPersistenceStoreFromEnv()
+): ProviderDocumentationWorkflow {
   const rows = new Map<string, IncentiveWorklistRow>();
   const settlementsInFlight = new Map<string, Promise<IncentiveWorklistRow | null>>();
 
   async function processEvent(event: PasSubmittedEvent): Promise<IncentiveWorklistRow | null> {
-    const existing = rows.get(event.caseId);
+    const existing = rows.get(event.caseId) ?? (await persistence?.getIncentiveRow(event.caseId)) ?? null;
     if (existing) {
+      rows.set(event.caseId, existing);
       return existing;
     }
 
@@ -85,14 +91,21 @@ export function createProviderDocumentationWorkflow(platform: UmPlatform = creat
   }
 
   async function settleEvent(event: PasSubmittedEvent): Promise<IncentiveWorklistRow | null> {
-    const record = platform.listPriorAuths().find((candidate) => candidate.caseId === event.caseId);
+    const record =
+      (await persistence?.getPriorAuthRecord(event.caseId)) ??
+      platform.listPriorAuths().find((candidate) => candidate.caseId === event.caseId) ??
+      null;
     if (!record) {
+      return null;
+    }
+    const evidence = (await persistence?.getEvidence(event.caseId)) ?? platform.getEvidence(event.caseId);
+    if (!evidence) {
       return null;
     }
 
     const evaluation = evaluateProviderDocumentationEvent(
       event,
-      { getEvidenceByCaseId: platform.getEvidence, monthToDateAmount: 0 }
+      { getEvidenceByCaseId: () => evidence, monthToDateAmount: 0 }
     );
     const audit = createAuditRecord({
       request: evaluation.request,
@@ -124,6 +137,7 @@ export function createProviderDocumentationWorkflow(platform: UmPlatform = creat
 
     if (evaluation.result.decision !== "approved" || !evaluation.result.walletId) {
       rows.set(event.caseId, baseRow);
+      await persistence?.saveIncentiveRow(baseRow);
       return baseRow;
     }
 
@@ -148,6 +162,7 @@ export function createProviderDocumentationWorkflow(platform: UmPlatform = creat
       };
 
       rows.set(event.caseId, paid);
+      await persistence?.saveIncentiveRow(paid);
       return paid;
     } catch {
       const failed: IncentiveWorklistRow = {
@@ -159,12 +174,15 @@ export function createProviderDocumentationWorkflow(platform: UmPlatform = creat
       };
 
       rows.set(event.caseId, failed);
+      await persistence?.saveIncentiveRow(failed);
       return failed;
     }
   }
 
   async function processPlatformEvents(caseId?: string): Promise<void> {
-    for (const event of platform.listEvents()) {
+    const events = persistence ? await persistence.listPasEvents() : platform.listEvents();
+
+    for (const event of events) {
       if (!caseId || event.caseId === caseId) {
         try {
           await processEvent(event);
@@ -184,17 +202,34 @@ export function createProviderDocumentationWorkflow(platform: UmPlatform = creat
     getCoverageRequirements,
     async submitPriorAuth(input) {
       const record = platform.submitPriorAuth(input);
+      if (persistence) {
+        const evidence = platform.getEvidence(record.caseId);
+        if (!evidence) {
+          throw new Error("PAS_EVIDENCE_NOT_AVAILABLE");
+        }
+
+        await persistence?.savePriorAuth({
+          record,
+          evidence,
+          fhirBundle: buildPasFhirBundle(record, evidence)
+        });
+      }
       await processPlatformEvents(record.caseId);
       return record;
     },
-    listPriorAuths() {
-      return platform.listPriorAuths();
+    async listPriorAuths() {
+      return persistence ? persistence.listPriorAuthRecords() : platform.listPriorAuths();
     },
-    getEvidence(caseId) {
-      return platform.getEvidence(caseId);
+    async getEvidence(caseId) {
+      return (await persistence?.getEvidence(caseId)) ?? platform.getEvidence(caseId);
     },
     async listIncentiveRows() {
       await processPlatformEvents();
+      const persistedRows = (await persistence?.listIncentiveRows()) ?? [];
+      for (const row of persistedRows) {
+        rows.set(row.caseId, row);
+      }
+
       return Array.from(rows.values()).sort((left, right) => right.submittedAt.localeCompare(left.submittedAt));
     },
     getIncentiveRow

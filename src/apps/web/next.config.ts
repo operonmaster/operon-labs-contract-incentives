@@ -6,6 +6,8 @@ const appDirectory = path.dirname(fileURLToPath(import.meta.url));
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1"],
+  output: "standalone",
+  outputFileTracingRoot: path.resolve(appDirectory, "../../.."),
   turbopack: {
     root: path.resolve(appDirectory, "../../..")
   },

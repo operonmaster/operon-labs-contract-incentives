@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { providerDocumentationWorkflow } from "../../../../lib/provider-documentation-workflow";
 
 export async function GET() {
-  return NextResponse.json(providerDocumentationWorkflow.listPriorAuths());
+  return NextResponse.json(await providerDocumentationWorkflow.listPriorAuths());
 }
 
 export async function POST(request: Request) {
@@ -38,5 +38,31 @@ function isPriorAuthSubmissionInput(value: unknown): value is PriorAuthSubmissio
     candidate.serviceCode === "wegovy_semaglutide" ||
     candidate.serviceCode === "humira_adalimumab";
 
-  return validRequestType && validServiceCode;
+  const validDtrQuestionnaireResponse =
+    candidate.dtrQuestionnaireResponse === undefined || isDtrQuestionnaireResponse(candidate.dtrQuestionnaireResponse);
+
+  return validRequestType && validServiceCode && validDtrQuestionnaireResponse;
+}
+
+function isDtrQuestionnaireResponse(value: unknown): value is NonNullable<PriorAuthSubmissionInput["dtrQuestionnaireResponse"]> {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.questionnaireId === "string" &&
+    Array.isArray(candidate.answers) &&
+    candidate.answers.every((answer) => {
+      if (typeof answer !== "object" || answer === null) {
+        return false;
+      }
+
+      const candidateAnswer = answer as Record<string, unknown>;
+      return (
+        typeof candidateAnswer.questionId === "string" &&
+        (candidateAnswer.value === "yes" || candidateAnswer.value === "no")
+      );
+    })
+  );
 }

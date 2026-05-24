@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   createInMemoryUmPlatform,
+  getCrdServiceOptions,
   getCoverageRequirements,
+  getDtrQuestionnaire,
   type PriorAuthSubmissionInput
 } from "../src/index";
 
@@ -42,6 +44,44 @@ describe("provider documentation UM Platform", () => {
       documentationTemplateId: "pharmacy-weight-management-pa-v1",
       reasonCode: null
     });
+  });
+
+  it("returns CRD service options with provider portal display details", () => {
+    const options = getCrdServiceOptions();
+
+    expect(options.map((option) => option.serviceCode)).toEqual([
+      "knee_mri",
+      "full_body_wellness_mri",
+      "wegovy_semaglutide",
+      "humira_adalimumab"
+    ]);
+    expect(options.find((option) => option.serviceCode === "knee_mri")).toMatchObject({
+      serviceLabel: "Knee MRI after injury",
+      procedureCode: "CPT 73721",
+      procedureSummary: "MRI lower extremity joint without contrast",
+      details: expect.arrayContaining(["Prior authorization required"])
+    });
+  });
+
+  it("returns DTR questionnaires from the seeded assessment catalog without allowing mutation", () => {
+    const questionnaire = getDtrQuestionnaire("knee-mri-pa-dtr-v1");
+
+    expect(questionnaire).toMatchObject({
+      id: "knee-mri-pa-dtr-v1",
+      serviceCode: "knee_mri",
+      title: "Knee MRI medical necessity assessment",
+      questions: expect.arrayContaining([
+        expect.objectContaining({
+          id: "knee_xray",
+          prompt: "Has a knee x-ray report been completed or reviewed for this episode of care?"
+        })
+      ])
+    });
+    expect(questionnaire!.questions).toHaveLength(6);
+
+    questionnaire!.questions.length = 0;
+
+    expect(getDtrQuestionnaire("knee-mri-pa-dtr-v1")!.questions).toHaveLength(6);
   });
 
   it("rejects request type and selected item mismatches", () => {
@@ -152,6 +192,41 @@ describe("provider documentation UM Platform", () => {
       approvalOutcomeUsed: false,
       referralVolumeMetricUsed: false,
       containsPhi: false
+    });
+  });
+
+  it("stores DTR questionnaire responses and treats all answered questions as complete evidence", () => {
+    const platform = createInMemoryUmPlatform();
+
+    platform.submitPriorAuth({
+      requestType: "outpatient_service",
+      serviceCode: "knee_mri",
+      dtrQuestionnaireResponse: {
+        questionnaireId: "knee-mri-pa-dtr-v1",
+        answers: [
+          { questionId: "knee_xray", value: "yes" },
+          { questionId: "clinical_indication", value: "yes" },
+          { questionId: "mechanical_symptoms", value: "no" },
+          { questionId: "objective_exam", value: "yes" },
+          { questionId: "treatment_or_surgical_planning", value: "yes" },
+          { questionId: "clinical_documentation", value: "no" }
+        ]
+      }
+    });
+
+    expect(platform.listPriorAuths()[0]).toMatchObject({
+      dtrQuestionnaireResponse: {
+        questionnaireId: "knee-mri-pa-dtr-v1",
+        answers: expect.arrayContaining([
+          { questionId: "mechanical_symptoms", value: "no" },
+          { questionId: "clinical_documentation", value: "no" }
+        ])
+      }
+    });
+    expect(platform.getEvidence("synthetic-pa-20931")).toMatchObject({
+      dtrTemplateCompleted: true,
+      attachmentChecklistComplete: true,
+      fhirFieldsPresent: true
     });
   });
 

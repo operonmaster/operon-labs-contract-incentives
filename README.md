@@ -7,6 +7,7 @@ Policy-gated healthcare operations incentive demo for the Hedera hackathon. The 
 ```text
 docs/
   Operon_Labs_Contract_Incentives_Hedera_Bounty_Scope.md
+  standards/nextjs-standard.md
 src/
   apps/web/                  Next.js demo app and API routes
   mock-data/                 Demo payloads for each incentive workflow
@@ -58,9 +59,28 @@ Demo sequence:
 
 Provider-documentation incentives are triggered asynchronously after `PAS_SUBMITTED`. The agent receives only the PA `caseId`, pulls policy-safe evidence from the synthetic UM Platform, and records either an automatic testnet transaction or a zero-value policy block.
 
+## PAS Persistence
+
+Local development defaults to in-process memory. Deployed Cloud Run can persist PAS-style synthetic FHIR Bundles and plan-side incentive rows in Firestore:
+
+```bash
+PAS_STORE_BACKEND=firestore
+GCP_PROJECT_ID=operon-labs-nonprod
+FIRESTORE_DATABASE_ID=(default)
+```
+
+The Firestore adapter writes:
+
+- `pasRequests/{caseId}` with the prior-auth record, policy-safe evidence, and PAS-style FHIR `Bundle`.
+- `pasEvents/{caseId}-PAS_SUBMITTED` for async incentive processing.
+- `incentiveEvaluations/{caseId}` so policy payment outcomes are idempotent across Cloud Run restarts.
+
+Full FHIR bundles stay server-side. The incentive agent receives policy-safe evidence only.
+
 ## Local Development
 
 ```bash
+nvm use
 npm install
 npm run dev
 ```
@@ -73,3 +93,32 @@ npm run typecheck
 npm test
 npm run build
 ```
+
+## Container Build And Deployment
+
+The deployment assets follow the Operon platform webapp pattern:
+
+- `Dockerfile` builds a production Next.js standalone server for Cloud Run.
+- `Makefile` is the local/CI entrypoint for validation, image build, image push, and deploy.
+- `scripts/ci/deploy.sh` updates an existing Terraform-managed Cloud Run service with `--cpu-throttling`.
+- `cloudbuild-build.yaml` and `cloudbuild-deploy.yaml` mirror the build/deploy split used by Operon webapps.
+
+Build and push the initial image before applying the `operon-labs-infra` `web-app` layer:
+
+```bash
+make ci-build
+```
+
+That publishes all tags expected by the deployment flow, including the Terraform bootstrap tag:
+
+```text
+us-central1-docker.pkg.dev/operon-labs-nonprod/operon-labs-docker/contract-incentives-web:latest
+```
+
+After Terraform creates the Cloud Run service, deploy later revisions with:
+
+```bash
+make deploy
+```
+
+The deploy script intentionally fails if `contract-incentives-web` does not already exist, so service creation stays in Terraform.

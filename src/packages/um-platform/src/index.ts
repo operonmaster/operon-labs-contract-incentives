@@ -1,3 +1,10 @@
+import {
+  copyDtrQuestionnaireResponse,
+  getCrdCoverageRequirements,
+  isCompleteDtrQuestionnaireResponse,
+  type DtrQuestionnaireResponse
+} from "./crd-dtr";
+
 export type RequestType = "outpatient_service" | "pharmacy_benefit" | "inpatient_admission";
 export type ServiceCode = "knee_mri" | "full_body_wellness_mri" | "wegovy_semaglutide" | "humira_adalimumab";
 export type CodingSystem = "CPT" | "NDC";
@@ -28,6 +35,7 @@ export interface PriorAuthSubmissionInput {
   requestType: RequestType;
   serviceCode: ServiceCode;
   dtr?: DtrAnswers;
+  dtrQuestionnaireResponse?: DtrQuestionnaireResponse;
   acknowledgedNotCovered?: boolean;
 }
 
@@ -45,6 +53,7 @@ export interface PriorAuthRecord {
   submittedAt: string;
   coverage: CoverageRequirements;
   dtr: DtrAnswers | null;
+  dtrQuestionnaireResponse: DtrQuestionnaireResponse | null;
   pasSubmitted: true;
   submittedBeforeInitialDecision: boolean;
   paResult: PaResult;
@@ -88,86 +97,8 @@ export interface UmPlatform {
   getEvidence(caseId: string): ProviderDocumentationEvidence | null;
 }
 
-const kneeMriRequirements: CoverageRequirements = {
-  requestType: "outpatient_service",
-  serviceCode: "knee_mri",
-  serviceLabel: "Knee MRI after injury",
-  codingSystem: "CPT",
-  billingCode: "73721",
-  coveredBenefit: true,
-  priorAuthRequired: true,
-  documentationTemplateId: "knee-mri-pa-dtr-v1",
-  requiredDocumentation: [
-    "symptom duration",
-    "conservative therapy",
-    "physical exam findings",
-    "clinical note attachment"
-  ],
-  reasonCode: null
-};
-
-const fullBodyWellnessMriRequirements: CoverageRequirements = {
-  requestType: "outpatient_service",
-  serviceCode: "full_body_wellness_mri",
-  serviceLabel: "Full-body wellness MRI screening",
-  codingSystem: "CPT",
-  billingCode: "76498",
-  coveredBenefit: false,
-  priorAuthRequired: true,
-  documentationTemplateId: null,
-  requiredDocumentation: [],
-  reasonCode: "BENEFIT_NOT_COVERED"
-};
-
-const wegovySemaglutideRequirements: CoverageRequirements = {
-  requestType: "pharmacy_benefit",
-  serviceCode: "wegovy_semaglutide",
-  serviceLabel: "Wegovy (semaglutide) injection",
-  codingSystem: "NDC",
-  billingCode: "0169-4525-14",
-  coveredBenefit: true,
-  priorAuthRequired: true,
-  documentationTemplateId: "pharmacy-weight-management-pa-v1",
-  requiredDocumentation: [
-    "diagnosis and indication",
-    "BMI or comorbidity criteria",
-    "prior therapy or lifestyle program documentation",
-    "clinical note attachment"
-  ],
-  reasonCode: null
-};
-
-const humiraAdalimumabRequirements: CoverageRequirements = {
-  requestType: "pharmacy_benefit",
-  serviceCode: "humira_adalimumab",
-  serviceLabel: "Humira (adalimumab) Pen",
-  codingSystem: "NDC",
-  billingCode: "0074-0554-02",
-  coveredBenefit: true,
-  priorAuthRequired: true,
-  documentationTemplateId: "specialty-biologic-pa-v1",
-  requiredDocumentation: [
-    "diagnosis and indication",
-    "prior therapy history",
-    "specialist note attachment",
-    "safety screening attestation"
-  ],
-  reasonCode: null
-};
-
 export function getCoverageRequirements(serviceCode: ServiceCode): CoverageRequirements {
-  switch (serviceCode) {
-    case "knee_mri":
-      return copyCoverageRequirements(kneeMriRequirements);
-    case "full_body_wellness_mri":
-      return copyCoverageRequirements(fullBodyWellnessMriRequirements);
-    case "wegovy_semaglutide":
-      return copyCoverageRequirements(wegovySemaglutideRequirements);
-    case "humira_adalimumab":
-      return copyCoverageRequirements(humiraAdalimumabRequirements);
-    default:
-      return assertNever(serviceCode);
-  }
+  return getCrdCoverageRequirements(serviceCode);
 }
 
 export function createInMemoryUmPlatform(): UmPlatform {
@@ -208,6 +139,7 @@ export function createInMemoryUmPlatform(): UmPlatform {
         submittedAt: new Date().toISOString(),
         coverage,
         dtr: copyDtrAnswers(input.dtr),
+        dtrQuestionnaireResponse: copyDtrQuestionnaireResponse(input.dtrQuestionnaireResponse),
         pasSubmitted: true,
         submittedBeforeInitialDecision: true,
         paResult: coverage.coveredBenefit ? "submitted_pending" : "denied_not_covered",
@@ -232,35 +164,56 @@ export function createInMemoryUmPlatform(): UmPlatform {
         return null;
       }
 
-      const dtrTemplateCompleted = record.coverage.documentationTemplateId ? isCompleteDtr(record.dtr) : false;
-
-      return {
-        caseId: record.caseId,
-        submitter: {
-          type: "provider_admin_team",
-          id: "lakeside-provider-admin"
-        },
-        requestType: record.requestType,
-        serviceCode: record.serviceCode,
-        codingSystem: record.codingSystem,
-        billingCode: record.billingCode,
-        crdCoverageChecked: true,
-        crdCoveredBenefit: record.coverage.coveredBenefit,
-        dtrTemplateCompleted,
-        attachmentChecklistComplete: dtrTemplateCompleted,
-        fhirFieldsPresent: dtrTemplateCompleted,
-        pasSubmitted: record.pasSubmitted,
-        submittedBeforeInitialDecision: record.submittedBeforeInitialDecision,
-        paResult: record.paResult,
-        denialReason: record.denialReason,
-        paResultUsedForPositivePayment: false,
-        approvalOutcomeUsed: false,
-        referralVolumeMetricUsed: false,
-        containsPhi: false
-      };
+      return buildProviderDocumentationEvidence(record);
     }
   };
 }
+
+export function buildProviderDocumentationEvidence(record: PriorAuthRecord): ProviderDocumentationEvidence {
+  const dtrTemplateCompleted = record.coverage.documentationTemplateId
+    ? isCompleteDtr(record.dtr) ||
+      isCompleteDtrQuestionnaireResponse(record.dtrQuestionnaireResponse, record.coverage.documentationTemplateId)
+    : false;
+
+  return {
+    caseId: record.caseId,
+    submitter: {
+      type: "provider_admin_team",
+      id: "lakeside-provider-admin"
+    },
+    requestType: record.requestType,
+    serviceCode: record.serviceCode,
+    codingSystem: record.codingSystem,
+    billingCode: record.billingCode,
+    crdCoverageChecked: true,
+    crdCoveredBenefit: record.coverage.coveredBenefit,
+    dtrTemplateCompleted,
+    attachmentChecklistComplete: dtrTemplateCompleted,
+    fhirFieldsPresent: dtrTemplateCompleted,
+    pasSubmitted: record.pasSubmitted,
+    submittedBeforeInitialDecision: record.submittedBeforeInitialDecision,
+    paResult: record.paResult,
+    denialReason: record.denialReason,
+    paResultUsedForPositivePayment: false,
+    approvalOutcomeUsed: false,
+    referralVolumeMetricUsed: false,
+    containsPhi: false
+  };
+}
+
+export { buildPasFhirBundle, type PasFhirBundle } from "./pas-fhir";
+export {
+  getCrdServiceOption,
+  getCrdServiceOptions,
+  getDtrQuestionnaire,
+  type CrdServiceOption,
+  type DtrAnswerOption,
+  type DtrAnswerValue,
+  type DtrQuestion,
+  type DtrQuestionnaire,
+  type DtrQuestionnaireAnswer,
+  type DtrQuestionnaireResponse
+} from "./crd-dtr";
 
 function copyPasSubmittedEvent(event: PasSubmittedEvent): PasSubmittedEvent {
   return { ...event };
@@ -270,7 +223,8 @@ function copyPriorAuthRecord(record: PriorAuthRecord): PriorAuthRecord {
   return {
     ...record,
     coverage: copyCoverageRequirements(record.coverage),
-    dtr: copyDtrAnswers(record.dtr)
+    dtr: copyDtrAnswers(record.dtr),
+    dtrQuestionnaireResponse: copyDtrQuestionnaireResponse(record.dtrQuestionnaireResponse)
   };
 }
 
@@ -296,8 +250,4 @@ function isCompleteDtr(dtr: DtrAnswers | null | undefined): dtr is DtrAnswers {
     dtr.examFindingsConfirmed === true &&
     dtr.clinicalNoteAttached === true
   );
-}
-
-function assertNever(value: never): never {
-  throw new Error(`Unhandled service code: ${value}`);
 }

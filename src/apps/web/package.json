@@ -10,6 +10,7 @@
     "typecheck": "next typegen && tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@google-cloud/firestore": "8.6.0",
     "@operon-labs/audit-log": "0.1.0",
     "@operon-labs/hedera-executor": "0.1.0",
     "@operon-labs/incentive-agent": "0.1.0",

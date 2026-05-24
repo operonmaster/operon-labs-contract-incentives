@@ -1,18 +1,24 @@
 "use client";
 
-import type { DtrAnswers, PriorAuthRecord, RequestType, ServiceCode } from "@operon-labs/um-platform";
+import type {
+  CoverageRequirements,
+  CrdServiceOption,
+  DtrQuestion,
+  DtrQuestionnaire,
+  DtrQuestionnaireResponse,
+  PriorAuthRecord,
+  RequestType,
+  ServiceCode
+} from "@operon-labs/um-platform";
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { LabsHero, LabsPageShell } from "../labs-ui";
 import { UseCaseNavigation } from "./UseCaseNavigation";
 import {
   canContinueFromSetup,
   canEditHealthPlan,
-  getAssessmentQuestionsForService,
   summarizeAssessmentAnswers,
   requestTypeOptions,
-  serviceOptionsByRequestType,
-  serviceOptions,
   stepContextByStep,
   type AssessmentAnswerMap,
   type AssessmentAnswerValue,
@@ -25,13 +31,6 @@ type PatientId = "patient-maya-chen";
 type PlanId = "acme-health-ppo";
 type AssessmentStatus = "not_required" | "not_started" | "complete" | "skipped";
 
-const completeDtr: DtrAnswers = {
-  symptomDurationConfirmed: true,
-  conservativeTherapyConfirmed: true,
-  examFindingsConfirmed: true,
-  clinicalNoteAttached: true
-};
-
 export function ProviderDocumentationWizard() {
   const [step, setStep] = useState<PortalStep>("setup");
   const [patientId, setPatientId] = useState<PatientId | null>(null);
@@ -39,23 +38,33 @@ export function ProviderDocumentationWizard() {
   const [requestType, setRequestType] = useState<RequestType | null>(null);
   const [serviceCode, setServiceCode] = useState<ServiceCode | null>(null);
   const [requirementsChecked, setRequirementsChecked] = useState(false);
+  const [coverageRequirements, setCoverageRequirements] = useState<CoverageRequirements | null>(null);
+  const [crdServices, setCrdServices] = useState<CrdServiceOption[]>([]);
+  const [dtrQuestionnaire, setDtrQuestionnaire] = useState<DtrQuestionnaire | null>(null);
   const [assessmentStatus, setAssessmentStatus] = useState<AssessmentStatus>("not_started");
   const [acknowledgedNotCovered, setAcknowledgedNotCovered] = useState(false);
   const [submitted, setSubmitted] = useState<PriorAuthRecord | null>(null);
+  const [checkingRequirements, setCheckingRequirements] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [crdLoadError, setCrdLoadError] = useState<string | null>(null);
   const [assessmentModalOpen, setAssessmentModalOpen] = useState(false);
   const [assessmentAnswers, setAssessmentAnswers] = useState<AssessmentAnswerMap>({});
+  const coverageRequestRef = useRef(0);
   const submitRequestRef = useRef(0);
   const selectedPathRef = useRef("");
 
   const selectedPath = `${patientId ?? ""}:${planId ?? ""}:${requestType ?? ""}:${serviceCode ?? ""}`;
   const currentStepIndex = wizardSteps.findIndex((candidate) => candidate.id === step);
-  const service = serviceCode ? serviceOptions[serviceCode] : null;
-  const assessmentQuestionsForService = getAssessmentQuestionsForService(service);
+  const servicesByCode = useMemo(
+    () => new Map<ServiceCode, CrdServiceOption>(crdServices.map((candidate) => [candidate.serviceCode, candidate])),
+    [crdServices]
+  );
+  const service = serviceCode ? servicesByCode.get(serviceCode) ?? null : null;
+  const assessmentQuestionsForService = dtrQuestionnaire?.questions ?? [];
   const assessmentSummary = summarizeAssessmentAnswers(assessmentAnswers, assessmentQuestionsForService);
-  const requiresAssessment = Boolean(service && service.requestType !== "outpatient_service") || serviceCode === "knee_mri";
-  const isFullBody = serviceCode === "full_body_wellness_mri";
+  const requiresAssessment = Boolean(coverageRequirements?.documentationTemplateId);
+  const isNotCovered = coverageRequirements?.coveredBenefit === false;
   const context = submitted
     ? {
         title: "Submission received",
@@ -63,6 +72,39 @@ export function ProviderDocumentationWizard() {
         bullets: ["The provider portal workflow is complete.", "Plan-side incentives are evaluated outside this provider flow."]
       }
     : stepContextByStep[step];
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCrdServices() {
+      try {
+        const response = await fetch("/api/um/crd/service-options");
+        const payload = (await response.json()) as { services?: CrdServiceOption[]; error?: string };
+
+        if (cancelled) {
+          return;
+        }
+
+        if (!response.ok || !payload.services) {
+          setCrdLoadError(payload.error ?? "Unable to load plan service options");
+          return;
+        }
+
+        setCrdServices(payload.services);
+        setCrdLoadError(null);
+      } catch {
+        if (!cancelled) {
+          setCrdLoadError("Unable to load plan service options");
+        }
+      }
+    }
+
+    void loadCrdServices();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function resetAfterSetup() {
     setRequestType(null);
@@ -72,10 +114,13 @@ export function ProviderDocumentationWizard() {
 
   function resetAfterService() {
     setRequirementsChecked(false);
+    setCoverageRequirements(null);
+    setDtrQuestionnaire(null);
     setAssessmentStatus("not_started");
     setAssessmentAnswers({});
     setAcknowledgedNotCovered(false);
     setSubmitted(null);
+    setCheckingRequirements(false);
     setError(null);
     setAssessmentModalOpen(false);
   }
@@ -103,8 +148,10 @@ export function ProviderDocumentationWizard() {
   }
 
   function selectService(nextServiceCode: string) {
-    const availableServiceCodes = requestType && requestType !== "inpatient_admission" ? serviceOptionsByRequestType[requestType] : [];
-    const normalizedServiceCode = availableServiceCodes.includes(nextServiceCode as ServiceCode) ? (nextServiceCode as ServiceCode) : null;
+    const selectedService = crdServices.find(
+      (candidate) => candidate.serviceCode === nextServiceCode && candidate.requestType === requestType
+    );
+    const normalizedServiceCode = selectedService ? selectedService.serviceCode : null;
     setServiceCode(normalizedServiceCode);
     resetAfterService();
   }
@@ -115,17 +162,74 @@ export function ProviderDocumentationWizard() {
     }
   }
 
-  function checkCoverageAndRequirements() {
+  async function checkCoverageAndRequirements() {
     if (!requestType || !serviceCode) {
       return;
     }
 
-    setRequirementsChecked(true);
-    setAssessmentStatus(serviceCode === "full_body_wellness_mri" ? "not_required" : "not_started");
+    const requestId = coverageRequestRef.current + 1;
+    coverageRequestRef.current = requestId;
+    selectedPathRef.current = selectedPath;
+    setCheckingRequirements(true);
+    setRequirementsChecked(false);
+    setCoverageRequirements(null);
+    setDtrQuestionnaire(null);
+    setAssessmentStatus("not_started");
+    setAssessmentAnswers({});
     setAcknowledgedNotCovered(false);
     setSubmitted(null);
     setError(null);
-    setStep("coverage");
+
+    try {
+      const coverageResponse = await fetch(
+        `/api/um/crd/coverage-requirements?requestType=${encodeURIComponent(requestType)}&serviceCode=${encodeURIComponent(serviceCode)}`
+      );
+      const coveragePayload = (await coverageResponse.json()) as { requirements?: CoverageRequirements; error?: string };
+
+      if (coverageRequestRef.current !== requestId || selectedPathRef.current !== selectedPath) {
+        return;
+      }
+
+      if (!coverageResponse.ok || !coveragePayload.requirements) {
+        setError(coveragePayload.error ?? "Unable to check coverage requirements");
+        return;
+      }
+
+      const requirements = coveragePayload.requirements;
+      let nextQuestionnaire: DtrQuestionnaire | null = null;
+
+      if (requirements.documentationTemplateId) {
+        const questionnaireResponse = await fetch(
+          `/api/um/dtr/questionnaires/${encodeURIComponent(requirements.documentationTemplateId)}`
+        );
+        const questionnairePayload = (await questionnaireResponse.json()) as { questionnaire?: DtrQuestionnaire; error?: string };
+
+        if (coverageRequestRef.current !== requestId || selectedPathRef.current !== selectedPath) {
+          return;
+        }
+
+        if (!questionnaireResponse.ok || !questionnairePayload.questionnaire) {
+          setError(questionnairePayload.error ?? "Unable to load documentation assessment");
+          return;
+        }
+
+        nextQuestionnaire = questionnairePayload.questionnaire;
+      }
+
+      setCoverageRequirements(requirements);
+      setDtrQuestionnaire(nextQuestionnaire);
+      setAssessmentStatus(requirements.documentationTemplateId ? "not_started" : "not_required");
+      setRequirementsChecked(true);
+      setStep("coverage");
+    } catch {
+      if (coverageRequestRef.current === requestId && selectedPathRef.current === selectedPath) {
+        setError("Unable to check coverage requirements");
+      }
+    } finally {
+      if (coverageRequestRef.current === requestId) {
+        setCheckingRequirements(false);
+      }
+    }
   }
 
   function saveAssessment() {
@@ -161,7 +265,19 @@ export function ProviderDocumentationWizard() {
   }
 
   function canContinueToReview() {
-    return requirementsChecked && ((requiresAssessment && assessmentStatus !== "not_started") || (isFullBody && acknowledgedNotCovered));
+    if (!requirementsChecked || !coverageRequirements) {
+      return false;
+    }
+
+    if (requiresAssessment) {
+      return assessmentStatus !== "not_started";
+    }
+
+    if (isNotCovered) {
+      return acknowledgedNotCovered;
+    }
+
+    return true;
   }
 
   function submitAnotherRequest() {
@@ -171,6 +287,8 @@ export function ProviderDocumentationWizard() {
     setRequestType(null);
     setServiceCode(null);
     setRequirementsChecked(false);
+    setCoverageRequirements(null);
+    setDtrQuestionnaire(null);
     setAssessmentStatus("not_started");
     setAssessmentAnswers({});
     setAcknowledgedNotCovered(false);
@@ -191,12 +309,23 @@ export function ProviderDocumentationWizard() {
     setSubmitting(true);
     setError(null);
 
+    const dtrQuestionnaireResponse =
+      assessmentStatus === "complete" && dtrQuestionnaire
+        ? ({
+            questionnaireId: dtrQuestionnaire.id,
+            answers: dtrQuestionnaire.questions.map((question) => ({
+              questionId: question.id,
+              value: assessmentAnswers[question.id] ?? "no"
+            }))
+          } satisfies DtrQuestionnaireResponse)
+        : undefined;
+
     const body =
       requiresAssessment
         ? {
             requestType,
             serviceCode,
-            dtr: assessmentStatus === "complete" ? completeDtr : undefined
+            dtrQuestionnaireResponse
           }
         : { requestType, serviceCode, acknowledgedNotCovered };
 
@@ -258,7 +387,7 @@ export function ProviderDocumentationWizard() {
         </ol>
 
         <div className="wizard-grid provider-stage-grid">
-          <section className="wizard-stage panel" aria-busy={submitting}>
+          <section className="wizard-stage panel" aria-busy={submitting || checkingRequirements}>
             {submitted ? (
               <SubmissionConfirmation submitted={submitted} onSubmitAnother={submitAnotherRequest} />
             ) : (
@@ -276,7 +405,11 @@ export function ProviderDocumentationWizard() {
 
                 {step === "service" ? (
                   <ServiceStep
+                    checkingRequirements={checkingRequirements}
+                    crdLoadError={crdLoadError}
+                    error={error}
                     requestType={requestType}
+                    services={crdServices}
                     serviceCode={serviceCode}
                     service={service}
                     onRequestTypeChange={selectRequestType}
@@ -289,9 +422,9 @@ export function ProviderDocumentationWizard() {
                   <CoverageStep
                     acknowledgedNotCovered={acknowledgedNotCovered}
                     assessmentStatus={assessmentStatus}
+                    coverageRequirements={coverageRequirements}
                     requestType={requestType}
                     service={service}
-                    serviceCode={serviceCode}
                     onAcknowledge={setAcknowledgedNotCovered}
                     onOpenAssessment={() => setAssessmentModalOpen(true)}
                     onReview={continueToReview}
@@ -302,10 +435,10 @@ export function ProviderDocumentationWizard() {
                   <ReviewStep
                     acknowledgedNotCovered={acknowledgedNotCovered}
                     assessmentStatus={assessmentStatus}
+                    coverageRequirements={coverageRequirements}
                     error={error}
                     requestType={requestType}
                     service={service}
-                    serviceCode={serviceCode}
                     submitting={submitting}
                     onSubmit={submitPriorAuth}
                   />
@@ -352,8 +485,8 @@ function AssessmentModal({
   onSkip
 }: {
   answers: AssessmentAnswerMap;
-  questions: ReturnType<typeof getAssessmentQuestionsForService>;
-  service: (typeof serviceOptions)[ServiceCode] | null;
+  questions: DtrQuestion[];
+  service: CrdServiceOption | null;
   summary: ReturnType<typeof summarizeAssessmentAnswers>;
   onAnswerChange: (questionId: string, value: AssessmentAnswerValue) => void;
   onSave: () => void;
@@ -465,21 +598,32 @@ function SetupStep({
 }
 
 function ServiceStep({
+  checkingRequirements,
+  crdLoadError,
+  error,
   requestType,
+  services,
   serviceCode,
   service,
   onRequestTypeChange,
   onServiceChange,
   onCheck
 }: {
+  checkingRequirements: boolean;
+  crdLoadError: string | null;
+  error: string | null;
   requestType: RequestType | null;
+  services: CrdServiceOption[];
   serviceCode: ServiceCode | null;
-  service: (typeof serviceOptions)[ServiceCode] | null;
+  service: CrdServiceOption | null;
   onRequestTypeChange: (value: RequestType) => void;
   onServiceChange: (value: string) => void;
   onCheck: () => void;
 }) {
-  const selectableServiceCodes = requestType && requestType !== "inpatient_admission" ? serviceOptionsByRequestType[requestType] : [];
+  const selectableServices =
+    requestType && requestType !== "inpatient_admission"
+      ? services.filter((candidate) => candidate.requestType === requestType)
+      : [];
   const servicePlaceholder = requestType === "pharmacy_benefit" ? "Search medication or NDC code" : "Search service or CPT code";
 
   return (
@@ -510,24 +654,33 @@ function ServiceStep({
         <span>{requestType === "pharmacy_benefit" ? "Search medication" : "Search service"}</span>
         <select
           className="select-control"
-          disabled={!requestType || requestType === "inpatient_admission"}
+          disabled={!requestType || requestType === "inpatient_admission" || Boolean(crdLoadError)}
           value={serviceCode ?? ""}
           onChange={(event) => onServiceChange(event.target.value)}
         >
           <option value="">{servicePlaceholder}</option>
-          {selectableServiceCodes.map((code) => {
-            const option = serviceOptions[code];
+          {selectableServices.map((option) => {
             return (
-              <option key={code} value={code}>
-                {option.procedureCode} - {option.label}
+              <option key={option.serviceCode} value={option.serviceCode}>
+                {option.procedureCode} - {option.serviceLabel}
               </option>
             );
           })}
         </select>
       </label>
       {service ? <ServiceCard service={service} /> : null}
-      <button className="primary-button" disabled={!requestType || !serviceCode} type="button" onClick={onCheck}>
-        Check coverage and requirements
+      {crdLoadError ? (
+        <p className="error-text" role="alert">
+          {crdLoadError}
+        </p>
+      ) : null}
+      {error ? (
+        <p className="error-text" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <button className="primary-button" disabled={!requestType || !serviceCode || checkingRequirements} type="button" onClick={onCheck}>
+        {checkingRequirements ? "Checking..." : "Check coverage and requirements"}
       </button>
     </>
   );
@@ -536,24 +689,25 @@ function ServiceStep({
 function CoverageStep({
   acknowledgedNotCovered,
   assessmentStatus,
+  coverageRequirements,
   requestType,
   service,
-  serviceCode,
   onAcknowledge,
   onOpenAssessment,
   onReview
 }: {
   acknowledgedNotCovered: boolean;
   assessmentStatus: AssessmentStatus;
+  coverageRequirements: CoverageRequirements | null;
   requestType: RequestType | null;
-  service: (typeof serviceOptions)[ServiceCode] | null;
-  serviceCode: ServiceCode | null;
+  service: CrdServiceOption | null;
   onAcknowledge: (value: boolean) => void;
   onOpenAssessment: () => void;
   onReview: () => void;
 }) {
-  const requiresAssessment = Boolean(service && service.requestType !== "outpatient_service") || serviceCode === "knee_mri";
-  const canReview = requiresAssessment ? assessmentStatus !== "not_started" : acknowledgedNotCovered;
+  const requiresAssessment = Boolean(coverageRequirements?.documentationTemplateId);
+  const isNotCovered = coverageRequirements?.coveredBenefit === false;
+  const canReview = requiresAssessment ? assessmentStatus !== "not_started" : !isNotCovered || acknowledgedNotCovered;
 
   return (
     <>
@@ -563,7 +717,7 @@ function CoverageStep({
           ["Patient", "Maya Chen"],
           ["Health plan", "Acme Health PPO"],
           ["Request type", formatRequestType(requestType)],
-          ["Service", service?.label ?? "Not selected"]
+          ["Service", service?.serviceLabel ?? "Not selected"]
         ]}
       />
       {requiresAssessment ? (
@@ -578,15 +732,21 @@ function CoverageStep({
             <span className={`assessment-pill ${assessmentStatus}`}>Assessment: {formatAssessmentStatus(assessmentStatus)}</span>
           </div>
         </div>
-      ) : (
+      ) : isNotCovered ? (
         <div className="coverage-card warning-panel">
           <span className="status blocked">Not covered benefit</span>
-          <h3>Routine full-body wellness screening is not covered</h3>
+          <h3>{service?.serviceLabel ?? "Requested item"} is not covered</h3>
           <p>The request can still be submitted, but it will include the not-covered benefit reason.</p>
           <label className="checkbox-row warning-copy">
             <input checked={acknowledgedNotCovered} type="checkbox" onChange={(event) => onAcknowledge(event.target.checked)} />
             Acknowledge not-covered submission
           </label>
+        </div>
+      ) : (
+        <div className="coverage-card approved-result">
+          <span className="status approved">Coverage confirmed</span>
+          <h3>No additional assessment required</h3>
+          <p>The request can move to review with the coverage response returned by the plan.</p>
         </div>
       )}
       <button className="primary-button" disabled={!canReview} type="button" onClick={onReview}>
@@ -599,22 +759,24 @@ function CoverageStep({
 function ReviewStep({
   acknowledgedNotCovered,
   assessmentStatus,
+  coverageRequirements,
   error,
   requestType,
   service,
-  serviceCode,
   submitting,
   onSubmit
 }: {
   acknowledgedNotCovered: boolean;
   assessmentStatus: AssessmentStatus;
+  coverageRequirements: CoverageRequirements | null;
   error: string | null;
   requestType: RequestType | null;
-  service: (typeof serviceOptions)[ServiceCode] | null;
-  serviceCode: ServiceCode | null;
+  service: CrdServiceOption | null;
   submitting: boolean;
   onSubmit: () => void;
 }) {
+  const isNotCovered = coverageRequirements?.coveredBenefit === false;
+
   return (
     <>
       <h2>Review prior authorization request</h2>
@@ -633,7 +795,7 @@ function ReviewStep({
         </div>
         <div>
           <dt>Requested item</dt>
-          <dd>{service?.label ?? "Not selected"}</dd>
+          <dd>{service?.serviceLabel ?? "Not selected"}</dd>
         </div>
         <div>
           <dt>{service?.codingSystem === "NDC" ? "Medication code" : "Procedure"}</dt>
@@ -643,17 +805,17 @@ function ReviewStep({
         </div>
         <div>
           <dt>Coverage result</dt>
-          <dd>{serviceCode === "full_body_wellness_mri" ? "Not covered benefit" : "Coverage confirmed; PA required"}</dd>
+          <dd>{isNotCovered ? "Not covered benefit" : "Coverage confirmed; PA required"}</dd>
         </div>
         <div>
           <dt>Assessment</dt>
-          <dd>{serviceCode === "full_body_wellness_mri" ? "Not required" : formatAssessmentStatus(assessmentStatus)}</dd>
+          <dd>{isNotCovered ? "Not required" : formatAssessmentStatus(assessmentStatus)}</dd>
         </div>
       </dl>
       {assessmentStatus === "skipped" ? (
         <p className="action-status warning-copy">Assessment was skipped. The request can still be submitted, but supporting documentation is incomplete.</p>
       ) : null}
-      {serviceCode === "full_body_wellness_mri" && acknowledgedNotCovered ? (
+      {isNotCovered && acknowledgedNotCovered ? (
         <p className="action-status warning-copy">The request will be submitted with a not-covered benefit reason.</p>
       ) : null}
       <button className="primary-button" disabled={submitting} type="button" onClick={onSubmit}>
@@ -704,12 +866,12 @@ function SubmissionConfirmation({ submitted, onSubmitAnother }: { submitted: Pri
   );
 }
 
-function ServiceCard({ service }: { service: (typeof serviceOptions)[ServiceCode] }) {
+function ServiceCard({ service }: { service: CrdServiceOption }) {
   return (
     <article className="service-card">
       <div>
         <span className="label">{service.procedureCode}</span>
-        <h3>{service.label}</h3>
+        <h3>{service.serviceLabel}</h3>
         <p>{service.procedureSummary}</p>
       </div>
       <p>{service.description}</p>
