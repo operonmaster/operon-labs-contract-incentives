@@ -36,20 +36,47 @@ describe("provider documentation UM Platform", () => {
     expect(() => platform.submitPriorAuth(input)).toThrow("NOT_COVERED_ACKNOWLEDGEMENT_REQUIRED");
   });
 
-  it("requires complete DTR documentation for knee MRI submission", () => {
+  it("allows knee MRI submission when assessment is skipped and exposes incomplete evidence", () => {
     const platform = createInMemoryUmPlatform();
 
-    expect(() =>
-      platform.submitPriorAuth({
-        serviceCode: "knee_mri",
-        dtr: {
-          symptomDurationConfirmed: true,
-          conservativeTherapyConfirmed: false,
-          examFindingsConfirmed: true,
-          clinicalNoteAttached: true
-        }
-      })
-    ).toThrow("DTR_DOCUMENTATION_INCOMPLETE");
+    const submitted = platform.submitPriorAuth({ serviceCode: "knee_mri" });
+
+    expect(submitted).toMatchObject({
+      caseId: "synthetic-pa-20931",
+      serviceCode: "knee_mri",
+      paResult: "submitted_pending",
+      denialReason: null,
+      dtr: null
+    });
+    expect(platform.getEvidence("synthetic-pa-20931")).toMatchObject({
+      serviceCode: "knee_mri",
+      crdCoveredBenefit: true,
+      dtrTemplateCompleted: false,
+      attachmentChecklistComplete: false,
+      fhirFieldsPresent: false,
+      pasSubmitted: true,
+      denialReason: null
+    });
+  });
+
+  it("stores incomplete knee MRI assessment as incomplete evidence instead of blocking submission", () => {
+    const platform = createInMemoryUmPlatform();
+
+    platform.submitPriorAuth({
+      serviceCode: "knee_mri",
+      dtr: {
+        symptomDurationConfirmed: true,
+        conservativeTherapyConfirmed: false,
+        examFindingsConfirmed: true,
+        clinicalNoteAttached: true
+      }
+    });
+
+    expect(platform.getEvidence("synthetic-pa-20931")).toMatchObject({
+      dtrTemplateCompleted: false,
+      attachmentChecklistComplete: false,
+      fhirFieldsPresent: false
+    });
   });
 
   it("submits knee MRI and exposes policy-safe evidence", () => {

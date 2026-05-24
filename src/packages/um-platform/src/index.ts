@@ -121,10 +121,6 @@ export function createInMemoryUmPlatform(): UmPlatform {
     submitPriorAuth(input) {
       const coverage = getCoverageRequirements(input.serviceCode);
 
-      if (input.serviceCode === "knee_mri" && !isCompleteDtr(input.dtr)) {
-        throw new Error("DTR_DOCUMENTATION_INCOMPLETE");
-      }
-
       if (input.serviceCode === "full_body_wellness_mri" && input.acknowledgedNotCovered !== true) {
         throw new Error("NOT_COVERED_ACKNOWLEDGEMENT_REQUIRED");
       }
