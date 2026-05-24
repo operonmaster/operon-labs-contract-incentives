@@ -1,0 +1,34 @@
+import type { PriorAuthSubmissionInput } from "@operon-labs/um-platform";
+import { NextResponse } from "next/server";
+import { providerDocumentationWorkflow } from "../../../../lib/provider-documentation-workflow";
+
+export async function GET() {
+  return NextResponse.json(providerDocumentationWorkflow.listPriorAuths());
+}
+
+export async function POST(request: Request) {
+  const body = await request.json().catch(() => null);
+
+  if (!isPriorAuthSubmissionInput(body)) {
+    return NextResponse.json({ error: "INVALID_PRIOR_AUTH_SUBMISSION" }, { status: 400 });
+  }
+
+  try {
+    const submitted = providerDocumentationWorkflow.submitPriorAuth(body);
+    return NextResponse.json(submitted);
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "PRIOR_AUTH_SUBMISSION_FAILED" },
+      { status: 400 }
+    );
+  }
+}
+
+function isPriorAuthSubmissionInput(value: unknown): value is PriorAuthSubmissionInput {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return candidate.serviceCode === "knee_mri" || candidate.serviceCode === "full_body_wellness_mri";
+}
