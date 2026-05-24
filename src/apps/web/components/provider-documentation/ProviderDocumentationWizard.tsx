@@ -17,7 +17,7 @@ import {
 /* eslint-disable no-unused-vars -- Callback parameter names document select and checkbox values. */
 type PatientId = "patient-maya-chen";
 type PlanId = "acme-health-ppo";
-type AssessmentStatus = "not_required" | "not_started" | "complete" | "incomplete" | "skipped";
+type AssessmentStatus = "not_required" | "not_started" | "complete" | "skipped";
 
 const completeDtr: DtrAnswers = {
   symptomDurationConfirmed: true,
@@ -109,11 +109,11 @@ export function ProviderDocumentationWizard() {
   }
 
   function saveAssessment() {
-    if (!assessmentSummary.allAnswered) {
+    if (!assessmentSummary.isComplete) {
       return;
     }
 
-    setAssessmentStatus(assessmentSummary.supportsMedicalNecessity ? "complete" : "incomplete");
+    setAssessmentStatus("complete");
     setAssessmentModalOpen(false);
     setSubmitted(null);
     setError(null);
@@ -322,11 +322,9 @@ function AssessmentModal({
   onSkip: () => void;
 }) {
   const unansweredCount = summary.totalCount - summary.answeredCount;
-  const progressClassName = summary.allAnswered ? (summary.supportsMedicalNecessity ? "complete" : "warning") : "";
-  const progressText = summary.allAnswered
-    ? summary.supportsMedicalNecessity
-      ? "All answers support medical necessity for this demo policy."
-      : "One or more answers are No. The PA can still be submitted, but documentation is incomplete."
+  const progressClassName = summary.isComplete ? "complete" : "";
+  const progressText = summary.isComplete
+    ? "Assessment complete. All required questions have been answered."
     : `Answer ${unansweredCount} more ${unansweredCount === 1 ? "question" : "questions"} to save the assessment.`;
 
   return (
@@ -368,7 +366,7 @@ function AssessmentModal({
           {summary.answeredCount} of {summary.totalCount} answered. {progressText}
         </p>
         <div className="button-row">
-          <button className="primary-button" disabled={!summary.allAnswered} type="button" onClick={onSave}>
+          <button className="primary-button" disabled={!summary.isComplete} type="button" onClick={onSave}>
             Save assessment
           </button>
           <button className="primary-button secondary-button" type="button" onClick={onSkip}>
@@ -558,9 +556,6 @@ function ReviewStep({
       {assessmentStatus === "skipped" ? (
         <p className="action-status warning-copy">Assessment was skipped. The request can still be submitted, but supporting documentation is incomplete.</p>
       ) : null}
-      {assessmentStatus === "incomplete" ? (
-        <p className="action-status warning-copy">Assessment includes at least one No answer. The request can still be submitted, but supporting documentation is incomplete.</p>
-      ) : null}
       {serviceCode === "full_body_wellness_mri" && acknowledgedNotCovered ? (
         <p className="action-status warning-copy">The request will be submitted with a not-covered benefit reason.</p>
       ) : null}
@@ -638,8 +633,6 @@ function formatAssessmentStatus(status: AssessmentStatus) {
   switch (status) {
     case "complete":
       return "Complete";
-    case "incomplete":
-      return "Incomplete";
     case "skipped":
       return "Skipped";
     case "not_required":

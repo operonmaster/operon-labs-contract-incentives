@@ -530,12 +530,6 @@ main {
   color: var(--amber);
 }
 
-.assessment-pill.incomplete {
-  background: #fff7ed;
-  border-color: #fdba74;
-  color: #9a3412;
-}
-
 .requirement-result {
   align-items: start;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -727,12 +721,6 @@ main {
   background: #f4fbf6;
   border-color: #b8ddc7;
   color: var(--green);
-}
-
-.assessment-progress.warning {
-  background: #fff7ed;
-  border-color: #fdba74;
-  color: #9a3412;
 }
 
 @media (max-width: 860px) {

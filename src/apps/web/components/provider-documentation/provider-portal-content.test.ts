@@ -40,25 +40,22 @@ describe("provider portal content", () => {
     expect(assessmentQuestions.every((question) => question.answerOptions.map((answer) => answer.value).join("/") === "yes/no")).toBe(true);
   });
 
-  it("summarizes complete and incomplete assessment answers", () => {
+  it("counts the assessment as complete when all questions are answered", () => {
     const allYes: AssessmentAnswerMap = Object.fromEntries(assessmentQuestions.map((question) => [question.id, "yes"]));
     const oneNo: AssessmentAnswerMap = { ...allYes, clinical_documentation: "no" };
 
     expect(summarizeAssessmentAnswers({})).toMatchObject({
       answeredCount: 0,
       totalCount: assessmentQuestions.length,
-      allAnswered: false,
-      supportsMedicalNecessity: false
+      isComplete: false
     });
     expect(summarizeAssessmentAnswers(allYes)).toMatchObject({
       answeredCount: assessmentQuestions.length,
-      allAnswered: true,
-      supportsMedicalNecessity: true
+      isComplete: true
     });
     expect(summarizeAssessmentAnswers(oneNo)).toMatchObject({
       answeredCount: assessmentQuestions.length,
-      allAnswered: true,
-      supportsMedicalNecessity: false
+      isComplete: true
     });
   });
 });

@@ -39,8 +39,7 @@ export interface AssessmentQuestionContent {
 export interface AssessmentAnswerSummary {
   answeredCount: number;
   totalCount: number;
-  allAnswered: boolean;
-  supportsMedicalNecessity: boolean;
+  isComplete: boolean;
 }
 
 const yesNoAnswerOptions: AssessmentAnswerOption[] = [
@@ -139,12 +138,10 @@ export const assessmentQuestions: AssessmentQuestionContent[] = [
 
 export function summarizeAssessmentAnswers(answers: AssessmentAnswerMap): AssessmentAnswerSummary {
   const answeredCount = assessmentQuestions.filter((question) => answers[question.id] !== undefined).length;
-  const allAnswered = answeredCount === assessmentQuestions.length;
 
   return {
     answeredCount,
     totalCount: assessmentQuestions.length,
-    allAnswered,
-    supportsMedicalNecessity: allAnswered && assessmentQuestions.every((question) => answers[question.id] === "yes")
+    isComplete: answeredCount === assessmentQuestions.length
   };
 }
