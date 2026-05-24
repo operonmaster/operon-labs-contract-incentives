@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createProviderDocumentationWorkflow } from "./provider-documentation-workflow";
 import { executeApprovedPayment } from "@operon-labs/hedera-executor";
+import { createInMemoryUmPlatform } from "@operon-labs/um-platform";
 
 vi.mock("@operon-labs/hedera-executor", () => ({
   executeApprovedPayment: vi.fn(async (request: { auditId: string; currency: string }) => {
@@ -46,6 +47,29 @@ describe("provider documentation workflow", () => {
       currency: "USDC",
       reason: "Complete DTR + PAS before cutoff"
     });
+  });
+
+  it("does not block provider submission when incentive evidence processing is unavailable", () => {
+    const platform = createInMemoryUmPlatform();
+    const workflow = createProviderDocumentationWorkflow({
+      ...platform,
+      getEvidence() {
+        throw new Error("INCENTIVE_EVIDENCE_UNAVAILABLE");
+      }
+    });
+
+    const submitted = workflow.submitPriorAuth({
+      serviceCode: "knee_mri",
+      dtr: {
+        symptomDurationConfirmed: true,
+        conservativeTherapyConfirmed: true,
+        examFindingsConfirmed: true,
+        clinicalNoteAttached: true
+      }
+    });
+
+    expect(submitted.caseId).toBe("synthetic-pa-20931");
+    expect(workflow.listPriorAuths()).toHaveLength(1);
   });
 
   it("submits full-body wellness MRI and creates a zero-value not-eligible row", () => {

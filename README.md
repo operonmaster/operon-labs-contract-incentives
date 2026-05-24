@@ -53,6 +53,8 @@ Demo sequence:
 - `GET /api/provider-documentation/incentives` - lists plan-side incentive rows
 - `POST /api/provider-documentation/incentives/[caseId]/approve` - approves an eligible plan-side testnet payment proposal
 
+The approval route uses a client-supplied `x-operon-plan-role: contract-admin` header as a local demo control only. It is not production authorization and should be replaced by server-side plan-user auth before public deployment.
+
 ## Local Development
 
 ```bash

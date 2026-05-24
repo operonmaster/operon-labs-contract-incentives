@@ -12,7 +12,8 @@ const nextConfig: NextConfig = {
     "@operon-labs/audit-log",
     "@operon-labs/hedera-executor",
     "@operon-labs/incentive-agent",
-    "@operon-labs/policy-engine"
+    "@operon-labs/policy-engine",
+    "@operon-labs/um-platform"
   ]
 };
 

@@ -4,6 +4,7 @@ import { evaluateProviderDocumentationEvent } from "@operon-labs/incentive-agent
 import {
   createInMemoryUmPlatform,
   getCoverageRequirements,
+  type PasSubmittedEvent,
   type PriorAuthRecord,
   type PriorAuthSubmissionInput,
   type ProviderDocumentationEvidence,
@@ -48,14 +49,19 @@ export function createProviderDocumentationWorkflow(platform: UmPlatform = creat
   const rows = new Map<string, IncentiveWorklistRow>();
   const approvalsInFlight = new Map<string, Promise<IncentiveWorklistRow>>();
 
-  function processRecord(record: PriorAuthRecord): IncentiveWorklistRow {
-    const existing = rows.get(record.caseId);
+  function processEvent(event: PasSubmittedEvent): IncentiveWorklistRow | null {
+    const existing = rows.get(event.caseId);
     if (existing) {
       return existing;
     }
 
+    const record = platform.listPriorAuths().find((candidate) => candidate.caseId === event.caseId);
+    if (!record) {
+      return null;
+    }
+
     const evaluation = evaluateProviderDocumentationEvent(
-      { eventType: "PAS_SUBMITTED", caseId: record.caseId },
+      event,
       { getEvidenceByCaseId: platform.getEvidence, monthToDateAmount: 0 }
     );
     const audit = createAuditRecord({
@@ -82,21 +88,27 @@ export function createProviderDocumentationWorkflow(platform: UmPlatform = creat
       transactionId: null
     };
 
-    rows.set(record.caseId, row);
+    rows.set(event.caseId, row);
     return row;
   }
 
+  function processPlatformEvents(caseId?: string): void {
+    for (const event of platform.listEvents()) {
+      if (!caseId || event.caseId === caseId) {
+        processEvent(event);
+      }
+    }
+  }
+
   function getIncentiveRow(caseId: string): IncentiveWorklistRow | null {
-    const record = platform.listPriorAuths().find((candidate) => candidate.caseId === caseId);
-    return record ? processRecord(record) : null;
+    processPlatformEvents(caseId);
+    return rows.get(caseId) ?? null;
   }
 
   return {
     getCoverageRequirements,
     submitPriorAuth(input) {
-      const record = platform.submitPriorAuth(input);
-      processRecord(record);
-      return record;
+      return platform.submitPriorAuth(input);
     },
     listPriorAuths() {
       return platform.listPriorAuths();
@@ -105,10 +117,7 @@ export function createProviderDocumentationWorkflow(platform: UmPlatform = creat
       return platform.getEvidence(caseId);
     },
     listIncentiveRows() {
-      for (const record of platform.listPriorAuths()) {
-        processRecord(record);
-      }
-
+      processPlatformEvents();
       return Array.from(rows.values()).sort((left, right) => right.submittedAt.localeCompare(left.submittedAt));
     },
     getIncentiveRow,

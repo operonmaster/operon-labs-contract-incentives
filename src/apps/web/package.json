@@ -7,13 +7,14 @@
     "dev": "next dev",
     "build": "next build",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "next typegen && tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
     "@operon-labs/audit-log": "0.1.0",
     "@operon-labs/hedera-executor": "0.1.0",
     "@operon-labs/incentive-agent": "0.1.0",
     "@operon-labs/policy-engine": "0.1.0",
+    "@operon-labs/um-platform": "0.1.0",
     "next": "16.2.6",
     "react": "19.2.6",
     "react-dom": "19.2.6"
