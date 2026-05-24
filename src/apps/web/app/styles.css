@@ -326,10 +326,6 @@ main {
   white-space: nowrap;
 }
 
-.worklist tbody tr {
-  cursor: pointer;
-}
-
 .worklist tbody tr:hover,
 .worklist tbody tr.selected {
   background: #eef4ff;
@@ -342,6 +338,25 @@ main {
 .mono-cell {
   font-family: "SFMono-Regular", Consolas, monospace;
   overflow-wrap: anywhere;
+}
+
+.row-action {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--blue);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 7px 10px;
+  white-space: nowrap;
+}
+
+.row-action:hover,
+.row-action:focus-visible {
+  border-color: var(--blue);
+  outline: none;
 }
 
 .detail-panel {

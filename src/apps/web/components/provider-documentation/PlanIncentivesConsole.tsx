@@ -2,11 +2,13 @@
 
 import type { IncentiveWorklistRow } from "../../lib/provider-documentation-workflow";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface IncentiveRowsResponse {
   rows: IncentiveWorklistRow[];
 }
+
+type RefreshSource = "initial" | "manual" | "poll" | "approval";
 
 function formatCurrency(row: IncentiveWorklistRow) {
   return `${row.incentiveValue.toLocaleString("en-US", {
@@ -44,15 +46,38 @@ function statusClass(status: IncentiveWorklistRow["incentiveStatus"]) {
 export function PlanIncentivesConsole() {
   const [rows, setRows] = useState<IncentiveWorklistRow[]>([]);
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actionStatus, setActionStatus] = useState<string | null>(null);
   const [approvingCaseId, setApprovingCaseId] = useState<string | null>(null);
+  const mountedRef = useRef(false);
+  const refreshSequenceRef = useRef(0);
+  const priorityRefreshCountRef = useRef(0);
 
   const selectedRow = rows.find((row) => row.caseId === selectedCaseId) ?? null;
 
-  async function refreshRows() {
-    setError(null);
+  const refreshRows = useCallback(async (source: RefreshSource = "manual") => {
+    if (source === "poll" && priorityRefreshCountRef.current > 0) {
+      return false;
+    }
+
+    const requestId = refreshSequenceRef.current + 1;
+    refreshSequenceRef.current = requestId;
+    const isPriorityRefresh = source === "manual" || source === "approval";
+
+    if (isPriorityRefresh) {
+      priorityRefreshCountRef.current += 1;
+    }
+
+    if (source === "manual" && mountedRef.current) {
+      setRefreshing(true);
+    }
+
+    if (source !== "poll" && mountedRef.current) {
+      setError(null);
+      setActionStatus(null);
+    }
 
     try {
       const response = await fetch("/api/provider-documentation/incentives", {
@@ -60,9 +85,13 @@ export function PlanIncentivesConsole() {
       });
       const payload = (await response.json()) as IncentiveRowsResponse | { error?: string };
 
+      if (!mountedRef.current || requestId !== refreshSequenceRef.current) {
+        return false;
+      }
+
       if (!response.ok || !("rows" in payload)) {
         setError("error" in payload && payload.error ? payload.error : "Unable to load incentive events");
-        return;
+        return false;
       }
 
       setRows(payload.rows);
@@ -73,12 +102,28 @@ export function PlanIncentivesConsole() {
 
         return payload.rows[0]?.caseId ?? null;
       });
+      return true;
     } catch {
+      if (!mountedRef.current || requestId !== refreshSequenceRef.current) {
+        return false;
+      }
+
       setError("Unable to load incentive events");
+      return false;
     } finally {
-      setLoading(false);
+      if (mountedRef.current && source === "initial") {
+        setInitialLoading(false);
+      }
+
+      if (mountedRef.current && source === "manual") {
+        setRefreshing(false);
+      }
+
+      if (isPriorityRefresh) {
+        priorityRefreshCountRef.current = Math.max(0, priorityRefreshCountRef.current - 1);
+      }
     }
-  }
+  }, []);
 
   async function approve(caseId: string) {
     setApprovingCaseId(caseId);
@@ -94,34 +139,46 @@ export function PlanIncentivesConsole() {
       });
       const payload = (await response.json()) as IncentiveWorklistRow | { error?: string };
 
+      if (!mountedRef.current) {
+        return;
+      }
+
       if (!response.ok) {
         setActionStatus("error" in payload && payload.error ? payload.error : "Payment approval failed");
         return;
       }
 
-      setActionStatus("Payment approved and Hedera transaction recorded.");
-      await refreshRows();
-      setSelectedCaseId(caseId);
+      const refreshed = await refreshRows("approval");
+      if (refreshed && mountedRef.current) {
+        setSelectedCaseId(caseId);
+        setActionStatus("Payment approved and Hedera transaction recorded.");
+      }
     } catch {
-      setActionStatus("Payment approval failed");
+      if (mountedRef.current) {
+        setActionStatus("Payment approval failed");
+      }
     } finally {
-      setApprovingCaseId(null);
+      if (mountedRef.current) {
+        setApprovingCaseId(null);
+      }
     }
   }
 
   useEffect(() => {
+    mountedRef.current = true;
     const initialRefreshId = window.setTimeout(() => {
-      void refreshRows();
+      void refreshRows("initial");
     }, 0);
     const intervalId = window.setInterval(() => {
-      void refreshRows();
+      void refreshRows("poll");
     }, 4000);
 
     return () => {
+      mountedRef.current = false;
       window.clearTimeout(initialRefreshId);
       window.clearInterval(intervalId);
     };
-  }, []);
+  }, [refreshRows]);
 
   return (
     <main className="workspace">
@@ -144,10 +201,17 @@ export function PlanIncentivesConsole() {
             <h2>Submitted PA worklist</h2>
             <p>{rows.length === 1 ? "1 event loaded" : `${rows.length} events loaded`}</p>
           </div>
-          <button className="primary-button secondary-button" disabled={loading} type="button" onClick={refreshRows}>
-            {loading ? "Refreshing..." : "Refresh events"}
+          <button
+            className="primary-button secondary-button"
+            disabled={refreshing}
+            type="button"
+            onClick={() => void refreshRows("manual")}
+          >
+            {refreshing ? "Refreshing..." : "Refresh events"}
           </button>
         </div>
+
+        {initialLoading ? <p className="empty-state">Loading incentive events...</p> : null}
 
         {error ? (
           <p className="error-text" role="alert">
@@ -166,16 +230,12 @@ export function PlanIncentivesConsole() {
                 <th>Incentive status</th>
                 <th>Value</th>
                 <th>Reason</th>
+                <th>Action</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr
-                  key={row.caseId}
-                  aria-selected={row.caseId === selectedCaseId}
-                  className={row.caseId === selectedCaseId ? "selected" : ""}
-                  onClick={() => setSelectedCaseId(row.caseId)}
-                >
+                <tr key={row.caseId} className={row.caseId === selectedCaseId ? "selected" : ""}>
                   <td className="mono-cell">{row.caseId}</td>
                   <td>{row.providerGroupDisplay}</td>
                   <td>{row.serviceLabel}</td>
@@ -187,11 +247,16 @@ export function PlanIncentivesConsole() {
                   </td>
                   <td>{formatCurrency(row)}</td>
                   <td>{row.reason}</td>
+                  <td>
+                    <button className="row-action" type="button" onClick={() => setSelectedCaseId(row.caseId)}>
+                      View details
+                    </button>
+                  </td>
                 </tr>
               ))}
-              {rows.length === 0 ? (
+              {!initialLoading && rows.length === 0 ? (
                 <tr>
-                  <td className="empty-state" colSpan={7}>
+                  <td className="empty-state" colSpan={8}>
                     No submitted PA incentive events yet. Submit a prior authorization from the provider portal.
                   </td>
                 </tr>
