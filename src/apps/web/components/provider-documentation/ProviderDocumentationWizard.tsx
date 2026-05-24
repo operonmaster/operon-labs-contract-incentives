@@ -2,7 +2,7 @@
 
 import type { DtrAnswers, PriorAuthRecord, ServiceCode } from "@operon-labs/um-platform";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 const completeDtr: DtrAnswers = {
   symptomDurationConfirmed: true,
@@ -19,21 +19,35 @@ export function ProviderDocumentationWizard() {
   const [submitted, setSubmitted] = useState<PriorAuthRecord | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const serviceCodeRef = useRef<ServiceCode | null>(null);
+  const submitRequestRef = useRef(0);
 
   const isKneeMri = serviceCode === "knee_mri";
   const isFullBody = serviceCode === "full_body_wellness_mri";
 
-  const readiness = useMemo(
-    () => [
+  const readiness = useMemo(() => {
+    if (isFullBody) {
+      return [
+        { label: "Coverage requirements checked", complete: coverageChecked },
+        { label: "Not-covered acknowledgement complete", complete: acknowledgedNotCovered },
+        { label: "PAS submitted with plan response", complete: submitted !== null }
+      ];
+    }
+
+    return [
       { label: "Coverage requirements checked", complete: coverageChecked },
       { label: "DTR documentation complete", complete: isKneeMri && dtrComplete },
       { label: "Attachments ready", complete: isKneeMri && dtrComplete },
       { label: "PAS submitted before cutoff", complete: submitted !== null }
-    ],
-    [coverageChecked, dtrComplete, isKneeMri, submitted]
-  );
+    ];
+  }, [acknowledgedNotCovered, coverageChecked, dtrComplete, isFullBody, isKneeMri, submitted]);
 
   function selectService(nextServiceCode: ServiceCode) {
+    if (submitting) {
+      return;
+    }
+
+    serviceCodeRef.current = nextServiceCode;
     setServiceCode(nextServiceCode);
     setCoverageChecked(false);
     setDtrComplete(false);
@@ -47,13 +61,17 @@ export function ProviderDocumentationWizard() {
       return;
     }
 
+    const submittedServiceCode = serviceCode;
+    const requestId = submitRequestRef.current + 1;
+    submitRequestRef.current = requestId;
+    serviceCodeRef.current = submittedServiceCode;
     setSubmitting(true);
     setError(null);
 
     const body =
-      serviceCode === "knee_mri"
-        ? { serviceCode, dtr: completeDtr }
-        : { serviceCode, acknowledgedNotCovered };
+      submittedServiceCode === "knee_mri"
+        ? { serviceCode: submittedServiceCode, dtr: completeDtr }
+        : { serviceCode: submittedServiceCode, acknowledgedNotCovered };
 
     try {
       const response = await fetch("/api/um/prior-auths", {
@@ -63,6 +81,10 @@ export function ProviderDocumentationWizard() {
       });
       const payload = (await response.json()) as PriorAuthRecord | { error?: string };
 
+      if (submitRequestRef.current !== requestId || serviceCodeRef.current !== submittedServiceCode) {
+        return;
+      }
+
       if (!response.ok) {
         setError("error" in payload && payload.error ? payload.error : "Unable to submit prior authorization");
         return;
@@ -70,9 +92,15 @@ export function ProviderDocumentationWizard() {
 
       setSubmitted(payload as PriorAuthRecord);
     } catch {
+      if (submitRequestRef.current !== requestId || serviceCodeRef.current !== submittedServiceCode) {
+        return;
+      }
+
       setError("Unable to submit prior authorization");
     } finally {
-      setSubmitting(false);
+      if (submitRequestRef.current === requestId) {
+        setSubmitting(false);
+      }
     }
   }
 
@@ -119,7 +147,9 @@ export function ProviderDocumentationWizard() {
 
           <div className="choice-grid" aria-label="Service selection">
             <button
+              aria-pressed={isKneeMri}
               className={`choice ${isKneeMri ? "selected" : ""}`}
+              disabled={submitting}
               type="button"
               onClick={() => selectService("knee_mri")}
             >
@@ -127,7 +157,9 @@ export function ProviderDocumentationWizard() {
               <span>Covered service, PA required, DTR documentation available.</span>
             </button>
             <button
+              aria-pressed={isFullBody}
               className={`choice ${isFullBody ? "selected" : ""}`}
+              disabled={submitting}
               type="button"
               onClick={() => selectService("full_body_wellness_mri")}
             >
@@ -155,7 +187,8 @@ export function ProviderDocumentationWizard() {
           <ol className="checklist">
             {readiness.map((item) => (
               <li key={item.label} className={item.complete ? "complete" : ""}>
-                {item.label}
+                <span>{item.label}</span>
+                <strong>{item.complete ? "Complete" : "Pending"}</strong>
               </li>
             ))}
           </ol>
@@ -195,7 +228,7 @@ export function ProviderDocumentationWizard() {
       ) : null}
 
       {coverageChecked ? (
-        <section className="panel">
+        <section className="panel" aria-busy={submitting}>
           <h2>PAS submission</h2>
           <p>
             {isKneeMri
@@ -205,9 +238,13 @@ export function ProviderDocumentationWizard() {
           <button className="primary-button" disabled={submitDisabled} type="button" onClick={submitPriorAuth}>
             {submitting ? "Submitting..." : "Submit prior authorization"}
           </button>
-          {error ? <p className="error-text">{error}</p> : null}
+          {error ? (
+            <p className="error-text" role="alert">
+              {error}
+            </p>
+          ) : null}
           {submitted ? (
-            <div className="result-box">
+            <div aria-live="polite" className="result-box" role="status">
               <strong>Prior authorization submitted</strong>
               <p>PA ID: {submitted.caseId}</p>
               <p>

@@ -194,6 +194,11 @@ main {
   box-shadow: 0 0 0 3px rgba(36, 87, 214, 0.12);
 }
 
+.choice:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .primary-button {
   background: var(--blue);
   border: 0;
@@ -216,12 +221,26 @@ main {
 }
 
 .checklist li {
+  align-items: center;
   color: var(--muted);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.checklist strong {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .checklist li.complete {
   color: var(--green);
   font-weight: 700;
+}
+
+.checklist li.complete strong {
+  color: var(--green);
 }
 
 .warning-panel {
