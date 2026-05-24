@@ -36,6 +36,22 @@ describe("provider documentation UM Platform", () => {
     expect(() => platform.submitPriorAuth(input)).toThrow("NOT_COVERED_ACKNOWLEDGEMENT_REQUIRED");
   });
 
+  it("requires complete DTR documentation for knee MRI submission", () => {
+    const platform = createInMemoryUmPlatform();
+
+    expect(() =>
+      platform.submitPriorAuth({
+        serviceCode: "knee_mri",
+        dtr: {
+          symptomDurationConfirmed: true,
+          conservativeTherapyConfirmed: false,
+          examFindingsConfirmed: true,
+          clinicalNoteAttached: true
+        }
+      })
+    ).toThrow("DTR_DOCUMENTATION_INCOMPLETE");
+  });
+
   it("submits knee MRI and exposes policy-safe evidence", () => {
     const platform = createInMemoryUmPlatform();
 
@@ -102,8 +118,55 @@ describe("provider documentation UM Platform", () => {
     expect(platform.getEvidence("synthetic-pa-20932")).toMatchObject({
       serviceCode: "full_body_wellness_mri",
       crdCoveredBenefit: false,
+      dtrTemplateCompleted: false,
+      attachmentChecklistComplete: false,
+      fhirFieldsPresent: false,
       pasSubmitted: true,
-      denialReason: "BENEFIT_NOT_COVERED"
+      denialReason: "BENEFIT_NOT_COVERED",
+      paResultUsedForPositivePayment: false,
+      approvalOutcomeUsed: false,
+      referralVolumeMetricUsed: false,
+      containsPhi: false
+    });
+  });
+
+  it("does not let returned prior auth records mutate stored evidence", () => {
+    const platform = createInMemoryUmPlatform();
+    const submitted = platform.submitPriorAuth({
+      serviceCode: "knee_mri",
+      dtr: {
+        symptomDurationConfirmed: true,
+        conservativeTherapyConfirmed: true,
+        examFindingsConfirmed: true,
+        clinicalNoteAttached: true
+      }
+    });
+
+    submitted.coverage.coveredBenefit = false;
+    submitted.coverage.requiredDocumentation.length = 0;
+    submitted.dtr!.clinicalNoteAttached = false;
+    platform.listPriorAuths()[0]!.dtr!.examFindingsConfirmed = false;
+
+    expect(platform.getEvidence("synthetic-pa-20931")).toMatchObject({
+      crdCoveredBenefit: true,
+      dtrTemplateCompleted: true,
+      attachmentChecklistComplete: true,
+      fhirFieldsPresent: true
+    });
+    expect(platform.listPriorAuths()[0]).toMatchObject({
+      coverage: {
+        coveredBenefit: true,
+        requiredDocumentation: [
+          "symptom duration",
+          "conservative therapy",
+          "physical exam findings",
+          "clinical note attachment"
+        ]
+      },
+      dtr: {
+        clinicalNoteAttached: true,
+        examFindingsConfirmed: true
+      }
     });
   });
 });

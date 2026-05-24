@@ -102,14 +102,14 @@ const fullBodyWellnessMriRequirements: CoverageRequirements = {
 };
 
 export function getCoverageRequirements(serviceCode: ServiceCode): CoverageRequirements {
-  if (serviceCode === "knee_mri") {
-    return { ...kneeMriRequirements, requiredDocumentation: [...kneeMriRequirements.requiredDocumentation] };
+  switch (serviceCode) {
+    case "knee_mri":
+      return copyCoverageRequirements(kneeMriRequirements);
+    case "full_body_wellness_mri":
+      return copyCoverageRequirements(fullBodyWellnessMriRequirements);
+    default:
+      return assertNever(serviceCode);
   }
-
-  return {
-    ...fullBodyWellnessMriRequirements,
-    requiredDocumentation: [...fullBodyWellnessMriRequirements.requiredDocumentation]
-  };
 }
 
 export function createInMemoryUmPlatform(): UmPlatform {
@@ -142,7 +142,7 @@ export function createInMemoryUmPlatform(): UmPlatform {
         serviceLabel: coverage.serviceLabel,
         submittedAt: new Date().toISOString(),
         coverage,
-        dtr: input.dtr ?? null,
+        dtr: copyDtrAnswers(input.dtr),
         pasSubmitted: true,
         submittedBeforeInitialDecision: true,
         paResult: coverage.coveredBenefit ? "submitted_pending" : "denied_not_covered",
@@ -152,10 +152,10 @@ export function createInMemoryUmPlatform(): UmPlatform {
       records.set(caseId, record);
       events.push({ eventType: "PAS_SUBMITTED", caseId });
 
-      return record;
+      return copyPriorAuthRecord(record);
     },
     listPriorAuths() {
-      return [...records.values()];
+      return [...records.values()].map(copyPriorAuthRecord);
     },
     listEvents() {
       return [...events];
@@ -194,6 +194,29 @@ export function createInMemoryUmPlatform(): UmPlatform {
   };
 }
 
+function copyPriorAuthRecord(record: PriorAuthRecord): PriorAuthRecord {
+  return {
+    ...record,
+    coverage: copyCoverageRequirements(record.coverage),
+    dtr: copyDtrAnswers(record.dtr)
+  };
+}
+
+function copyCoverageRequirements(requirements: CoverageRequirements): CoverageRequirements {
+  return {
+    ...requirements,
+    requiredDocumentation: [...requirements.requiredDocumentation]
+  };
+}
+
+function copyDtrAnswers(dtr: DtrAnswers | null | undefined): DtrAnswers | null {
+  if (!dtr) {
+    return null;
+  }
+
+  return { ...dtr };
+}
+
 function isCompleteDtr(dtr: DtrAnswers | null | undefined): dtr is DtrAnswers {
   return (
     dtr?.symptomDurationConfirmed === true &&
@@ -201,4 +224,8 @@ function isCompleteDtr(dtr: DtrAnswers | null | undefined): dtr is DtrAnswers {
     dtr.examFindingsConfirmed === true &&
     dtr.clinicalNoteAttached === true
   );
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unhandled service code: ${value}`);
 }
