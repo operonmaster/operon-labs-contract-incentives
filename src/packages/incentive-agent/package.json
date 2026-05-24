@@ -9,6 +9,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@operon-labs/policy-engine": "0.1.0"
+    "@operon-labs/policy-engine": "0.1.0",
+    "@operon-labs/um-platform": "0.1.0"
   }
 }
