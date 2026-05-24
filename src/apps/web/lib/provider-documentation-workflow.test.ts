@@ -1,7 +1,26 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createProviderDocumentationWorkflow } from "./provider-documentation-workflow";
+import { executeApprovedPayment } from "@operon-labs/hedera-executor";
+
+vi.mock("@operon-labs/hedera-executor", () => ({
+  executeApprovedPayment: vi.fn(async (request: { auditId: string; currency: string }) => {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    return {
+      status: "simulated",
+      network: "testnet",
+      transactionId: `testnet-${request.auditId}-${request.currency.toLowerCase()}-${Date.now()}`
+    };
+  })
+}));
+
+const executeApprovedPaymentMock = vi.mocked(executeApprovedPayment);
 
 describe("provider documentation workflow", () => {
+  beforeEach(() => {
+    executeApprovedPaymentMock.mockClear();
+  });
+
   it("submits knee MRI and creates an eligible pending incentive row", () => {
     const workflow = createProviderDocumentationWorkflow();
 
@@ -79,5 +98,67 @@ describe("provider documentation workflow", () => {
     });
 
     await expect(workflow.approvePayment("synthetic-pa-20931")).rejects.toThrow("PAYMENT_NOT_ELIGIBLE");
+  });
+
+  it("preserves audit metadata across repeated list and get reads", async () => {
+    const workflow = createProviderDocumentationWorkflow();
+
+    workflow.submitPriorAuth({
+      serviceCode: "knee_mri",
+      dtr: {
+        symptomDurationConfirmed: true,
+        conservativeTherapyConfirmed: true,
+        examFindingsConfirmed: true,
+        clinicalNoteAttached: true
+      }
+    });
+    const listed = workflow.listIncentiveRows()[0];
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const relisted = workflow.listIncentiveRows()[0];
+    const fetched = workflow.getIncentiveRow("synthetic-pa-20931");
+
+    expect(relisted.audit.createdAt).toBe(listed.audit.createdAt);
+    expect(fetched?.audit.createdAt).toBe(listed.audit.createdAt);
+  });
+
+  it("returns existing paid rows for repeat approvals without executing payment again", async () => {
+    const workflow = createProviderDocumentationWorkflow();
+
+    workflow.submitPriorAuth({
+      serviceCode: "knee_mri",
+      dtr: {
+        symptomDurationConfirmed: true,
+        conservativeTherapyConfirmed: true,
+        examFindingsConfirmed: true,
+        clinicalNoteAttached: true
+      }
+    });
+    const firstPaid = await workflow.approvePayment("synthetic-pa-20931");
+    const secondPaid = await workflow.approvePayment("synthetic-pa-20931");
+
+    expect(secondPaid).toBe(firstPaid);
+    expect(secondPaid.transactionId).toBe(firstPaid.transactionId);
+    expect(executeApprovedPaymentMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("deduplicates concurrent approvals for the same case", async () => {
+    const workflow = createProviderDocumentationWorkflow();
+
+    workflow.submitPriorAuth({
+      serviceCode: "knee_mri",
+      dtr: {
+        symptomDurationConfirmed: true,
+        conservativeTherapyConfirmed: true,
+        examFindingsConfirmed: true,
+        clinicalNoteAttached: true
+      }
+    });
+    const [firstPaid, secondPaid] = await Promise.all([
+      workflow.approvePayment("synthetic-pa-20931"),
+      workflow.approvePayment("synthetic-pa-20931")
+    ]);
+
+    expect(secondPaid.transactionId).toBe(firstPaid.transactionId);
+    expect(executeApprovedPaymentMock).toHaveBeenCalledTimes(1);
   });
 });

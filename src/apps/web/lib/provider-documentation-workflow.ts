@@ -32,6 +32,7 @@ export interface IncentiveWorklistRow {
   transactionId: string | null;
 }
 
+/* eslint-disable no-unused-vars -- TypeScript interface method signatures require parameter names. */
 export interface ProviderDocumentationWorkflow {
   getCoverageRequirements: typeof getCoverageRequirements;
   submitPriorAuth(input: PriorAuthSubmissionInput): PriorAuthRecord;
@@ -41,13 +42,15 @@ export interface ProviderDocumentationWorkflow {
   getIncentiveRow(caseId: string): IncentiveWorklistRow | null;
   approvePayment(caseId: string): Promise<IncentiveWorklistRow>;
 }
+/* eslint-enable no-unused-vars */
 
 export function createProviderDocumentationWorkflow(platform: UmPlatform = createInMemoryUmPlatform()): ProviderDocumentationWorkflow {
   const rows = new Map<string, IncentiveWorklistRow>();
+  const approvalsInFlight = new Map<string, Promise<IncentiveWorklistRow>>();
 
   function processRecord(record: PriorAuthRecord): IncentiveWorklistRow {
     const existing = rows.get(record.caseId);
-    if (existing?.incentiveStatus === "paid") {
+    if (existing) {
       return existing;
     }
 
@@ -58,7 +61,7 @@ export function createProviderDocumentationWorkflow(platform: UmPlatform = creat
     const audit = createAuditRecord({
       request: evaluation.request,
       result: evaluation.result,
-      transactionId: existing?.transactionId ?? null
+      transactionId: null
     });
     const row: IncentiveWorklistRow = {
       caseId: record.caseId,
@@ -76,7 +79,7 @@ export function createProviderDocumentationWorkflow(platform: UmPlatform = creat
       policyId: evaluation.result.policyId,
       audit,
       walletId: evaluation.result.walletId,
-      transactionId: existing?.transactionId ?? null
+      transactionId: null
     };
 
     rows.set(record.caseId, row);
@@ -110,30 +113,50 @@ export function createProviderDocumentationWorkflow(platform: UmPlatform = creat
     },
     getIncentiveRow,
     async approvePayment(caseId) {
+      const existingApproval = approvalsInFlight.get(caseId);
+      if (existingApproval) {
+        return existingApproval;
+      }
+
       const row = getIncentiveRow(caseId);
+      if (row?.incentiveStatus === "paid") {
+        return row;
+      }
+
       if (!row || row.incentiveStatus !== "eligible_pending_approval" || !row.walletId) {
         throw new Error("PAYMENT_NOT_ELIGIBLE");
       }
 
-      const payment = await executeApprovedPayment({
-        auditId: row.audit.id,
-        amount: row.incentiveValue,
-        currency: row.currency,
-        walletId: row.walletId
-      });
-      const paid: IncentiveWorklistRow = {
-        ...row,
-        incentiveStatus: "paid",
-        reason: "Hedera transaction recorded",
-        transactionId: payment.transactionId,
-        audit: {
-          ...row.audit,
-          transactionId: payment.transactionId
-        }
-      };
+      const walletId = row.walletId;
+      const approval = (async () => {
+        const payment = await executeApprovedPayment({
+          auditId: row.audit.id,
+          amount: row.incentiveValue,
+          currency: row.currency,
+          walletId
+        });
+        const paid: IncentiveWorklistRow = {
+          ...row,
+          incentiveStatus: "paid",
+          reason: "Hedera transaction recorded",
+          transactionId: payment.transactionId,
+          audit: {
+            ...row.audit,
+            transactionId: payment.transactionId
+          }
+        };
 
-      rows.set(caseId, paid);
-      return paid;
+        rows.set(caseId, paid);
+        return paid;
+      })();
+
+      approvalsInFlight.set(caseId, approval);
+
+      try {
+        return await approval;
+      } finally {
+        approvalsInFlight.delete(caseId);
+      }
     }
   };
 }

@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { providerDocumentationWorkflow } from "../../../../../../lib/provider-documentation-workflow";
 
-export async function POST(_request: Request, context: { params: Promise<{ caseId: string }> }) {
+export async function POST(request: Request, context: { params: Promise<{ caseId: string }> }) {
+  if (request.headers.get("x-operon-plan-role") !== "contract-admin") {
+    return NextResponse.json({ error: "PLAN_APPROVAL_REQUIRED" }, { status: 403 });
+  }
+
   const { caseId } = await context.params;
 
   try {
