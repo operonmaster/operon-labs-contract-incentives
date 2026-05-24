@@ -47,6 +47,22 @@ describe("provider documentation API routes", () => {
     expect(row.transactionId).toContain("testnet-");
   });
 
+  it("accepts knee MRI prior auth submission when assessment is skipped", async () => {
+    const submittedResponse = await submitPriorAuth(
+      new Request("http://localhost/api/um/prior-auths", {
+        method: "POST",
+        body: JSON.stringify({ serviceCode: "knee_mri" })
+      })
+    );
+    const submitted = (await submittedResponse.json()) as { dtr: unknown; paResult: string };
+
+    expect(submittedResponse.status).toBe(200);
+    expect(submitted).toMatchObject({
+      paResult: "submitted_pending",
+      dtr: null
+    });
+  });
+
   it("returns 404 for missing evidence", async () => {
     const response = await getEvidence(new Request("http://localhost/api/um/prior-auths/missing/evidence"), {
       params: Promise.resolve({ caseId: "missing" })

@@ -91,6 +91,31 @@ describe("provider documentation workflow", () => {
     });
   });
 
+  it("submits knee MRI with skipped assessment as zero-value not eligible", () => {
+    const workflow = createProviderDocumentationWorkflow();
+
+    const submitted = workflow.submitPriorAuth({
+      serviceCode: "knee_mri"
+    });
+    const rows = workflow.listIncentiveRows();
+
+    expect(submitted).toMatchObject({
+      caseId: "synthetic-pa-20931",
+      paResult: "submitted_pending"
+    });
+    expect(rows[0]).toMatchObject({
+      caseId: "synthetic-pa-20931",
+      serviceLabel: "Knee MRI after injury",
+      paResult: "submitted_pending",
+      incentiveStatus: "not_eligible",
+      incentiveValue: 0,
+      reason: "Missing required documentation"
+    });
+    expect(rows[0]!.reasonCodes).toEqual(
+      expect.arrayContaining(["DTR_TEMPLATE_INCOMPLETE", "ATTACHMENT_CHECKLIST_INCOMPLETE", "FHIR_FIELDS_MISSING"])
+    );
+  });
+
   it("approves payment only for eligible pending rows", async () => {
     const workflow = createProviderDocumentationWorkflow();
 
@@ -119,6 +144,16 @@ describe("provider documentation workflow", () => {
     workflow.submitPriorAuth({
       serviceCode: "full_body_wellness_mri",
       acknowledgedNotCovered: true
+    });
+
+    await expect(workflow.approvePayment("synthetic-pa-20931")).rejects.toThrow("PAYMENT_NOT_ELIGIBLE");
+  });
+
+  it("blocks payment approval for skipped knee MRI assessment", async () => {
+    const workflow = createProviderDocumentationWorkflow();
+
+    workflow.submitPriorAuth({
+      serviceCode: "knee_mri"
     });
 
     await expect(workflow.approvePayment("synthetic-pa-20931")).rejects.toThrow("PAYMENT_NOT_ELIGIBLE");
