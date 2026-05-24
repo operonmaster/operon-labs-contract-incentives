@@ -6,7 +6,7 @@ Operon Labs Contract Incentives is a policy-gated incentive layer for healthcare
 
 The core business claim:
 
-> Healthcare organizations should be able to reward measurable operational quality under explicit contract rules, with auditability, capped exposure, human approval, and safeguards against incentives tied to inappropriate outcomes such as denials, referral volume, or cost avoidance.
+> Healthcare organizations should be able to reward measurable operational quality under explicit contract rules, with auditability, capped exposure, pre-authorized policy controls, and safeguards against incentives tied to inappropriate outcomes such as denials, referral volume, or cost avoidance.
 
 This is not a generic payment bot. It is a reusable infrastructure pattern for contract-governed healthcare incentives.
 
@@ -65,8 +65,8 @@ The shared layer performs the following steps:
 6. Use the AI agent to summarize, route, and explain the decision, but not to override policy controls.
 7. Compute incentive amount from the policy if approved.
 8. Map approved submitter to a wallet.
-9. Require human approval before payment execution.
-10. Execute HBAR or USDC payment through Hedera Agent Kit.
+9. Verify explicit plan consent through pre-authorized policy guardrails, or route to human approval when the policy requires it.
+10. Execute HBAR or USDC payment through Hedera Agent Kit when the policy permits auto-settlement.
 11. Record audit trail: request hash, policy ID/version, decision, reason codes, transaction ID.
 
 ### Demo App 1: Delegate UM SLA Bonus
@@ -114,6 +114,9 @@ Policy evaluates:
 Incentive trigger:
 
 - provider submitted clean documentation that reduces avoidable back-and-forth
+- `PAS_SUBMITTED` event carries only `caseId`; the incentive agent pulls policy-safe evidence from the UM Platform
+- eligible requests auto-settle on Hedera testnet under the plan's pre-authorized policy guardrails
+- non-covered or incomplete-documentation requests are still submitted, but policy blocks payment and records `0 USDC`
 
 ### Demo App 3: Appeals Packet Quality
 
@@ -184,7 +187,7 @@ Policies should own:
 - currency
 - per-request caps
 - monthly caps
-- human-approval requirements
+- settlement mode: pre-authorized auto-settlement or human approval
 - audit fields
 
 Example policy:
@@ -243,7 +246,7 @@ The AI agent should not be the uncontrolled decision-maker for payments. Its rol
 - identify the right evaluation type when needed
 - summarize the submitted evidence
 - explain why a policy approved, rejected, or routed a request to manual review
-- prepare a payment proposal
+- prepare or execute a policy-bound payment action
 - help the user inspect policy details
 
 The deterministic policy engine should make the allow/block/payment-amount decision.
@@ -287,11 +290,11 @@ For Week 5, the project should:
 
 ### Safety Requirements
 
-The agent must be designed so it cannot access, use, transfer, or drain user funds without explicit prior consent and approval for each transaction.
+The agent must be designed so it cannot access, use, transfer, or drain user funds without explicit prior consent. In this demo, consent is represented by a plan-administered contract policy that pre-authorizes bounded testnet auto-settlement for eligible events. Mainnet or higher-risk policies should use human approval or equivalent safeguards.
 
 Implementation requirements for safety:
 
-- human approval before payment submission
+- pre-authorized policy controls before payment submission, or human approval when the policy requires it
 - transaction limits
 - allowed recipient/wallet list
 - approved currency list: HBAR or USDC
@@ -328,8 +331,8 @@ Recommended demo flow:
    - computed payment amount
    - recipient wallet
    - reason code
-7. User approves payment.
-8. Hedera Agent Kit executes HBAR or USDC payment.
+7. Policy confirms the request is inside pre-authorized guardrails, or blocks/routes it if not.
+8. Hedera Agent Kit executes HBAR or USDC payment for approved auto-settlement cases.
 9. UI displays transaction ID and audit record.
 10. Audit view shows request hash, policy version, decision, and transaction reference.
 
@@ -417,8 +420,8 @@ The demo is complete when:
 - each policy can approve, reject, and explain decisions
 - payment amount is computed by policy, not provided by the incoming request
 - blocked requests show clear reason codes
-- approved requests produce a human-approval screen
-- approved requests can execute HBAR or USDC payment through Hedera Agent Kit
+- approved requests either auto-settle under pre-authorized policy guardrails or require human approval, depending on policy configuration
+- approved provider-documentation PAS events execute HBAR or USDC payment through Hedera Agent Kit without a manual plan-console approval button
 - audit record is created for every decision
 - no PHI/PII appears in requests, logs, payment metadata, or on-chain records
 - README explains setup, policies, demo scripts, and Hedera integration
@@ -434,7 +437,7 @@ The demo is complete when:
 - [ ] Use Hedera Agent Kit JS or Python as core dependency.
 - [ ] Implement runtime policies using Hooks and Policies.
 - [ ] Execute HBAR or USDC payment in demo.
-- [ ] Add human approval before payment.
+- [ ] Add pre-authorized policy safeguards, with human approval for any policy that requires it.
 - [ ] Add public README and setup steps.
 - [ ] Add `.env.example`.
 - [ ] Add synthetic demo data only.
@@ -445,4 +448,4 @@ The demo is complete when:
 
 ## Positioning Line
 
-Operon Labs Contract Incentives is a policy-gated healthcare operations incentive layer: business apps submit evidence, policies determine whether contract incentives are earned, and Hedera executes auditable HBAR or USDC payments with explicit human approval and safety controls.
+Operon Labs Contract Incentives is a policy-gated healthcare operations incentive layer: business apps submit evidence, policies determine whether contract incentives are earned, and Hedera executes auditable HBAR or USDC payments only inside explicit plan-approved safety controls.

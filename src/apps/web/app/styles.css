@@ -1,13 +1,38 @@
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');
+
 :root {
-  color-scheme: light;
-  --bg: #f7f8fb;
-  --panel: #ffffff;
-  --ink: #172033;
-  --muted: #667085;
-  --line: #dde3ee;
-  --blue: #2457d6;
-  --green: #177245;
-  --amber: #9a6700;
+  color-scheme: dark;
+  --op-bg: #050816;
+  --op-bg-2: #0a0f1f;
+  --op-bg-3: #0f1530;
+  --op-line: rgba(96, 165, 250, 0.1);
+  --op-line-soft: rgba(96, 165, 250, 0.05);
+  --op-ink: #f8fafc;
+  --op-ink-2: rgba(248, 250, 252, 0.78);
+  --op-muted: rgba(248, 250, 252, 0.55);
+  --op-muted-2: rgba(248, 250, 252, 0.4);
+  --op-blue: #3b82f6;
+  --op-blue-2: #60a5fa;
+  --op-blue-deep: #1d4ed8;
+  --op-green: #10b981;
+  --op-green-2: #34d399;
+  --op-amber: #f59e0b;
+  --op-amber-2: #fbbf24;
+  --op-orange: #f97316;
+  --op-red: #ef4444;
+  --op-slide-w: 1920px;
+  --op-slide-h: 1080px;
+  --op-page-w: 1240px;
+  --op-page-h: 1600px;
+  --op-rail-width: 188px;
+  --bg: var(--op-bg);
+  --panel: rgba(10, 15, 31, 0.74);
+  --ink: var(--op-ink);
+  --muted: var(--op-muted);
+  --line: var(--op-line);
+  --blue: var(--op-blue);
+  --green: var(--op-green);
+  --amber: var(--op-amber);
 }
 
 * {
@@ -18,7 +43,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: "Geist", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 a {
@@ -205,10 +230,13 @@ main {
 }
 
 .primary-button {
+  align-items: center;
   background: var(--blue);
   border: 0;
   color: white;
+  display: inline-flex;
   font-weight: 700;
+  justify-content: center;
   padding: 10px 14px;
   width: fit-content;
 }
@@ -281,6 +309,40 @@ main {
 
 .provider-portal .back {
   margin-bottom: 10px;
+}
+
+.top-nav-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.use-case-nav {
+  align-items: center;
+  background: rgba(10, 15, 31, 0.72);
+  border: 1px solid var(--op-line);
+  border-radius: 999px;
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+}
+
+.use-case-nav a {
+  border-radius: 999px;
+  color: var(--op-muted);
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  padding: 8px 12px;
+  text-transform: uppercase;
+}
+
+.use-case-nav a[aria-current="page"] {
+  background: rgba(59, 130, 246, 0.16);
+  color: var(--op-blue-2);
 }
 
 .provider-hero {
@@ -832,6 +894,11 @@ main {
   overflow-wrap: anywhere;
 }
 
+.worklist .mono-cell {
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+
 .row-action {
   background: #ffffff;
   border: 1px solid var(--line);
@@ -905,5 +972,569 @@ main {
 
   .toolbar .primary-button {
     width: 100%;
+  }
+}
+
+html {
+  min-height: 100%;
+  background: #000;
+}
+
+body {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 22% 8%, rgba(59, 130, 246, 0.24), transparent 32rem),
+    radial-gradient(circle at 84% 16%, rgba(16, 185, 129, 0.1), transparent 28rem),
+    linear-gradient(180deg, #050816 0%, #050816 42%, #02040b 100%);
+  color: var(--op-ink);
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "ss01", "cv11";
+}
+
+.op-page-shell {
+  isolation: isolate;
+  margin: 0 auto;
+  max-width: 1240px;
+  min-height: 100vh;
+  padding: 32px 24px 72px;
+  position: relative;
+}
+
+.op-page-shell::before,
+.op-grid-bg {
+  background-image:
+    linear-gradient(rgba(96, 165, 250, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(96, 165, 250, 0.08) 1px, transparent 1px);
+  background-size: 128px 128px;
+  content: "";
+  inset: 0;
+  mask-image: linear-gradient(180deg, black, transparent 72%);
+  pointer-events: none;
+  position: absolute;
+  z-index: -1;
+}
+
+.op-page-shell::after {
+  background: linear-gradient(90deg, rgba(59, 130, 246, 0.8), rgba(16, 185, 129, 0.55), rgba(245, 158, 11, 0.55));
+  content: "";
+  height: 1px;
+  left: 24px;
+  opacity: 0.42;
+  position: absolute;
+  right: 24px;
+  top: 0;
+}
+
+.op-page-shell-app {
+  display: grid;
+  gap: 22px;
+}
+
+.op-page-shell-document {
+  max-width: var(--op-page-w);
+}
+
+.op-page-shell-deck {
+  max-width: calc(var(--op-slide-w) * 0.72);
+}
+
+.back {
+  align-items: center;
+  border: 1px solid var(--op-line);
+  border-radius: 999px;
+  color: var(--op-blue-2);
+  display: inline-flex;
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 500;
+  gap: 8px;
+  letter-spacing: 0;
+  margin-bottom: 0;
+  padding: 8px 12px;
+  text-transform: uppercase;
+  width: fit-content;
+}
+
+.eyebrow,
+.label {
+  color: var(--op-blue-2);
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.op-hero,
+.hero {
+  gap: 18px;
+  padding: 32px 0 20px;
+}
+
+.op-hero h1,
+.hero h1 {
+  color: var(--op-ink);
+  font-size: 72px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 0.98;
+  margin: 0;
+  max-width: 1020px;
+}
+
+.op-hero h1 em,
+.hero h1 em {
+  color: var(--op-blue-2);
+  font-style: normal;
+}
+
+.op-hero-copy,
+.hero p,
+.op-hero-copy p {
+  color: var(--op-ink-2);
+  font-size: 18px;
+  line-height: 1.55;
+  margin: 0;
+  max-width: 820px;
+}
+
+.hero.compact h1,
+.op-hero.compact h1,
+.provider-hero h1 {
+  font-size: 48px;
+  line-height: 1.02;
+}
+
+.card,
+.panel,
+.op-panel,
+.choice,
+.service-card,
+.coverage-card,
+.confirmation-panel,
+.readonly-fields div,
+.review-list div,
+.detail-grid div,
+.assessment-question,
+.assessment-progress,
+.result-box,
+.modal,
+.table-wrap {
+  background: rgba(10, 15, 31, 0.72);
+  border: 1px solid var(--op-line);
+  border-radius: 8px;
+  box-shadow: inset 0 1px 0 rgba(248, 250, 252, 0.04);
+  color: var(--op-ink);
+}
+
+.card,
+.panel,
+.op-panel {
+  backdrop-filter: blur(18px);
+}
+
+.card {
+  min-height: 176px;
+  padding: 20px;
+  position: relative;
+}
+
+.card::before {
+  background: linear-gradient(90deg, var(--op-blue), transparent);
+  content: "";
+  height: 1px;
+  left: 20px;
+  opacity: 0.8;
+  position: absolute;
+  right: 20px;
+  top: 0;
+}
+
+.card h2,
+.panel h2,
+.op-panel h2 {
+  color: var(--op-ink);
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.card p,
+.panel p,
+.panel li,
+.service-card p,
+.service-card ul,
+.coverage-card p,
+.confirmation-panel p,
+.empty-state,
+.step-context ul,
+.stage-copy {
+  color: var(--op-muted);
+}
+
+.op-product-frame {
+  background: rgba(5, 8, 22, 0.86);
+  border: 1px solid rgba(96, 165, 250, 0.16);
+  border-radius: 8px;
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(248, 250, 252, 0.04);
+  display: grid;
+  overflow: hidden;
+}
+
+.op-product-toolbar {
+  align-items: center;
+  background: rgba(15, 21, 48, 0.82);
+  border-bottom: 1px solid var(--op-line);
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, 9px) minmax(0, 1fr) auto;
+  min-height: 38px;
+  padding: 0 14px;
+}
+
+.op-product-toolbar span {
+  background: rgba(96, 165, 250, 0.38);
+  border-radius: 999px;
+  height: 9px;
+  width: 9px;
+}
+
+.op-product-toolbar strong,
+.op-product-toolbar em {
+  color: var(--op-muted);
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 500;
+  letter-spacing: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.op-product-toolbar em {
+  color: var(--op-blue-2);
+}
+
+.op-product-frame-body {
+  padding: 18px;
+}
+
+.op-product-frame .grid {
+  gap: 12px;
+}
+
+.op-deck-rail {
+  align-content: start;
+  background: rgba(0, 0, 0, 0.52);
+  border-right: 1px solid var(--op-line);
+  display: grid;
+  gap: 12px;
+  inline-size: var(--op-rail-width);
+  max-height: 100vh;
+  overflow: auto;
+  padding: 12px;
+}
+
+.op-deck-rail a {
+  background: rgba(10, 15, 31, 0.78);
+  border: 1px solid rgba(96, 165, 250, 0.14);
+  border-radius: 8px;
+  color: var(--op-ink-2);
+  display: grid;
+  gap: 6px;
+  min-height: 92px;
+  padding: 10px;
+}
+
+.op-deck-rail a[aria-current="step"] {
+  border-color: var(--op-orange-2);
+  box-shadow: 0 0 0 1px rgba(249, 115, 22, 0.24);
+  color: var(--op-ink);
+}
+
+.op-deck-rail span {
+  color: var(--op-muted-2);
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+}
+
+.op-deck-rail strong {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.op-deck-rail em {
+  color: var(--op-muted);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.primary-button,
+.row-action {
+  background: linear-gradient(135deg, var(--op-blue), var(--op-blue-deep));
+  border: 1px solid rgba(96, 165, 250, 0.3);
+  border-radius: 8px;
+  box-shadow: 0 16px 40px rgba(29, 78, 216, 0.22);
+  color: #fff;
+  font-weight: 600;
+}
+
+.secondary-button,
+.row-action {
+  background: rgba(10, 15, 31, 0.86);
+  color: var(--op-blue-2);
+}
+
+.primary-button:focus-visible,
+.row-action:focus-visible,
+.select-control:focus-visible,
+.radio-card:focus-within {
+  outline: 2px solid var(--op-blue-2);
+  outline-offset: 2px;
+}
+
+.primary-button:disabled {
+  opacity: 0.48;
+}
+
+.status {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.status.approved {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(52, 211, 153, 0.28);
+  color: var(--op-green-2);
+}
+
+.status.blocked {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(251, 191, 36, 0.28);
+  color: var(--op-amber-2);
+}
+
+.status.pending {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(96, 165, 250, 0.28);
+  color: var(--op-blue-2);
+}
+
+.mono,
+.mono-cell {
+  color: var(--op-ink-2);
+  font-family: "Geist Mono", ui-monospace, monospace;
+}
+
+.mono {
+  background: rgba(2, 4, 11, 0.78);
+  border: 1px solid var(--op-line);
+}
+
+.stepper li {
+  background: rgba(10, 15, 31, 0.7);
+  border-color: var(--op-line);
+  color: var(--op-muted);
+}
+
+.stepper strong,
+.question-number {
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--op-blue-2);
+}
+
+.stepper li.done,
+.stepper li.active {
+  border-color: rgba(96, 165, 250, 0.54);
+  color: var(--op-ink);
+}
+
+.stepper li.active {
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.16);
+}
+
+.wizard-stage {
+  min-height: 420px;
+}
+
+.step-context {
+  background:
+    linear-gradient(180deg, rgba(96, 165, 250, 0.08), transparent 42%),
+    rgba(10, 15, 31, 0.72);
+  min-height: 420px;
+}
+
+.form-row span,
+.worklist th,
+.readonly-fields dt,
+.review-list dt,
+.detail-grid dt {
+  color: var(--op-muted);
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.select-control {
+  background:
+    linear-gradient(180deg, rgba(248, 250, 252, 0.035), rgba(248, 250, 252, 0.01)),
+    rgba(5, 8, 22, 0.86);
+  border-color: rgba(96, 165, 250, 0.14);
+  color: var(--op-ink);
+}
+
+.select-control:disabled {
+  background: rgba(15, 21, 48, 0.62);
+  color: var(--op-muted-2);
+}
+
+.readonly-fields div,
+.review-list div,
+.detail-grid div,
+.assessment-question {
+  background: rgba(5, 8, 22, 0.5);
+}
+
+.service-card,
+.coverage-card,
+.confirmation-panel {
+  background:
+    linear-gradient(135deg, rgba(59, 130, 246, 0.08), transparent 54%),
+    rgba(5, 8, 22, 0.62);
+}
+
+.coverage-card.approved-result {
+  background:
+    linear-gradient(135deg, rgba(16, 185, 129, 0.12), transparent 54%),
+    rgba(5, 8, 22, 0.62);
+  border-color: rgba(52, 211, 153, 0.3);
+}
+
+.coverage-card.warning-panel,
+.warning-panel {
+  background:
+    linear-gradient(135deg, rgba(245, 158, 11, 0.13), transparent 54%),
+    rgba(5, 8, 22, 0.62);
+  border-color: rgba(251, 191, 36, 0.3);
+}
+
+.warning-copy {
+  color: var(--op-amber-2);
+}
+
+.assessment-pill {
+  background: rgba(5, 8, 22, 0.55);
+  border-color: var(--op-line);
+  color: var(--op-muted);
+}
+
+.assessment-pill.complete,
+.assessment-progress.complete {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(52, 211, 153, 0.28);
+  color: var(--op-green-2);
+}
+
+.assessment-pill.skipped {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(251, 191, 36, 0.28);
+  color: var(--op-amber-2);
+}
+
+.modal-backdrop {
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(10px);
+}
+
+.modal {
+  background:
+    radial-gradient(circle at 18% 0%, rgba(59, 130, 246, 0.18), transparent 24rem),
+    var(--op-bg-2);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.45);
+}
+
+.radio-card {
+  background: rgba(5, 8, 22, 0.64);
+  border-color: var(--op-line);
+}
+
+.radio-card.selected {
+  border-color: var(--op-blue-2);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.16);
+  color: var(--op-blue-2);
+}
+
+.table-wrap {
+  background: rgba(5, 8, 22, 0.64);
+}
+
+.worklist th {
+  background: rgba(15, 21, 48, 0.84);
+}
+
+.worklist th,
+.worklist td {
+  border-bottom-color: var(--op-line);
+}
+
+.worklist tbody tr:hover,
+.worklist tbody tr.selected {
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.action-status {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(96, 165, 250, 0.28);
+  color: var(--op-blue-2);
+}
+
+.error-text {
+  color: #fca5a5;
+}
+
+@media (max-width: 860px) {
+  .op-page-shell {
+    padding: 24px 16px 48px;
+  }
+
+  .op-page-shell::after {
+    left: 16px;
+    right: 16px;
+  }
+
+  .op-hero h1,
+  .hero h1 {
+    font-size: 46px;
+  }
+
+  .hero.compact h1,
+  .op-hero.compact h1,
+  .provider-hero h1 {
+    font-size: 36px;
+  }
+
+  .op-product-frame-body {
+    padding: 14px;
+  }
+}
+
+@media (max-width: 560px) {
+  .op-hero h1,
+  .hero h1 {
+    font-size: 38px;
+  }
+
+  .op-hero-copy,
+  .hero p,
+  .op-hero-copy p {
+    font-size: 16px;
   }
 }

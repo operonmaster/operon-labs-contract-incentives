@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const submitted = providerDocumentationWorkflow.submitPriorAuth(body);
+    const submitted = await providerDocumentationWorkflow.submitPriorAuth(body);
     return NextResponse.json(submitted);
   } catch (error) {
     return NextResponse.json(

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  canContinueFromSetup,
+  canEditHealthPlan,
   summarizeAssessmentAnswers,
   assessmentQuestions,
   serviceOptions,
@@ -12,6 +14,17 @@ describe("provider portal content", () => {
   it("uses a four-step portal flow with patient and plan collapsed into one step", () => {
     expect(wizardSteps.map((step) => step.label)).toEqual(["Patient & Plan", "Service", "Coverage", "Review"]);
     expect(stepContextByStep.setup.title).toBe("Select patient and plan");
+  });
+
+  it("requires patient selection before health plan selection and setup progression", () => {
+    expect(canEditHealthPlan({ patientId: null, submitting: false })).toBe(false);
+    expect(canEditHealthPlan({ patientId: "patient-maya-chen", submitting: false })).toBe(true);
+    expect(canEditHealthPlan({ patientId: "patient-maya-chen", submitting: true })).toBe(false);
+
+    expect(canContinueFromSetup({ patientId: null, planId: "acme-health-ppo", submitting: false })).toBe(false);
+    expect(canContinueFromSetup({ patientId: "patient-maya-chen", planId: null, submitting: false })).toBe(false);
+    expect(canContinueFromSetup({ patientId: "patient-maya-chen", planId: "acme-health-ppo", submitting: false })).toBe(true);
+    expect(canContinueFromSetup({ patientId: "patient-maya-chen", planId: "acme-health-ppo", submitting: true })).toBe(false);
   });
 
   it("describes the service options with procedure codes and provider-facing detail", () => {

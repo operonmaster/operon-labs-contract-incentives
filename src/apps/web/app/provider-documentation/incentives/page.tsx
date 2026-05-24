@@ -3,9 +3,15 @@ import { PlanIncentivesConsole } from "../../../components/provider-documentatio
 
 export const metadata: Metadata = {
   title: "Plan Incentives Console",
-  description: "Plan-side worklist for reviewing provider documentation incentive events and approving testnet payments."
+  description: "Plan-side audit console for reviewing provider documentation incentive events and policy-bound testnet payments."
 };
 
-export default function ProviderDocumentationIncentivesPage() {
-  return <PlanIncentivesConsole />;
+export default async function ProviderDocumentationIncentivesPage({
+  searchParams
+}: {
+  searchParams?: Promise<{ caseId?: string }>;
+}) {
+  const params = await searchParams;
+
+  return <PlanIncentivesConsole initialCaseId={params?.caseId ?? null} />;
 }

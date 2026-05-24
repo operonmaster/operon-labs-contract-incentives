@@ -9,6 +9,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@hashgraph/hedera-agent-kit": "^4.0.0",
     "@operon-labs/policy-engine": "0.1.0"
   }
 }

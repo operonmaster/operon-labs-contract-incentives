@@ -3,6 +3,6 @@ import { providerDocumentationWorkflow } from "../../../../lib/provider-document
 
 export async function GET() {
   return NextResponse.json({
-    rows: providerDocumentationWorkflow.listIncentiveRows()
+    rows: await providerDocumentationWorkflow.listIncentiveRows()
   });
 }

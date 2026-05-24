@@ -2,6 +2,7 @@ import Link from "next/link";
 import { evaluateDemoScenario } from "@operon-labs/incentive-agent";
 import { createAuditRecord } from "@operon-labs/audit-log";
 import { getScenario } from "./demo-catalog";
+import { LabsHero, LabsPageShell, LabsPanel, LabsProductFrame } from "./labs-ui";
 
 export function DemoPage({ slug }: Readonly<{ slug: string }>) {
   const scenario = getScenario(slug);
@@ -13,22 +14,20 @@ export function DemoPage({ slug }: Readonly<{ slug: string }>) {
   });
 
   return (
-    <main>
+    <LabsPageShell>
       <Link className="back" href="/">
         Back to demos
       </Link>
-      <section className="hero">
-        <span className="eyebrow">Contract incentive workflow</span>
-        <h1>{scenario.title}</h1>
+
+      <LabsHero eyebrow="Contract incentive workflow" title={scenario.title}>
         <p>{scenario.purpose}</p>
-      </section>
+      </LabsHero>
 
-      <section className="panel">
-        <h2>Synthetic evidence</h2>
+      <LabsProductFrame title="Synthetic evidence" meta="Policy input">
         <pre className="mono">{JSON.stringify(evaluation.request, null, 2)}</pre>
-      </section>
+      </LabsProductFrame>
 
-      <section className="panel">
+      <LabsPanel>
         <h2>Policy decision</h2>
         <span className={`status ${evaluation.result.decision}`}>{evaluation.result.decision}</span>
         <ul>
@@ -37,12 +36,11 @@ export function DemoPage({ slug }: Readonly<{ slug: string }>) {
           <li>Recipient wallet: {evaluation.result.walletId ?? "blocked"}</li>
           <li>Reason codes: {evaluation.result.reasonCodes.length === 0 ? "none" : evaluation.result.reasonCodes.join(", ")}</li>
         </ul>
-      </section>
+      </LabsPanel>
 
-      <section className="panel">
-        <h2>Audit record</h2>
+      <LabsProductFrame title="Audit record" meta="Immutable trace">
         <pre className="mono">{JSON.stringify(audit, null, 2)}</pre>
-      </section>
-    </main>
+      </LabsProductFrame>
+    </LabsPageShell>
   );
 }

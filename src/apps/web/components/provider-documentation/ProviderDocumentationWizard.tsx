@@ -3,7 +3,11 @@
 import type { DtrAnswers, PriorAuthRecord, ServiceCode } from "@operon-labs/um-platform";
 import Link from "next/link";
 import { useRef, useState } from "react";
+import { LabsHero, LabsPageShell } from "../labs-ui";
+import { UseCaseNavigation } from "./UseCaseNavigation";
 import {
+  canContinueFromSetup,
+  canEditHealthPlan,
   summarizeAssessmentAnswers,
   assessmentQuestions,
   serviceOptions,
@@ -210,16 +214,17 @@ export function ProviderDocumentationWizard() {
   }
 
   return (
-    <main className="workspace provider-portal">
-      <Link className="back" href="/">
-        Back to demos
-      </Link>
+    <LabsPageShell className="workspace provider-portal">
+      <div className="top-nav-row">
+        <Link className="back" href="/">
+          Back to demos
+        </Link>
+        <UseCaseNavigation activeView="provider" caseId={submitted?.caseId} />
+      </div>
 
-      <section className="hero compact provider-hero">
-        <span className="eyebrow">Provider portal</span>
-        <h1>New prior authorization</h1>
+      <LabsHero className="provider-hero" compact eyebrow="Provider portal" title="New prior authorization">
         <p>Select patient coverage, search the requested service, check requirements, and submit the request.</p>
-      </section>
+      </LabsHero>
 
       <section className="wizard-shell provider-shell">
         <ol className="stepper compact-stepper" aria-label="Prior authorization steps">
@@ -304,7 +309,7 @@ export function ProviderDocumentationWizard() {
           onSkip={skipAssessment}
         />
       ) : null}
-    </main>
+    </LabsPageShell>
   );
 }
 
@@ -408,13 +413,18 @@ function SetupStep({
 
         <label className="form-row">
           <span>Health plan</span>
-          <select className="select-control" disabled={!patientId || submitting} value={planId ?? ""} onChange={(event) => onPlanChange(event.target.value)}>
+          <select
+            className="select-control"
+            disabled={!canEditHealthPlan({ patientId, submitting })}
+            value={planId ?? ""}
+            onChange={(event) => onPlanChange(event.target.value)}
+          >
             <option value="">Select health plan</option>
             <option value="acme-health-ppo">Acme Health PPO</option>
           </select>
         </label>
       </div>
-      <button className="primary-button" disabled={!patientId || !planId || submitting} type="button" onClick={onContinue}>
+      <button className="primary-button" disabled={!canContinueFromSetup({ patientId, planId, submitting })} type="button" onClick={onContinue}>
         Next: service
       </button>
     </>
@@ -591,9 +601,14 @@ function SubmissionConfirmation({ submitted, onSubmitAnother }: { submitted: Pri
           <dd>{submitted.serviceLabel}</dd>
         </div>
       </dl>
-      <button className="primary-button secondary-button" type="button" onClick={onSubmitAnother}>
-        Submit another request
-      </button>
+      <div className="button-row">
+        <Link className="primary-button" href={`/provider-documentation/incentives?caseId=${encodeURIComponent(submitted.caseId)}`}>
+          View health plan audit
+        </Link>
+        <button className="primary-button secondary-button" type="button" onClick={onSubmitAnother}>
+          Submit another request
+        </button>
+      </div>
     </div>
   );
 }

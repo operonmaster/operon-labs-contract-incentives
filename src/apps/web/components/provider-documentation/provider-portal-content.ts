@@ -42,6 +42,15 @@ export interface AssessmentAnswerSummary {
   isComplete: boolean;
 }
 
+export interface HealthPlanEditState {
+  patientId: string | null;
+  submitting: boolean;
+}
+
+export interface SetupContinueState extends HealthPlanEditState {
+  planId: string | null;
+}
+
 const yesNoAnswerOptions: AssessmentAnswerOption[] = [
   { value: "yes", label: "Yes" },
   { value: "no", label: "No" }
@@ -144,4 +153,12 @@ export function summarizeAssessmentAnswers(answers: AssessmentAnswerMap): Assess
     totalCount: assessmentQuestions.length,
     isComplete: answeredCount === assessmentQuestions.length
   };
+}
+
+export function canEditHealthPlan({ patientId, submitting }: HealthPlanEditState) {
+  return Boolean(patientId) && !submitting;
+}
+
+export function canContinueFromSetup({ patientId, planId, submitting }: SetupContinueState) {
+  return Boolean(patientId && planId) && !submitting;
 }

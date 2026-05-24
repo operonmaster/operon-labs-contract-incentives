@@ -1,5 +1,5 @@
 import { createAuditRecord, type AuditRecord } from "@operon-labs/audit-log";
-import { executeApprovedPayment } from "@operon-labs/hedera-executor";
+import { executePolicyBoundPayment } from "@operon-labs/hedera-executor";
 import { evaluateProviderDocumentationEvent } from "@operon-labs/incentive-agent";
 import {
   createInMemoryUmPlatform,
@@ -12,7 +12,8 @@ import {
   type UmPlatform
 } from "@operon-labs/um-platform";
 
-export type IncentiveStatus = "eligible_pending_approval" | "not_eligible" | "paid";
+export type IncentiveStatus = "not_eligible" | "paid" | "payment_failed";
+export type PaymentStatus = "auto_executed" | "blocked_by_policy" | "execution_failed";
 
 export interface IncentiveWorklistRow {
   caseId: string;
@@ -23,11 +24,13 @@ export interface IncentiveWorklistRow {
   paResult: PriorAuthRecord["paResult"];
   denialReason: PriorAuthRecord["denialReason"];
   incentiveStatus: IncentiveStatus;
+  paymentStatus: PaymentStatus;
   incentiveValue: number;
   currency: "USDC";
   reason: string;
   reasonCodes: string[];
   policyId: string;
+  policyControls: string[];
   audit: AuditRecord;
   walletId: string | null;
   transactionId: string | null;
@@ -36,25 +39,40 @@ export interface IncentiveWorklistRow {
 /* eslint-disable no-unused-vars -- TypeScript interface method signatures require parameter names. */
 export interface ProviderDocumentationWorkflow {
   getCoverageRequirements: typeof getCoverageRequirements;
-  submitPriorAuth(input: PriorAuthSubmissionInput): PriorAuthRecord;
+  submitPriorAuth(input: PriorAuthSubmissionInput): Promise<PriorAuthRecord>;
   listPriorAuths(): PriorAuthRecord[];
   getEvidence(caseId: string): ProviderDocumentationEvidence | null;
-  listIncentiveRows(): IncentiveWorklistRow[];
-  getIncentiveRow(caseId: string): IncentiveWorklistRow | null;
-  approvePayment(caseId: string): Promise<IncentiveWorklistRow>;
+  listIncentiveRows(): Promise<IncentiveWorklistRow[]>;
+  getIncentiveRow(caseId: string): Promise<IncentiveWorklistRow | null>;
 }
 /* eslint-enable no-unused-vars */
 
 export function createProviderDocumentationWorkflow(platform: UmPlatform = createInMemoryUmPlatform()): ProviderDocumentationWorkflow {
   const rows = new Map<string, IncentiveWorklistRow>();
-  const approvalsInFlight = new Map<string, Promise<IncentiveWorklistRow>>();
+  const settlementsInFlight = new Map<string, Promise<IncentiveWorklistRow | null>>();
 
-  function processEvent(event: PasSubmittedEvent): IncentiveWorklistRow | null {
+  async function processEvent(event: PasSubmittedEvent): Promise<IncentiveWorklistRow | null> {
     const existing = rows.get(event.caseId);
     if (existing) {
       return existing;
     }
 
+    const existingSettlement = settlementsInFlight.get(event.caseId);
+    if (existingSettlement) {
+      return existingSettlement;
+    }
+
+    const settlement = settleEvent(event);
+    settlementsInFlight.set(event.caseId, settlement);
+
+    try {
+      return await settlement;
+    } finally {
+      settlementsInFlight.delete(event.caseId);
+    }
+  }
+
+  async function settleEvent(event: PasSubmittedEvent): Promise<IncentiveWorklistRow | null> {
     const record = platform.listPriorAuths().find((candidate) => candidate.caseId === event.caseId);
     if (!record) {
       return null;
@@ -69,7 +87,7 @@ export function createProviderDocumentationWorkflow(platform: UmPlatform = creat
       result: evaluation.result,
       transactionId: null
     });
-    const row: IncentiveWorklistRow = {
+    const baseRow: IncentiveWorklistRow = {
       caseId: record.caseId,
       submittedAt: record.submittedAt,
       providerGroupDisplay: record.providerGroupDisplay,
@@ -77,38 +95,83 @@ export function createProviderDocumentationWorkflow(platform: UmPlatform = creat
       serviceCode: record.serviceCode,
       paResult: record.paResult,
       denialReason: record.denialReason,
-      incentiveStatus: evaluation.result.decision === "approved" ? "eligible_pending_approval" : "not_eligible",
+      incentiveStatus: evaluation.result.decision === "approved" ? "paid" : "not_eligible",
+      paymentStatus: evaluation.result.decision === "approved" ? "auto_executed" : "blocked_by_policy",
       incentiveValue: evaluation.result.amount,
       currency: "USDC",
       reason: summarizeReason(record, evaluation.result.reasonCodes),
       reasonCodes: evaluation.result.reasonCodes,
       policyId: evaluation.result.policyId,
+      policyControls: providerDocumentationPolicyControls,
       audit,
       walletId: evaluation.result.walletId,
       transactionId: null
     };
 
-    rows.set(event.caseId, row);
-    return row;
+    if (evaluation.result.decision !== "approved" || !evaluation.result.walletId) {
+      rows.set(event.caseId, baseRow);
+      return baseRow;
+    }
+
+    try {
+      const payment = await executePolicyBoundPayment({
+        auditId: audit.id,
+        amount: evaluation.result.amount,
+        currency: evaluation.result.currency,
+        walletId: evaluation.result.walletId,
+        policyId: evaluation.result.policyId,
+        policyVersion: evaluation.result.policyVersion,
+        triggerEvent: event.eventType,
+        policyControls: providerDocumentationPolicyControls
+      });
+      const paid: IncentiveWorklistRow = {
+        ...baseRow,
+        transactionId: payment.transactionId,
+        audit: {
+          ...audit,
+          transactionId: payment.transactionId
+        }
+      };
+
+      rows.set(event.caseId, paid);
+      return paid;
+    } catch {
+      const failed: IncentiveWorklistRow = {
+        ...baseRow,
+        incentiveStatus: "payment_failed",
+        paymentStatus: "execution_failed",
+        reason: "Policy approved, but Hedera transaction execution failed",
+        transactionId: null
+      };
+
+      rows.set(event.caseId, failed);
+      return failed;
+    }
   }
 
-  function processPlatformEvents(caseId?: string): void {
+  async function processPlatformEvents(caseId?: string): Promise<void> {
     for (const event of platform.listEvents()) {
       if (!caseId || event.caseId === caseId) {
-        processEvent(event);
+        try {
+          await processEvent(event);
+        } catch {
+          // Provider submission must not fail because the async incentive layer is unavailable.
+        }
       }
     }
   }
 
-  function getIncentiveRow(caseId: string): IncentiveWorklistRow | null {
-    processPlatformEvents(caseId);
+  async function getIncentiveRow(caseId: string): Promise<IncentiveWorklistRow | null> {
+    await processPlatformEvents(caseId);
     return rows.get(caseId) ?? null;
   }
 
   return {
     getCoverageRequirements,
-    submitPriorAuth(input) {
-      return platform.submitPriorAuth(input);
+    async submitPriorAuth(input) {
+      const record = platform.submitPriorAuth(input);
+      await processPlatformEvents(record.caseId);
+      return record;
     },
     listPriorAuths() {
       return platform.listPriorAuths();
@@ -116,57 +179,11 @@ export function createProviderDocumentationWorkflow(platform: UmPlatform = creat
     getEvidence(caseId) {
       return platform.getEvidence(caseId);
     },
-    listIncentiveRows() {
-      processPlatformEvents();
+    async listIncentiveRows() {
+      await processPlatformEvents();
       return Array.from(rows.values()).sort((left, right) => right.submittedAt.localeCompare(left.submittedAt));
     },
-    getIncentiveRow,
-    async approvePayment(caseId) {
-      const existingApproval = approvalsInFlight.get(caseId);
-      if (existingApproval) {
-        return existingApproval;
-      }
-
-      const row = getIncentiveRow(caseId);
-      if (row?.incentiveStatus === "paid") {
-        return row;
-      }
-
-      if (!row || row.incentiveStatus !== "eligible_pending_approval" || !row.walletId) {
-        throw new Error("PAYMENT_NOT_ELIGIBLE");
-      }
-
-      const walletId = row.walletId;
-      const approval = (async () => {
-        const payment = await executeApprovedPayment({
-          auditId: row.audit.id,
-          amount: row.incentiveValue,
-          currency: row.currency,
-          walletId
-        });
-        const paid: IncentiveWorklistRow = {
-          ...row,
-          incentiveStatus: "paid",
-          reason: "Hedera transaction recorded",
-          transactionId: payment.transactionId,
-          audit: {
-            ...row.audit,
-            transactionId: payment.transactionId
-          }
-        };
-
-        rows.set(caseId, paid);
-        return paid;
-      })();
-
-      approvalsInFlight.set(caseId, approval);
-
-      try {
-        return await approval;
-      } finally {
-        approvalsInFlight.delete(caseId);
-      }
-    }
+    getIncentiveRow
   };
 }
 
@@ -187,3 +204,10 @@ function summarizeReason(record: PriorAuthRecord, reasonCodes: string[]): string
 
   return reasonCodes.join(", ");
 }
+
+const providerDocumentationPolicyControls = [
+  "Allowed submitter and recipient wallet",
+  "3 USDC max per PA request",
+  "300 USDC monthly cap",
+  "No PHI or prohibited outcome metrics"
+];

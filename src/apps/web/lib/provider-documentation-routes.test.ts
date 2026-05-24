@@ -1,19 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { POST as approvePayment } from "../app/api/provider-documentation/incentives/[caseId]/approve/route";
+import { GET as listIncentives } from "../app/api/provider-documentation/incentives/route";
 import { POST as submitPriorAuth } from "../app/api/um/prior-auths/route";
 import { GET as getEvidence } from "../app/api/um/prior-auths/[caseId]/evidence/route";
 
 describe("provider documentation API routes", () => {
-  it("requires a plan role header before approval", async () => {
-    const response = await approvePayment(new Request("http://localhost/api/provider-documentation/incentives/missing/approve"), {
-      params: Promise.resolve({ caseId: "missing" })
-    });
-
-    await expect(response.json()).resolves.toEqual({ error: "PLAN_APPROVAL_REQUIRED" });
-    expect(response.status).toBe(403);
-  });
-
-  it("approves an eligible row when the plan role header is present", async () => {
+  it("auto-settles an eligible policy payment after prior auth submission", async () => {
     const submittedResponse = await submitPriorAuth(
       new Request("http://localhost/api/um/prior-auths", {
         method: "POST",
@@ -30,21 +21,16 @@ describe("provider documentation API routes", () => {
     );
     const submitted = (await submittedResponse.json()) as { caseId: string };
 
-    const response = await approvePayment(
-      new Request(`http://localhost/api/provider-documentation/incentives/${submitted.caseId}/approve`, {
-        headers: {
-          "x-operon-plan-role": "contract-admin"
-        }
-      }),
-      {
-        params: Promise.resolve({ caseId: submitted.caseId })
-      }
-    );
-    const row = (await response.json()) as { incentiveStatus: string; transactionId: string | null };
+    const response = await listIncentives();
+    const payload = (await response.json()) as { rows: Array<{ caseId: string; incentiveStatus: string; paymentStatus: string; transactionId: string | null }> };
+    const row = payload.rows.find((candidate) => candidate.caseId === submitted.caseId);
 
     expect(response.status).toBe(200);
-    expect(row.incentiveStatus).toBe("paid");
-    expect(row.transactionId).toContain("testnet-");
+    expect(row).toMatchObject({
+      incentiveStatus: "paid",
+      paymentStatus: "auto_executed"
+    });
+    expect(row?.transactionId).toContain("testnet-");
   });
 
   it("accepts knee MRI prior auth submission when assessment is skipped", async () => {

@@ -3,12 +3,14 @@
 import type { IncentiveWorklistRow } from "../../lib/provider-documentation-workflow";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { LabsHero, LabsPageShell } from "../labs-ui";
+import { UseCaseNavigation } from "./UseCaseNavigation";
 
 interface IncentiveRowsResponse {
   rows: IncentiveWorklistRow[];
 }
 
-type RefreshSource = "initial" | "manual" | "poll" | "approval";
+type RefreshSource = "initial" | "manual" | "poll";
 
 function formatCurrency(row: IncentiveWorklistRow) {
   return `${row.incentiveValue.toLocaleString("en-US", {
@@ -19,12 +21,12 @@ function formatCurrency(row: IncentiveWorklistRow) {
 
 function formatStatus(status: IncentiveWorklistRow["incentiveStatus"]) {
   switch (status) {
-    case "eligible_pending_approval":
-      return "Eligible - pending approval";
     case "not_eligible":
-      return "Not eligible";
+      return "Blocked by policy";
     case "paid":
-      return "Paid";
+      return "Paid by policy";
+    case "payment_failed":
+      return "Payment failed";
   }
 }
 
@@ -34,23 +36,33 @@ function formatPaResult(paResult: IncentiveWorklistRow["paResult"]) {
 
 function statusClass(status: IncentiveWorklistRow["incentiveStatus"]) {
   switch (status) {
-    case "eligible_pending_approval":
-      return "pending";
     case "not_eligible":
       return "blocked";
     case "paid":
       return "approved";
+    case "payment_failed":
+      return "blocked";
   }
 }
 
-export function PlanIncentivesConsole() {
+function formatPaymentStatus(row: IncentiveWorklistRow) {
+  switch (row.paymentStatus) {
+    case "auto_executed":
+      return "Auto-settled";
+    case "blocked_by_policy":
+      return "No transaction";
+    case "execution_failed":
+      return "Execution failed";
+  }
+}
+
+export function PlanIncentivesConsole({ initialCaseId = null }: { initialCaseId?: string | null }) {
+  const requestedCaseId = initialCaseId;
   const [rows, setRows] = useState<IncentiveWorklistRow[]>([]);
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [actionStatus, setActionStatus] = useState<string | null>(null);
-  const [approvingCaseId, setApprovingCaseId] = useState<string | null>(null);
   const mountedRef = useRef(false);
   const refreshSequenceRef = useRef(0);
   const priorityRefreshCountRef = useRef(0);
@@ -64,7 +76,7 @@ export function PlanIncentivesConsole() {
 
     const requestId = refreshSequenceRef.current + 1;
     refreshSequenceRef.current = requestId;
-    const isPriorityRefresh = source === "manual" || source === "approval";
+    const isPriorityRefresh = source === "manual";
 
     if (isPriorityRefresh) {
       priorityRefreshCountRef.current += 1;
@@ -76,7 +88,6 @@ export function PlanIncentivesConsole() {
 
     if (source !== "poll" && mountedRef.current) {
       setError(null);
-      setActionStatus(null);
     }
 
     try {
@@ -96,6 +107,10 @@ export function PlanIncentivesConsole() {
 
       setRows(payload.rows);
       setSelectedCaseId((currentCaseId) => {
+        if (requestedCaseId && payload.rows.some((row) => row.caseId === requestedCaseId)) {
+          return requestedCaseId;
+        }
+
         if (currentCaseId && payload.rows.some((row) => row.caseId === currentCaseId)) {
           return currentCaseId;
         }
@@ -123,46 +138,7 @@ export function PlanIncentivesConsole() {
         priorityRefreshCountRef.current = Math.max(0, priorityRefreshCountRef.current - 1);
       }
     }
-  }, []);
-
-  async function approve(caseId: string) {
-    setApprovingCaseId(caseId);
-    setActionStatus(null);
-    setError(null);
-
-    try {
-      const response = await fetch(`/api/provider-documentation/incentives/${caseId}/approve`, {
-        method: "POST",
-        headers: {
-          "x-operon-plan-role": "contract-admin"
-        }
-      });
-      const payload = (await response.json()) as IncentiveWorklistRow | { error?: string };
-
-      if (!mountedRef.current) {
-        return;
-      }
-
-      if (!response.ok) {
-        setActionStatus("error" in payload && payload.error ? payload.error : "Payment approval failed");
-        return;
-      }
-
-      const refreshed = await refreshRows("approval");
-      if (refreshed && mountedRef.current) {
-        setSelectedCaseId(caseId);
-        setActionStatus("Payment approved and Hedera transaction recorded.");
-      }
-    } catch {
-      if (mountedRef.current) {
-        setActionStatus("Payment approval failed");
-      }
-    } finally {
-      if (mountedRef.current) {
-        setApprovingCaseId(null);
-      }
-    }
-  }
+  }, [requestedCaseId]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -181,19 +157,19 @@ export function PlanIncentivesConsole() {
   }, [refreshRows]);
 
   return (
-    <main className="workspace">
-      <Link className="back" href="/provider-documentation">
-        Back to provider portal
-      </Link>
+    <LabsPageShell className="workspace plan-console">
+      <div className="top-nav-row">
+        <Link className="back" href="/">
+          Back to demos
+        </Link>
+        <UseCaseNavigation activeView="plan" caseId={selectedCaseId ?? requestedCaseId} />
+      </div>
 
-      <section className="hero compact">
-        <span className="eyebrow">Plan contract incentives console</span>
-        <h1>Provider documentation incentives</h1>
+      <LabsHero compact eyebrow="Health plan audit console" title="Provider documentation incentives">
         <p>
-          Review submitted PA events, inspect policy-safe evidence, and approve eligible provider incentive payments on
-          testnet.
+          Review submitted PA events, inspect policy-safe evidence, and verify policy-bound Hedera testnet settlement.
         </p>
-      </section>
+      </LabsHero>
 
       <section className="panel">
         <div className="toolbar">
@@ -227,8 +203,9 @@ export function PlanIncentivesConsole() {
                 <th>Provider group</th>
                 <th>Service</th>
                 <th>PA result</th>
-                <th>Incentive status</th>
+                <th>Policy outcome</th>
                 <th>Value</th>
+                <th>Payment</th>
                 <th>Reason</th>
                 <th>Action</th>
               </tr>
@@ -246,6 +223,7 @@ export function PlanIncentivesConsole() {
                     </span>
                   </td>
                   <td>{formatCurrency(row)}</td>
+                  <td>{formatPaymentStatus(row)}</td>
                   <td>{row.reason}</td>
                   <td>
                     <button className="row-action" type="button" onClick={() => setSelectedCaseId(row.caseId)}>
@@ -256,7 +234,7 @@ export function PlanIncentivesConsole() {
               ))}
               {!initialLoading && rows.length === 0 ? (
                 <tr>
-                  <td className="empty-state" colSpan={8}>
+                  <td className="empty-state" colSpan={9}>
                     No submitted PA incentive events yet. Submit a prior authorization from the provider portal.
                   </td>
                 </tr>
@@ -269,19 +247,9 @@ export function PlanIncentivesConsole() {
       <section className="panel detail-panel">
         <div className="toolbar">
           <div>
-            <h2>Policy details</h2>
+            <h2>PA preview and policy audit</h2>
             <p>{selectedRow ? selectedRow.caseId : "Select a PA row to inspect the event."}</p>
           </div>
-          {selectedRow?.incentiveStatus === "eligible_pending_approval" ? (
-            <button
-              className="primary-button"
-              disabled={approvingCaseId === selectedRow.caseId}
-              type="button"
-              onClick={() => void approve(selectedRow.caseId)}
-            >
-              {approvingCaseId === selectedRow.caseId ? "Approving..." : "Approve testnet payment"}
-            </button>
-          ) : null}
         </div>
 
         {selectedRow ? (
@@ -296,8 +264,28 @@ export function PlanIncentivesConsole() {
                 <dd>UM Platform API</dd>
               </div>
               <div>
+                <dt>Service</dt>
+                <dd>{selectedRow.serviceLabel}</dd>
+              </div>
+              <div>
+                <dt>PA result</dt>
+                <dd>{formatPaResult(selectedRow.paResult)}</dd>
+              </div>
+              <div>
                 <dt>Policy ID</dt>
                 <dd className="mono-cell">{selectedRow.policyId}</dd>
+              </div>
+              <div>
+                <dt>Policy outcome</dt>
+                <dd>{formatStatus(selectedRow.incentiveStatus)}</dd>
+              </div>
+              <div>
+                <dt>Payment status</dt>
+                <dd>{formatPaymentStatus(selectedRow)}</dd>
+              </div>
+              <div>
+                <dt>Incentive value</dt>
+                <dd>{formatCurrency(selectedRow)}</dd>
               </div>
               <div>
                 <dt>Audit ID</dt>
@@ -312,21 +300,23 @@ export function PlanIncentivesConsole() {
                 <dd className="mono-cell">{selectedRow.walletId ?? "Not assigned"}</dd>
               </div>
               <div>
+                <dt>Network</dt>
+                <dd>Hedera testnet</dd>
+              </div>
+              <div>
                 <dt>Transaction</dt>
                 <dd className="mono-cell">{selectedRow.transactionId ?? "Not recorded"}</dd>
               </div>
+              <div>
+                <dt>Policy guardrails</dt>
+                <dd>{selectedRow.policyControls.join("; ")}</dd>
+              </div>
             </dl>
-
-            {actionStatus ? (
-              <p className="action-status" role="status">
-                {actionStatus}
-              </p>
-            ) : null}
           </>
         ) : (
           <p className="empty-state">No policy event selected.</p>
         )}
       </section>
-    </main>
+    </LabsPageShell>
   );
 }

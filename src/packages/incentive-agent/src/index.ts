@@ -42,7 +42,9 @@ export function evaluateDemoScenario(evaluationType: string): DemoEvaluation {
 
 export function explainDecision(result: PolicyEvaluationResult): string {
   if (result.decision === "approved") {
-    return `Policy ${result.policyId} approved a ${result.amount} ${result.currency} payment proposal pending human approval.`;
+    return result.requiresHumanApproval
+      ? `Policy ${result.policyId} approved a ${result.amount} ${result.currency} payment proposal pending human approval.`
+      : `Policy ${result.policyId} approved a ${result.amount} ${result.currency} policy-bound payment for automatic settlement.`;
   }
 
   return `Policy ${result.policyId} blocked payment because ${result.reasonCodes.join(", ")}.`;
@@ -117,7 +119,7 @@ const demoPolicies: Record<string, IncentivePolicy> = {
       { field: "containsPhi", operator: "equals", value: false, reasonCode: "PHI_BLOCKED" }
     ],
     paymentFormula: { baseAmount: 5, maxPerRequest: 5, monthlyCap: 500 },
-    requiresHumanApproval: true
+    requiresHumanApproval: false
   },
   provider_documentation_completeness: {
     id: "provider-documentation-completeness-v1",
