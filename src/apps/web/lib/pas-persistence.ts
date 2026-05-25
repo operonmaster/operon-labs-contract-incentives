@@ -53,6 +53,7 @@ export interface FirestoreDocumentSnapshot {
 }
 
 export interface FirestoreDocumentReference {
+  create?(value: unknown): Promise<unknown>;
   set(value: unknown): Promise<unknown>;
   get(): Promise<FirestoreDocumentSnapshot>;
 }
@@ -219,6 +220,7 @@ function stripStoredAt(row: IncentiveWorklistRow & { storedAt?: string }): Incen
   delete (incentiveRow as IncentiveWorklistRow & { storedAt?: string }).storedAt;
   return {
     ...incentiveRow,
+    paymentIntentId: incentiveRow.paymentIntentId ?? null,
     settlementToken: incentiveRow.settlementToken ?? {
       symbol: incentiveRow.currency
     }

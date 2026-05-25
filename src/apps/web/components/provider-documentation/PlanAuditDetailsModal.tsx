@@ -70,6 +70,10 @@ export function PlanAuditDetailsModal({ row, onClose }: PlanAuditDetailsModalPro
             <dd className="mono-cell">{row.audit.id}</dd>
           </div>
           <div>
+            <dt>Payment intent</dt>
+            <dd className="mono-cell">{row.paymentIntentId ?? "Not recorded"}</dd>
+          </div>
+          <div>
             <dt>Reason codes</dt>
             <dd>{row.reasonCodes.length > 0 ? row.reasonCodes.join(", ") : "None"}</dd>
           </div>

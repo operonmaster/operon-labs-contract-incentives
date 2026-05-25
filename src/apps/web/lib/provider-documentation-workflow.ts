@@ -1,5 +1,5 @@
 import { createAuditRecord, type AuditRecord } from "@operon-labs/audit-log";
-import { executePolicyBoundPayment } from "@operon-labs/hedera-executor";
+import { executePolicyBoundPayment, type PaymentIntentStore } from "@operon-labs/hedera-executor";
 import { evaluateProviderDocumentationEvent } from "@operon-labs/incentive-agent";
 import type { Currency, SettlementToken } from "@operon-labs/policy-engine";
 import {
@@ -15,6 +15,7 @@ import {
   type UmPlatform
 } from "@operon-labs/um-platform";
 import { createPasPersistenceStoreFromEnv, type PasPersistenceStore } from "./pas-persistence";
+import { createPaymentIntentStoreFromEnv } from "./payment-intent-store";
 import { createPolicyStoreFromEnv, type PolicyStore } from "./policy-store";
 
 export type IncentiveStatus = "not_eligible" | "paid" | "payment_failed";
@@ -50,6 +51,7 @@ export interface IncentiveWorklistRow {
   policyCriteria: PolicyCriterionMatch[];
   audit: AuditRecord;
   walletId: string | null;
+  paymentIntentId: string | null;
   transactionId: string | null;
 }
 
@@ -67,7 +69,8 @@ export interface ProviderDocumentationWorkflow {
 export function createProviderDocumentationWorkflow(
   platform: UmPlatform = createInMemoryUmPlatform(),
   persistence: PasPersistenceStore | undefined = createPasPersistenceStoreFromEnv(),
-  policyStore: PolicyStore = createPolicyStoreFromEnv()
+  policyStore: PolicyStore = createPolicyStoreFromEnv(),
+  paymentIntentStore: PaymentIntentStore | undefined = createPaymentIntentStoreFromEnv()
 ): ProviderDocumentationWorkflow {
   const rows = new Map<string, IncentiveWorklistRow>();
   const settlementsInFlight = new Map<string, Promise<IncentiveWorklistRow | null>>();
@@ -150,6 +153,7 @@ export function createProviderDocumentationWorkflow(
       policyCriteria: buildProviderDocumentationPolicyCriteria(evaluation),
       audit,
       walletId: evaluation.result.walletId,
+      paymentIntentId: null,
       transactionId: null
     };
 
@@ -170,9 +174,12 @@ export function createProviderDocumentationWorkflow(
         caseId: event.caseId,
         triggerEvent: event.eventType,
         policyControls
+      }, {
+        paymentIntentStore
       });
       const paid: IncentiveWorklistRow = {
         ...baseRow,
+        paymentIntentId: payment.paymentIntentId,
         transactionId: payment.transactionId,
         audit: {
           ...audit,

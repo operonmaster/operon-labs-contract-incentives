@@ -53,6 +53,11 @@ describe("provider documentation workflow", () => {
       reason: "Complete DTR + PAS before cutoff"
     });
     expect(rows[0]!.transactionId).toContain("testnet-");
+    expect(executePolicyBoundPaymentMock.mock.calls[0]?.[1]).toMatchObject({
+      paymentIntentStore: expect.objectContaining({
+        backend: "firestore"
+      })
+    });
     expect(rows[0]!.policyControls).toEqual(
       expect.arrayContaining([
         "Allowed submitter and recipient wallet",
@@ -341,6 +346,7 @@ describe("provider documentation workflow", () => {
         createdAt: "2026-05-24T00:00:00.000Z"
       },
       walletId: null,
+      paymentIntentId: null,
       transactionId: null
     };
     const workflow = createProviderDocumentationWorkflow(createInMemoryUmPlatform(), {

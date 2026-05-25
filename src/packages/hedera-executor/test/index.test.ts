@@ -1,9 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  PolicyBoundHbarTransferHook,
   buildHederaTransactionMemo,
+  buildPaymentIntent,
   createHederaSettlementConfigFromEnv,
+  createInMemoryPaymentIntentStore,
   executePolicyBoundPayment,
   parseHederaTransactionId,
+  HEDERA_TRANSFER_HBAR_TOOL,
   type HederaAgentKitTransferRunner
 } from "../src/index";
 
@@ -15,6 +19,7 @@ describe("Hedera policy-bound payment executor", () => {
       HEDERA_OPERATOR_ACCOUNT_ID: "0.0.1001",
       HEDERA_OPERATOR_PRIVATE_KEY: "302e020100300506032b657004220420abcdef",
       HEDERA_ALLOWED_RECIPIENT_ACCOUNT_IDS: "0.0.23456, 0.0.34567",
+      HEDERA_BLOCKED_RECIPIENT_ACCOUNT_IDS: "0.0.99999",
       HEDERA_MAX_PAYMENT_HBAR: "1.5"
     });
 
@@ -24,6 +29,7 @@ describe("Hedera policy-bound payment executor", () => {
       operatorAccountId: "0.0.1001",
       operatorPrivateKey: "302e020100300506032b657004220420abcdef",
       allowedRecipientAccountIds: ["0.0.23456", "0.0.34567"],
+      blockedRecipientAccountIds: ["0.0.99999"],
       maxPaymentHbar: 1.5
     });
   });
@@ -47,6 +53,7 @@ describe("Hedera policy-bound payment executor", () => {
       mode: "simulated",
       network: "testnet",
       allowedRecipientAccountIds: [],
+      blockedRecipientAccountIds: [],
       maxPaymentHbar: 5
     });
   });
@@ -78,6 +85,7 @@ describe("Hedera policy-bound payment executor", () => {
           operatorAccountId: "0.0.1001",
           operatorPrivateKey: "302e020100300506032b657004220420abcdef",
           allowedRecipientAccountIds: ["0.0.23456"],
+          blockedRecipientAccountIds: [],
           maxPaymentHbar: 5
         },
         runner
@@ -113,6 +121,7 @@ describe("Hedera policy-bound payment executor", () => {
       operatorAccountId: "0.0.1001",
       operatorPrivateKey: "302e020100300506032b657004220420abcdef",
       allowedRecipientAccountIds: ["0.0.23456"],
+      blockedRecipientAccountIds: ["0.0.77777"],
       maxPaymentHbar: 5
     };
 
@@ -128,8 +137,145 @@ describe("Hedera policy-bound payment executor", () => {
     await expect(
       executePolicyBoundPayment({ auditId: "audit-1", amount: 1, currency: "HBAR", walletId: "0.0.99999" }, { config, runner })
     ).rejects.toThrow("RECIPIENT_WALLET_NOT_ALLOWED");
+    await expect(
+      executePolicyBoundPayment({ auditId: "audit-1", amount: 1, currency: "HBAR", walletId: "0.0.77777" }, { config, runner })
+    ).rejects.toThrow("RECIPIENT_WALLET_BLOCKED");
 
     expect(runner.runHbarTransfer).not.toHaveBeenCalled();
+  });
+
+  it("builds a deterministic payment intent for duplicate-payment prevention", () => {
+    const first = buildPaymentIntent({
+      auditId: "audit-1",
+      caseId,
+      amount: 5,
+      currency: "HBAR",
+      walletId: "0.0.23456",
+      policyId: "provider-documentation-completeness-v1",
+      policyVersion: "v1",
+      triggerEvent: "PAS_SUBMITTED"
+    }, {
+      sourceAccountId: "0.0.1001",
+      transactionMemo: "olabs|case:PA-260524-2102-AAAA1111|policy:provider-documentation-completeness-v1|event:PAS_SUBMITTED"
+    });
+    const second = buildPaymentIntent({
+      auditId: "audit-2",
+      caseId,
+      amount: 5,
+      currency: "HBAR",
+      walletId: "0.0.23456",
+      policyId: "provider-documentation-completeness-v1",
+      policyVersion: "v1",
+      triggerEvent: "PAS_SUBMITTED"
+    }, {
+      sourceAccountId: "0.0.1001",
+      transactionMemo: "olabs|case:PA-260524-2102-AAAA1111|policy:provider-documentation-completeness-v1|event:PAS_SUBMITTED"
+    });
+
+    expect(first.id).toBe(second.id);
+    expect(first.id).toMatch(/^pi_[a-f0-9]{32}$/);
+    expect(first).toMatchObject({
+      caseId,
+      policyId: "provider-documentation-completeness-v1",
+      triggerEvent: "PAS_SUBMITTED",
+      token: "HBAR",
+      amount: 5,
+      recipientAccountId: "0.0.23456"
+    });
+  });
+
+  it("uses the Agent Kit policy hook to reserve an intent and block duplicate transfers", async () => {
+    const store = createInMemoryPaymentIntentStore();
+    const config = {
+      mode: "real" as const,
+      network: "testnet" as const,
+      operatorAccountId: "0.0.1001",
+      operatorPrivateKey: "302e020100300506032b657004220420abcdef",
+      allowedRecipientAccountIds: ["0.0.23456"],
+      blockedRecipientAccountIds: [],
+      maxPaymentHbar: 5
+    };
+    const request = {
+      auditId: "audit-1",
+      caseId,
+      amount: 5,
+      currency: "HBAR" as const,
+      walletId: "0.0.23456",
+      policyId: "provider-documentation-completeness-v1",
+      policyVersion: "v1",
+      triggerEvent: "PAS_SUBMITTED"
+    };
+    const expectedTransfer = {
+      sourceAccountId: "0.0.1001",
+      recipientAccountId: "0.0.23456",
+      amountHbar: 5,
+      transactionMemo: buildHederaTransactionMemo(request)
+    };
+    const paymentIntent = buildPaymentIntent(request, {
+      sourceAccountId: expectedTransfer.sourceAccountId,
+      transactionMemo: expectedTransfer.transactionMemo
+    });
+    const rawParams = {
+      sourceAccountId: "0.0.1001",
+      transfers: [{ accountId: "0.0.23456", amount: 5 }],
+      transactionMemo: expectedTransfer.transactionMemo
+    };
+
+    await new PolicyBoundHbarTransferHook(expectedTransfer, config, paymentIntent, store).preToolExecutionHook(
+      { rawParams } as never,
+      HEDERA_TRANSFER_HBAR_TOOL
+    );
+
+    await expect(
+      new PolicyBoundHbarTransferHook(expectedTransfer, config, paymentIntent, store).preToolExecutionHook(
+        { rawParams } as never,
+        HEDERA_TRANSFER_HBAR_TOOL
+      )
+    ).rejects.toThrow("DUPLICATE_PAYMENT_BLOCKED");
+  });
+
+  it("uses the Agent Kit policy hook to block wallet, amount, source, and memo tampering", async () => {
+    const config = {
+      mode: "real" as const,
+      network: "testnet" as const,
+      operatorAccountId: "0.0.1001",
+      operatorPrivateKey: "302e020100300506032b657004220420abcdef",
+      allowedRecipientAccountIds: ["0.0.23456"],
+      blockedRecipientAccountIds: ["0.0.99999"],
+      maxPaymentHbar: 5
+    };
+    const expectedTransfer = {
+      sourceAccountId: "0.0.1001",
+      recipientAccountId: "0.0.23456",
+      amountHbar: 5,
+      transactionMemo: `olabs|case:${caseId}|policy:provider-documentation-completeness-v1|event:PAS_SUBMITTED`
+    };
+    const hook = new PolicyBoundHbarTransferHook(expectedTransfer, config);
+
+    await expect(
+      hook.preToolExecutionHook(
+        { rawParams: { sourceAccountId: "0.0.9999", transfers: [{ accountId: "0.0.23456", amount: 5 }], transactionMemo: expectedTransfer.transactionMemo } } as never,
+        HEDERA_TRANSFER_HBAR_TOOL
+      )
+    ).rejects.toThrow("HEDERA_POLICY_SOURCE_ACCOUNT_MISMATCH");
+    await expect(
+      hook.preToolExecutionHook(
+        { rawParams: { sourceAccountId: "0.0.1001", transfers: [{ accountId: "0.0.99999", amount: 5 }], transactionMemo: expectedTransfer.transactionMemo } } as never,
+        HEDERA_TRANSFER_HBAR_TOOL
+      )
+    ).rejects.toThrow("RECIPIENT_WALLET_BLOCKED");
+    await expect(
+      hook.preToolExecutionHook(
+        { rawParams: { sourceAccountId: "0.0.1001", transfers: [{ accountId: "0.0.23456", amount: 6 }], transactionMemo: expectedTransfer.transactionMemo } } as never,
+        HEDERA_TRANSFER_HBAR_TOOL
+      )
+    ).rejects.toThrow("HEDERA_PAYMENT_AMOUNT_EXCEEDS_MAX");
+    await expect(
+      hook.preToolExecutionHook(
+        { rawParams: { sourceAccountId: "0.0.1001", transfers: [{ accountId: "0.0.23456", amount: 5 }], transactionMemo: "tampered" } } as never,
+        HEDERA_TRANSFER_HBAR_TOOL
+      )
+    ).rejects.toThrow("HEDERA_POLICY_MEMO_MISMATCH");
   });
 
   it("keeps transaction memo non-PHI and within Hedera memo length limits", () => {

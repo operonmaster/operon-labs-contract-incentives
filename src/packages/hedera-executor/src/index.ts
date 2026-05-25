@@ -1,6 +1,7 @@
 import { AgentMode, HederaAgentAPI, AbstractHook, type Context, type PreToolExecutionParams } from "@hashgraph/hedera-agent-kit";
 import { coreAccountPlugin, coreAccountPluginToolNames } from "@hashgraph/hedera-agent-kit/plugins";
 import { Client, PrivateKey } from "@hiero-ledger/sdk";
+import { createHash } from "node:crypto";
 import type { Currency } from "@operon-labs/policy-engine";
 
 export interface PaymentApprovalRequest {
@@ -24,6 +25,7 @@ export interface HederaSettlementConfig {
   operatorAccountId?: string;
   operatorPrivateKey?: string;
   allowedRecipientAccountIds: string[];
+  blockedRecipientAccountIds: string[];
   maxPaymentHbar: number;
 }
 
@@ -40,12 +42,17 @@ export interface HederaHbarTransferOutput {
 }
 
 export interface HederaAgentKitTransferRunner {
-  runHbarTransfer(input: HederaHbarTransferInput, config: HederaSettlementConfig): Promise<HederaHbarTransferOutput>;
+  runHbarTransfer(
+    input: HederaHbarTransferInput,
+    config: HederaSettlementConfig,
+    policyContext?: HederaExecutionPolicyContext
+  ): Promise<HederaHbarTransferOutput>;
 }
 
 export interface ExecutePolicyBoundPaymentOptions {
   config?: HederaSettlementConfig;
   runner?: HederaAgentKitTransferRunner;
+  paymentIntentStore?: PaymentIntentStore;
 }
 
 export interface PaymentExecutionResult {
@@ -53,8 +60,48 @@ export interface PaymentExecutionResult {
   network: "testnet";
   transactionId: string;
   runtime: "hedera-agent-kit-policy";
+  paymentIntentId: string;
   rawResponse?: string;
   explorerUrl?: string;
+}
+
+export type PaymentIntentStatus = "reserved" | "submitted" | "failed";
+
+export interface PaymentIntent {
+  id: string;
+  auditId: string;
+  caseId?: string;
+  policyId?: string;
+  policyVersion?: string;
+  triggerEvent?: string;
+  token: Currency;
+  amount: number;
+  sourceAccountId: string;
+  recipientAccountId: string;
+  transactionMemo: string;
+  status: PaymentIntentStatus;
+  transactionId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PaymentIntentReservation {
+  allowed: boolean;
+  reasonCode?: string;
+  intent?: PaymentIntent;
+}
+
+/* eslint-disable no-unused-vars -- TypeScript interface method signatures require parameter names. */
+export interface PaymentIntentStore {
+  reserveIntent(intent: PaymentIntent): Promise<PaymentIntentReservation>;
+  markIntentSubmitted(intentId: string, transactionId: string): Promise<void>;
+  markIntentFailed(intentId: string, reasonCode: string): Promise<void>;
+}
+/* eslint-enable no-unused-vars */
+
+export interface HederaExecutionPolicyContext {
+  paymentIntent: PaymentIntent;
+  paymentIntentStore?: PaymentIntentStore;
 }
 
 export const hederaAgentKitPolicyRuntime = {
@@ -67,7 +114,8 @@ export const hederaAgentKitPolicyRuntime = {
 
 const DEFAULT_MAX_PAYMENT_HBAR = 5;
 const HEDERA_TRANSACTION_MEMO_LIMIT = 100;
-const TRANSFER_HBAR_TOOL = coreAccountPluginToolNames.TRANSFER_HBAR_TOOL;
+export const HEDERA_TRANSFER_HBAR_TOOL = coreAccountPluginToolNames.TRANSFER_HBAR_TOOL;
+const TRANSFER_HBAR_TOOL = HEDERA_TRANSFER_HBAR_TOOL;
 
 export function createHederaSettlementConfigFromEnv(
   env: Record<string, string | undefined> = process.env
@@ -84,6 +132,7 @@ export function createHederaSettlementConfigFromEnv(
 
   const maxPaymentHbar = parsePositiveNumber(env.HEDERA_MAX_PAYMENT_HBAR, DEFAULT_MAX_PAYMENT_HBAR, "HEDERA_MAX_PAYMENT_HBAR_INVALID");
   const allowedRecipientAccountIds = splitCsv(env.HEDERA_ALLOWED_RECIPIENT_ACCOUNT_IDS);
+  const blockedRecipientAccountIds = splitCsv(env.HEDERA_BLOCKED_RECIPIENT_ACCOUNT_IDS);
   const operatorAccountId = cleanOptional(env.HEDERA_OPERATOR_ACCOUNT_ID);
   const operatorPrivateKey = cleanOptional(env.HEDERA_OPERATOR_PRIVATE_KEY);
 
@@ -105,6 +154,7 @@ export function createHederaSettlementConfigFromEnv(
     operatorAccountId,
     operatorPrivateKey,
     allowedRecipientAccountIds,
+    blockedRecipientAccountIds,
     maxPaymentHbar
   };
 }
@@ -123,27 +173,45 @@ export async function executePolicyBoundPayment(
       network: config.network,
       transactionId,
       runtime: "hedera-agent-kit-policy",
+      paymentIntentId: buildPaymentIntentId(request),
       rawResponse: "Explicit simulated settlement mode. No Hedera transaction was submitted."
     };
   }
 
   const sourceAccountId = requireConfigValue(config.operatorAccountId, "HEDERA_OPERATOR_ACCOUNT_ID_REQUIRED");
+  const transactionMemo = buildHederaTransactionMemo(request);
+  const paymentIntent = buildPaymentIntent(request, {
+    sourceAccountId,
+    transactionMemo
+  });
   const runner = options.runner ?? new DefaultHederaAgentKitTransferRunner();
-  const transfer = await runner.runHbarTransfer(
-    {
-      sourceAccountId,
-      recipientAccountId: request.walletId,
-      amountHbar: request.amount,
-      transactionMemo: buildHederaTransactionMemo(request)
-    },
-    config
-  );
+  let transfer: HederaHbarTransferOutput;
+  const transferInput: HederaHbarTransferInput = {
+    sourceAccountId,
+    recipientAccountId: request.walletId,
+    amountHbar: request.amount,
+    transactionMemo
+  };
+
+  try {
+    transfer = options.paymentIntentStore
+      ? await runner.runHbarTransfer(transferInput, config, {
+          paymentIntent,
+          paymentIntentStore: options.paymentIntentStore
+        })
+      : await runner.runHbarTransfer(transferInput, config);
+    await options.paymentIntentStore?.markIntentSubmitted(paymentIntent.id, transfer.transactionId);
+  } catch (error) {
+    await options.paymentIntentStore?.markIntentFailed(paymentIntent.id, toErrorCode(error));
+    throw error;
+  }
 
   return {
     status: "submitted",
     network: config.network,
     transactionId: transfer.transactionId,
     runtime: "hedera-agent-kit-policy",
+    paymentIntentId: paymentIntent.id,
     rawResponse: transfer.rawResponse,
     explorerUrl: buildHashscanTestnetTransactionUrl(transfer.transactionId)
   };
@@ -160,6 +228,98 @@ export function buildHederaTransactionMemo(request: PaymentApprovalRequest): str
   return memo.length > HEDERA_TRANSACTION_MEMO_LIMIT ? memo.slice(0, HEDERA_TRANSACTION_MEMO_LIMIT) : memo;
 }
 
+export function buildPaymentIntent(
+  request: PaymentApprovalRequest,
+  execution: { sourceAccountId: string; transactionMemo: string },
+  now: Date = new Date()
+): PaymentIntent {
+  const timestamp = now.toISOString();
+
+  return {
+    id: buildPaymentIntentId(request),
+    auditId: request.auditId,
+    caseId: request.caseId,
+    policyId: request.policyId,
+    policyVersion: request.policyVersion,
+    triggerEvent: request.triggerEvent,
+    token: request.currency,
+    amount: request.amount,
+    sourceAccountId: execution.sourceAccountId,
+    recipientAccountId: request.walletId,
+    transactionMemo: execution.transactionMemo,
+    status: "reserved",
+    transactionId: null,
+    createdAt: timestamp,
+    updatedAt: timestamp
+  };
+}
+
+export function buildPaymentIntentId(request: PaymentApprovalRequest): string {
+  const raw = [
+    request.caseId ?? request.auditId,
+    request.policyId ?? "policy",
+    request.triggerEvent ?? "event",
+    request.currency
+  ].join("|");
+
+  return `pi_${createHash("sha256").update(raw).digest("hex").slice(0, 32)}`;
+}
+
+export function createInMemoryPaymentIntentStore(): PaymentIntentStore {
+  const intents = new Map<string, PaymentIntent>();
+
+  return {
+    async reserveIntent(intent) {
+      const existing = intents.get(intent.id);
+      if (existing) {
+        return {
+          allowed: false,
+          reasonCode: "DUPLICATE_PAYMENT_BLOCKED",
+          intent: existing
+        };
+      }
+
+      const reserved: PaymentIntent = {
+        ...intent,
+        status: "reserved",
+        updatedAt: new Date().toISOString()
+      };
+      intents.set(intent.id, reserved);
+
+      return {
+        allowed: true,
+        intent: reserved
+      };
+    },
+    async markIntentSubmitted(intentId, transactionId) {
+      const existing = intents.get(intentId);
+      if (!existing) {
+        return;
+      }
+
+      intents.set(intentId, {
+        ...existing,
+        status: "submitted",
+        transactionId,
+        updatedAt: new Date().toISOString()
+      });
+    },
+    async markIntentFailed(intentId) {
+      const existing = intents.get(intentId);
+      if (!existing) {
+        return;
+      }
+
+      intents.set(intentId, {
+        ...existing,
+        status: "failed",
+        transactionId: null,
+        updatedAt: new Date().toISOString()
+      });
+    }
+  };
+}
+
 function validatePolicyBoundPayment(request: PaymentApprovalRequest, config: HederaSettlementConfig): void {
   if (request.currency !== "HBAR") {
     throw new Error("HEDERA_TOKEN_TRANSFER_NOT_IMPLEMENTED");
@@ -173,24 +333,26 @@ function validatePolicyBoundPayment(request: PaymentApprovalRequest, config: Hed
     throw new Error("HEDERA_PAYMENT_AMOUNT_EXCEEDS_MAX");
   }
 
-  if (config.allowedRecipientAccountIds.length > 0 && !config.allowedRecipientAccountIds.includes(request.walletId)) {
-    throw new Error("RECIPIENT_WALLET_NOT_ALLOWED");
-  }
-
   if (!request.walletId || !/^0\.0\.\d+$/.test(request.walletId)) {
     throw new Error("INVALID_RECIPIENT_WALLET_ID");
   }
+
+  validateRecipientTrust(request.walletId, config);
 }
 
 class DefaultHederaAgentKitTransferRunner implements HederaAgentKitTransferRunner {
-  async runHbarTransfer(input: HederaHbarTransferInput, config: HederaSettlementConfig): Promise<HederaHbarTransferOutput> {
+  async runHbarTransfer(
+    input: HederaHbarTransferInput,
+    config: HederaSettlementConfig,
+    policyContext?: HederaExecutionPolicyContext
+  ): Promise<HederaHbarTransferOutput> {
     const operatorAccountId = requireConfigValue(config.operatorAccountId, "HEDERA_OPERATOR_ACCOUNT_ID_REQUIRED");
     const operatorPrivateKey = requireConfigValue(config.operatorPrivateKey, "HEDERA_OPERATOR_PRIVATE_KEY_REQUIRED");
     const client = Client.forTestnet().setOperator(operatorAccountId, PrivateKey.fromString(operatorPrivateKey));
     const context: Context = {
       accountId: operatorAccountId,
       mode: AgentMode.AUTONOMOUS,
-      hooks: [new PolicyBoundHbarTransferHook(input)]
+      hooks: [new PolicyBoundHbarTransferHook(input, config, policyContext?.paymentIntent, policyContext?.paymentIntentStore)]
     };
     const transferTool = coreAccountPlugin.tools(context).find((tool) => tool.method === TRANSFER_HBAR_TOOL);
     if (!transferTool) {
@@ -211,12 +373,18 @@ class DefaultHederaAgentKitTransferRunner implements HederaAgentKitTransferRunne
   }
 }
 
-class PolicyBoundHbarTransferHook extends AbstractHook {
+export class PolicyBoundHbarTransferHook extends AbstractHook {
   name = "operon-policy-bound-hbar-transfer";
   description = "Blocks Hedera HBAR transfers that do not match the evaluated Operon Labs incentive policy result.";
   relevantTools = [TRANSFER_HBAR_TOOL];
+  private reservationAttempted = false;
 
-  constructor(private readonly expected: HederaHbarTransferInput) {
+  constructor(
+    private readonly expected: HederaHbarTransferInput,
+    private readonly config: HederaSettlementConfig,
+    private readonly paymentIntent?: PaymentIntent,
+    private readonly paymentIntentStore?: PaymentIntentStore
+  ) {
     super();
   }
 
@@ -227,6 +395,7 @@ class PolicyBoundHbarTransferHook extends AbstractHook {
 
     const raw = params.rawParams as
       | {
+          sourceAccountId?: string;
           transfers?: Array<{ accountId?: string; amount?: number }>;
           transactionMemo?: string;
         }
@@ -237,8 +406,20 @@ class PolicyBoundHbarTransferHook extends AbstractHook {
     }
 
     const [transfer] = raw.transfers;
+    if (raw.sourceAccountId && raw.sourceAccountId !== this.expected.sourceAccountId) {
+      throw new Error("HEDERA_POLICY_SOURCE_ACCOUNT_MISMATCH");
+    }
+
+    if (transfer?.accountId) {
+      validateRecipientTrust(transfer.accountId, this.config);
+    }
+
     if (transfer?.accountId !== this.expected.recipientAccountId) {
       throw new Error("HEDERA_POLICY_RECIPIENT_MISMATCH");
+    }
+
+    if (Number(transfer.amount) > this.config.maxPaymentHbar) {
+      throw new Error("HEDERA_PAYMENT_AMOUNT_EXCEEDS_MAX");
     }
 
     if (Number(transfer.amount) !== this.expected.amountHbar) {
@@ -247,6 +428,14 @@ class PolicyBoundHbarTransferHook extends AbstractHook {
 
     if (raw.transactionMemo !== this.expected.transactionMemo) {
       throw new Error("HEDERA_POLICY_MEMO_MISMATCH");
+    }
+
+    if (this.paymentIntent && this.paymentIntentStore && !this.reservationAttempted) {
+      this.reservationAttempted = true;
+      const reservation = await this.paymentIntentStore.reserveIntent(this.paymentIntent);
+      if (!reservation.allowed) {
+        throw new Error(reservation.reasonCode ?? "DUPLICATE_PAYMENT_BLOCKED");
+      }
     }
   }
 }
@@ -295,4 +484,18 @@ function splitCsv(value: string | undefined): string[] {
 
 function sanitizeMemoPart(value: string): string {
   return value.replace(/[^a-zA-Z0-9._:-]+/g, "_").slice(0, 60);
+}
+
+function validateRecipientTrust(walletId: string, config: HederaSettlementConfig): void {
+  if (config.blockedRecipientAccountIds.includes(walletId)) {
+    throw new Error("RECIPIENT_WALLET_BLOCKED");
+  }
+
+  if (config.allowedRecipientAccountIds.length > 0 && !config.allowedRecipientAccountIds.includes(walletId)) {
+    throw new Error("RECIPIENT_WALLET_NOT_ALLOWED");
+  }
+}
+
+function toErrorCode(error: unknown): string {
+  return error instanceof Error ? error.message : "HEDERA_PAYMENT_EXECUTION_FAILED";
 }

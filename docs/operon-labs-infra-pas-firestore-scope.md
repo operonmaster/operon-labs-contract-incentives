@@ -83,6 +83,7 @@ The infra deployment should set these env vars on the Next.js Cloud Run service:
 PAS_STORE_BACKEND=firestore
 UM_REFERENCE_STORE_BACKEND=firestore
 POLICY_STORE_BACKEND=firestore
+PAYMENT_INTENT_STORE_BACKEND=firestore
 GCP_PROJECT_ID=operon-labs-nonprod
 FIRESTORE_DATABASE_ID=(default)
 ```
@@ -103,7 +104,7 @@ The app will add a server-side store abstraction with two implementations:
 - `firestore`: default local and deployed persistence/reference data
 - `memory`: explicit local/test fallback
 
-The app will choose transactional persistence using `PAS_STORE_BACKEND`, patient/CRD/DTR reference storage using `UM_REFERENCE_STORE_BACKEND`, and policy storage using `POLICY_STORE_BACKEND`.
+The app will choose transactional persistence using `PAS_STORE_BACKEND`, patient/CRD/DTR reference storage using `UM_REFERENCE_STORE_BACKEND`, policy storage using `POLICY_STORE_BACKEND`, and Hedera payment-intent reservation using `PAYMENT_INTENT_STORE_BACKEND`.
 
 Expected app behavior:
 
@@ -114,6 +115,8 @@ Expected app behavior:
 - If `UM_REFERENCE_STORE_BACKEND=memory`, use seeded in-process patient, CRD, and DTR reference data for isolated tests or offline demos.
 - If `POLICY_STORE_BACKEND` is missing, use Firestore in `operon-labs-nonprod`.
 - If `POLICY_STORE_BACKEND=memory`, use seeded in-process policies for isolated tests only.
+- If `PAYMENT_INTENT_STORE_BACKEND` is missing, use Firestore in `operon-labs-nonprod`.
+- If `PAYMENT_INTENT_STORE_BACKEND=memory`, skip durable payment-intent reservation for isolated tests only.
 - Use `FIRESTORE_DATABASE_ID` when provided, otherwise default to `(default)`.
 - Never require service account key files in deployed Cloud Run.
 
@@ -275,6 +278,34 @@ Shape:
 
 Persisting `incentiveEvaluations` is recommended once Firestore is introduced, because otherwise PA requests survive restart but their plan-side payment/audit rows do not.
 
+### `paymentIntents/{paymentIntentId}`
+
+Stores the durable Hedera Agent Kit settlement intent used to prevent duplicate payments at transfer execution time. The document id is deterministic from `caseId + policyId + triggerEvent + token`, so retries for the same PA/policy/event/token reserve the same id.
+
+Shape:
+
+```json
+{
+  "id": "pi_9998988d92a70ee853bdc929848893fc",
+  "auditId": "audit_abc123",
+  "caseId": "PA-260524-2102-AAAA1111",
+  "policyId": "provider-documentation-completeness-v1",
+  "policyVersion": "v1",
+  "triggerEvent": "PAS_SUBMITTED",
+  "token": "HBAR",
+  "amount": 5,
+  "sourceAccountId": "0.0.6870566",
+  "recipientAccountId": "0.0.9049549",
+  "transactionMemo": "olabs|case:PA-260524-2102-AAAA1111|policy:provider-documentation-completeness-v1|event:PAS_SUBMITTED",
+  "status": "submitted",
+  "transactionId": "0.0.6870566@1779686274.765050870",
+  "createdAt": "2026-05-24T00:00:00.000Z",
+  "updatedAt": "2026-05-24T00:00:00.000Z"
+}
+```
+
+The Agent Kit hook blocks execution when this intent already exists, when the recipient wallet is not trusted, when the transfer envelope is changed, or when the transfer amount exceeds the configured request maximum.
+
 ## FHIR/PAS Expectations
 
 The app repo will map the demo submission into a PAS-style FHIR Bundle.
@@ -330,6 +361,7 @@ Runtime:
    - `PAS_STORE_BACKEND=firestore`
    - `UM_REFERENCE_STORE_BACKEND=firestore`
    - `POLICY_STORE_BACKEND=firestore`
+   - `PAYMENT_INTENT_STORE_BACKEND=firestore`
    - `GCP_PROJECT_ID=operon-labs-nonprod`
    - `FIRESTORE_DATABASE_ID=(default)`
 7. Add outputs useful to the app/deploy pipeline:
@@ -368,10 +400,12 @@ Cloud Run resource/module should attach:
 service_account_name = google_service_account.contract_incentives_web.email
 
 env = {
-  PAS_STORE_BACKEND          = "firestore"
-  UM_REFERENCE_STORE_BACKEND = "firestore"
-  GCP_PROJECT_ID             = var.project_id
-  FIRESTORE_DATABASE_ID = "(default)"
+  PAS_STORE_BACKEND            = "firestore"
+  UM_REFERENCE_STORE_BACKEND   = "firestore"
+  POLICY_STORE_BACKEND         = "firestore"
+  PAYMENT_INTENT_STORE_BACKEND = "firestore"
+  GCP_PROJECT_ID               = var.project_id
+  FIRESTORE_DATABASE_ID        = "(default)"
 }
 ```
 
@@ -395,6 +429,7 @@ Firestore local/dev defaults can be made explicit with:
 PAS_STORE_BACKEND=firestore
 UM_REFERENCE_STORE_BACKEND=firestore
 POLICY_STORE_BACKEND=firestore
+PAYMENT_INTENT_STORE_BACKEND=firestore
 GCP_PROJECT_ID=operon-labs-nonprod
 FIRESTORE_DATABASE_ID=(default)
 ```

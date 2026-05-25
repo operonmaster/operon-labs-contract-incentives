@@ -92,6 +92,7 @@ describe("PAS persistence store selection", () => {
         createdAt: record.submittedAt
       },
       walletId: "0.0.9049549",
+      paymentIntentId: "pi_test",
       transactionId: "testnet-1"
     });
 

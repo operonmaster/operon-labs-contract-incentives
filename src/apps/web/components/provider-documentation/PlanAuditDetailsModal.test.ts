@@ -17,6 +17,8 @@ describe("plan audit details modal", () => {
     expect(source).toContain("Close details");
     expect(source).toContain("Request type");
     expect(source).toContain("formatRequestType(row.requestType)");
+    expect(source).toContain("Payment intent");
+    expect(source).toContain('row.paymentIntentId ?? "Not recorded"');
     expect(source).toContain("Show policy criteria");
     expect(source).toContain("Expected");
     expect(source).toContain("Evidence value");

@@ -73,8 +73,11 @@ HEDERA_NETWORK=testnet
 HEDERA_OPERATOR_ACCOUNT_ID=<Secret Manager value>
 HEDERA_OPERATOR_PRIVATE_KEY=<Secret Manager value>
 HEDERA_ALLOWED_RECIPIENT_ACCOUNT_IDS=0.0.9049549
+HEDERA_BLOCKED_RECIPIENT_ACCOUNT_IDS=
 HEDERA_MAX_PAYMENT_HBAR=5
 ```
+
+The Hedera Agent Kit execution policy is intentionally narrower than the healthcare business policy. CRD/DTR/PAS eligibility is evaluated before settlement. Agent Kit controls enforce duplicate-payment prevention, recipient wallet trust, payment envelope integrity, and the max HBAR amount per request at the transfer-tool boundary.
 
 For tests or offline demos only:
 
@@ -92,13 +95,14 @@ Local development and deployed Cloud Run default to Firestore-backed PAS persist
 PAS_STORE_BACKEND=firestore
 UM_REFERENCE_STORE_BACKEND=firestore
 POLICY_STORE_BACKEND=firestore
+PAYMENT_INTENT_STORE_BACKEND=firestore
 GCP_PROJECT_ID=operon-labs-nonprod
 FIRESTORE_DATABASE_ID=(default)
 ```
 
 For isolated test runs or offline demos, explicitly opt out with `PAS_STORE_BACKEND=memory`.
 
-UM reference data and incentive policies also default to Firestore. Use `UM_REFERENCE_STORE_BACKEND=memory` and `POLICY_STORE_BACKEND=memory` only for isolated tests or offline demos.
+UM reference data, incentive policies, and payment-intent settlement controls also default to Firestore. Use `UM_REFERENCE_STORE_BACKEND=memory`, `POLICY_STORE_BACKEND=memory`, and `PAYMENT_INTENT_STORE_BACKEND=memory` only for isolated tests or offline demos.
 
 The Firestore adapter writes:
 
@@ -106,6 +110,7 @@ The Firestore adapter writes:
 - `pasClaims/{caseId}` with the prior-auth record, policy-safe evidence, and PAS-style FHIR `Bundle` containing the `Claim`.
 - `auditEvents/{caseId}-PAS_SUBMITTED` for auditable async incentive processing.
 - `incentiveEvaluations/{caseId}` so policy payment outcomes are idempotent across Cloud Run restarts.
+- `paymentIntents/{paymentIntentId}` so Hedera Agent Kit execution can reserve and block duplicate settlement for the same PA/policy/event/token.
 
 The UM reference adapter auto-seeds these demo reference collections when they are missing:
 
