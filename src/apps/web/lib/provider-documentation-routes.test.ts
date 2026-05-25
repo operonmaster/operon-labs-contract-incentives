@@ -2,13 +2,51 @@ import { describe, expect, it } from "vitest";
 import { GET as getCoverageRequirements } from "../app/api/um/crd/coverage-requirements/route";
 import { GET as listCrdServiceOptions } from "../app/api/um/crd/service-options/route";
 import { GET as getDtrQuestionnaire } from "../app/api/um/dtr/questionnaires/[questionnaireId]/route";
+import { GET as listPatients } from "../app/api/um/patients/route";
 import { GET as listIncentives } from "../app/api/provider-documentation/incentives/route";
 import { GET as listPriorAuths, POST as submitPriorAuth } from "../app/api/um/prior-auths/route";
 import { GET as getEvidence } from "../app/api/um/prior-auths/[caseId]/evidence/route";
 
 describe("provider documentation API routes", () => {
+  it("serves patient coverage context for the provider portal patient and plan picker", async () => {
+    const response = await listPatients();
+    const payload = (await response.json()) as { patients: Array<{ patientId: string; plans: Array<{ planId: string }> }> };
+
+    expect(response.status).toBe(200);
+    expect(payload.patients).toHaveLength(6);
+    expect(new Set(payload.patients.flatMap((patient) => patient.plans.map((plan) => plan.planId)))).toEqual(
+      new Set(["acme-health-ppo", "summit-health-hmo"])
+    );
+    expect(payload.patients).toEqual([
+      expect.objectContaining({
+        patientId: "patient-maya-chen",
+        plans: [expect.objectContaining({ planId: "acme-health-ppo" })]
+      }),
+      expect.objectContaining({
+        patientId: "patient-andre-williams",
+        plans: [expect.objectContaining({ planId: "summit-health-hmo" })]
+      }),
+      expect.objectContaining({
+        patientId: "patient-sofia-ramirez",
+        plans: [expect.objectContaining({ planId: "acme-health-ppo" })]
+      }),
+      expect.objectContaining({
+        patientId: "patient-noah-patel",
+        plans: [expect.objectContaining({ planId: "summit-health-hmo" })]
+      }),
+      expect.objectContaining({
+        patientId: "patient-elena-petrova",
+        plans: [expect.objectContaining({ planId: "acme-health-ppo" })]
+      }),
+      expect.objectContaining({
+        patientId: "patient-grace-kim",
+        plans: [expect.objectContaining({ planId: "summit-health-hmo" })]
+      })
+    ]);
+  });
+
   it("serves CRD service options matching the provider portal service picker", async () => {
-    const response = await listCrdServiceOptions();
+    const response = await listCrdServiceOptions(new Request("http://localhost/api/um/crd/service-options?planId=acme-health-ppo"));
     const payload = (await response.json()) as { services: Array<{ serviceCode: string; procedureCode: string; serviceLabel: string }> };
 
     expect(response.status).toBe(200);
@@ -29,7 +67,7 @@ describe("provider documentation API routes", () => {
 
   it("serves CRD coverage requirements for the selected request type and service", async () => {
     const response = await getCoverageRequirements(
-      new Request("http://localhost/api/um/crd/coverage-requirements?requestType=outpatient_service&serviceCode=knee_mri")
+      new Request("http://localhost/api/um/crd/coverage-requirements?planId=acme-health-ppo&requestType=outpatient_service&serviceCode=knee_mri")
     );
     const payload = (await response.json()) as { requirements: { serviceCode: string; documentationTemplateId: string } };
 

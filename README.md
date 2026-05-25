@@ -54,6 +54,7 @@ Demo sequence:
 - `GET /api/um/prior-auths` - lists synthetic prior-auth submissions
 - `POST /api/um/prior-auths` - submits a synthetic prior-auth request
 - `GET /api/um/prior-auths/[caseId]/evidence` - returns policy-safe UM evidence
+- `GET /api/um/patients` - returns seeded patient and coverage context for the provider portal
 - `GET /api/provider-documentation/incentives` - lists plan-side incentive audit rows
 - `POST /api/provider-documentation/incentives/[caseId]/approve` - deprecated demo route; provider-documentation payments auto-settle after policy approval
 
@@ -61,19 +62,30 @@ Provider-documentation incentives are triggered asynchronously after `PAS_SUBMIT
 
 ## PAS Persistence
 
-Local development defaults to in-process memory. Deployed Cloud Run can persist PAS-style synthetic FHIR Bundles and plan-side incentive rows in Firestore:
+Local development and deployed Cloud Run default to Firestore-backed PAS persistence in `operon-labs-nonprod`:
 
 ```bash
 PAS_STORE_BACKEND=firestore
+UM_REFERENCE_STORE_BACKEND=firestore
 GCP_PROJECT_ID=operon-labs-nonprod
 FIRESTORE_DATABASE_ID=(default)
 ```
 
+For isolated test runs or offline demos, explicitly opt out with `PAS_STORE_BACKEND=memory`.
+
+UM reference data also defaults to Firestore. Use `UM_REFERENCE_STORE_BACKEND=memory` only for isolated tests or offline demos.
+
 The Firestore adapter writes:
 
-- `pasRequests/{caseId}` with the prior-auth record, policy-safe evidence, and PAS-style FHIR `Bundle`.
-- `pasEvents/{caseId}-PAS_SUBMITTED` for async incentive processing.
+- `pasClaims/{caseId}` with the prior-auth record, policy-safe evidence, and PAS-style FHIR `Bundle` containing the `Claim`.
+- `auditEvents/{caseId}-PAS_SUBMITTED` for auditable async incentive processing.
 - `incentiveEvaluations/{caseId}` so policy payment outcomes are idempotent across Cloud Run restarts.
+
+The UM reference adapter auto-seeds these demo reference collections when they are missing:
+
+- `patients/{patientId}` for Patient-anchored display and active Coverage context.
+- `coverageRequirementRules/{planId}_{requestType}_{serviceCode}` for Da Vinci CRD coverage and PA requirement reference rules.
+- `questionnaires/{questionnaireId}` for FHIR Questionnaire templates used by the DTR flow.
 
 Full FHIR bundles stay server-side. The incentive agent receives policy-safe evidence only.
 

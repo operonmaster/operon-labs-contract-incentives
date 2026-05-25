@@ -12,6 +12,7 @@ import type {
 } from "@operon-labs/um-platform";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { PatientCoverageContext } from "../../lib/um-reference-data";
 import { LabsHero, LabsPageShell } from "../labs-ui";
 import { UseCaseNavigation } from "./UseCaseNavigation";
 import {
@@ -27,12 +28,13 @@ import {
 } from "./provider-portal-content";
 
 /* eslint-disable no-unused-vars -- Callback parameter names document select and checkbox values. */
-type PatientId = "patient-maya-chen";
-type PlanId = "acme-health-ppo";
+type PatientId = string;
+type PlanId = string;
 type AssessmentStatus = "not_required" | "not_started" | "complete" | "skipped";
 
 export function ProviderDocumentationWizard() {
   const [step, setStep] = useState<PortalStep>("setup");
+  const [patientCoverageContexts, setPatientCoverageContexts] = useState<PatientCoverageContext[]>([]);
   const [patientId, setPatientId] = useState<PatientId | null>(null);
   const [planId, setPlanId] = useState<PlanId | null>(null);
   const [requestType, setRequestType] = useState<RequestType | null>(null);
@@ -47,6 +49,7 @@ export function ProviderDocumentationWizard() {
   const [checkingRequirements, setCheckingRequirements] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [patientLoadError, setPatientLoadError] = useState<string | null>(null);
   const [crdLoadError, setCrdLoadError] = useState<string | null>(null);
   const [assessmentModalOpen, setAssessmentModalOpen] = useState(false);
   const [assessmentAnswers, setAssessmentAnswers] = useState<AssessmentAnswerMap>({});
@@ -56,6 +59,12 @@ export function ProviderDocumentationWizard() {
 
   const selectedPath = `${patientId ?? ""}:${planId ?? ""}:${requestType ?? ""}:${serviceCode ?? ""}`;
   const currentStepIndex = wizardSteps.findIndex((candidate) => candidate.id === step);
+  const selectedPatientCoverage = patientId
+    ? patientCoverageContexts.find((patient) => patient.patientId === patientId) ?? null
+    : null;
+  const selectedPlan = planId ? selectedPatientCoverage?.plans.find((plan) => plan.planId === planId) ?? null : null;
+  const patientDisplay = selectedPatientCoverage?.patientDisplay ?? "Not selected";
+  const planDisplay = selectedPlan?.planDisplay ?? "Not selected";
   const servicesByCode = useMemo(
     () => new Map<ServiceCode, CrdServiceOption>(crdServices.map((candidate) => [candidate.serviceCode, candidate])),
     [crdServices]
@@ -76,9 +85,48 @@ export function ProviderDocumentationWizard() {
   useEffect(() => {
     let cancelled = false;
 
-    async function loadCrdServices() {
+    async function loadPatients() {
       try {
-        const response = await fetch("/api/um/crd/service-options");
+        const response = await fetch("/api/um/patients");
+        const payload = (await response.json()) as { patients?: PatientCoverageContext[]; error?: string };
+
+        if (cancelled) {
+          return;
+        }
+
+        if (!response.ok || !payload.patients) {
+          setPatientLoadError(payload.error ?? "Unable to load patient coverage");
+          return;
+        }
+
+        setPatientCoverageContexts(payload.patients);
+        setPatientLoadError(null);
+      } catch {
+        if (!cancelled) {
+          setPatientLoadError("Unable to load patient coverage");
+        }
+      }
+    }
+
+    void loadPatients();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCrdServices() {
+      if (!planId) {
+        setCrdServices([]);
+        setCrdLoadError(null);
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/um/crd/service-options?planId=${encodeURIComponent(planId)}`);
         const payload = (await response.json()) as { services?: CrdServiceOption[]; error?: string };
 
         if (cancelled) {
@@ -104,7 +152,7 @@ export function ProviderDocumentationWizard() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [planId]);
 
   function resetAfterSetup() {
     setRequestType(null);
@@ -126,13 +174,15 @@ export function ProviderDocumentationWizard() {
   }
 
   function selectPatient(nextPatientId: string) {
-    setPatientId(nextPatientId === "patient-maya-chen" ? nextPatientId : null);
+    const nextPatientCoverage = patientCoverageContexts.find((patient) => patient.patientId === nextPatientId) ?? null;
+    setPatientId(nextPatientCoverage?.patientId ?? null);
     setPlanId(null);
     resetAfterSetup();
   }
 
   function selectPlan(nextPlanId: string) {
-    setPlanId(nextPlanId === "acme-health-ppo" ? nextPlanId : null);
+    const nextPlan = selectedPatientCoverage?.plans.find((plan) => plan.planId === nextPlanId) ?? null;
+    setPlanId(nextPlan?.planId ?? null);
     resetAfterSetup();
   }
 
@@ -163,7 +213,7 @@ export function ProviderDocumentationWizard() {
   }
 
   async function checkCoverageAndRequirements() {
-    if (!requestType || !serviceCode) {
+    if (!planId || !requestType || !serviceCode) {
       return;
     }
 
@@ -182,7 +232,7 @@ export function ProviderDocumentationWizard() {
 
     try {
       const coverageResponse = await fetch(
-        `/api/um/crd/coverage-requirements?requestType=${encodeURIComponent(requestType)}&serviceCode=${encodeURIComponent(serviceCode)}`
+        `/api/um/crd/coverage-requirements?planId=${encodeURIComponent(planId)}&requestType=${encodeURIComponent(requestType)}&serviceCode=${encodeURIComponent(serviceCode)}`
       );
       const coveragePayload = (await coverageResponse.json()) as { requirements?: CoverageRequirements; error?: string };
 
@@ -394,8 +444,11 @@ export function ProviderDocumentationWizard() {
               <>
                 {step === "setup" ? (
                   <SetupStep
+                    patientLoadError={patientLoadError}
+                    patientCoverageContexts={patientCoverageContexts}
                     patientId={patientId}
                     planId={planId}
+                    selectedPatientCoverage={selectedPatientCoverage}
                     submitting={submitting}
                     onPatientChange={selectPatient}
                     onPlanChange={selectPlan}
@@ -408,6 +461,8 @@ export function ProviderDocumentationWizard() {
                     checkingRequirements={checkingRequirements}
                     crdLoadError={crdLoadError}
                     error={error}
+                    patientDisplay={patientDisplay}
+                    planDisplay={planDisplay}
                     requestType={requestType}
                     services={crdServices}
                     serviceCode={serviceCode}
@@ -423,6 +478,8 @@ export function ProviderDocumentationWizard() {
                     acknowledgedNotCovered={acknowledgedNotCovered}
                     assessmentStatus={assessmentStatus}
                     coverageRequirements={coverageRequirements}
+                    patientDisplay={patientDisplay}
+                    planDisplay={planDisplay}
                     requestType={requestType}
                     service={service}
                     onAcknowledge={setAcknowledgedNotCovered}
@@ -437,6 +494,8 @@ export function ProviderDocumentationWizard() {
                     assessmentStatus={assessmentStatus}
                     coverageRequirements={coverageRequirements}
                     error={error}
+                    patientDisplay={patientDisplay}
+                    planDisplay={planDisplay}
                     requestType={requestType}
                     service={service}
                     submitting={submitting}
@@ -550,15 +609,21 @@ function AssessmentModal({
 }
 
 function SetupStep({
+  patientLoadError,
+  patientCoverageContexts,
   patientId,
   planId,
+  selectedPatientCoverage,
   submitting,
   onPatientChange,
   onPlanChange,
   onContinue
 }: {
+  patientLoadError: string | null;
+  patientCoverageContexts: PatientCoverageContext[];
   patientId: PatientId | null;
   planId: PlanId | null;
+  selectedPatientCoverage: PatientCoverageContext | null;
   submitting: boolean;
   onPatientChange: (value: string) => void;
   onPlanChange: (value: string) => void;
@@ -573,7 +638,11 @@ function SetupStep({
           <span>Patient</span>
           <select className="select-control" disabled={submitting} value={patientId ?? ""} onChange={(event) => onPatientChange(event.target.value)}>
             <option value="">Select patient</option>
-            <option value="patient-maya-chen">Maya Chen</option>
+            {patientCoverageContexts.map((patientCoverage) => (
+              <option key={patientCoverage.patientId} value={patientCoverage.patientId}>
+                {patientCoverage.patientDisplay}
+              </option>
+            ))}
           </select>
         </label>
 
@@ -586,10 +655,19 @@ function SetupStep({
             onChange={(event) => onPlanChange(event.target.value)}
           >
             <option value="">Select health plan</option>
-            <option value="acme-health-ppo">Acme Health PPO</option>
+            {selectedPatientCoverage?.plans.map((plan) => (
+              <option key={plan.planId} value={plan.planId}>
+                {plan.planDisplay}
+              </option>
+            ))}
           </select>
         </label>
       </div>
+      {patientLoadError ? (
+        <p className="error-text" role="alert">
+          {patientLoadError}
+        </p>
+      ) : null}
       <button className="primary-button" disabled={!canContinueFromSetup({ patientId, planId, submitting })} type="button" onClick={onContinue}>
         Next: service
       </button>
@@ -601,6 +679,8 @@ function ServiceStep({
   checkingRequirements,
   crdLoadError,
   error,
+  patientDisplay,
+  planDisplay,
   requestType,
   services,
   serviceCode,
@@ -612,6 +692,8 @@ function ServiceStep({
   checkingRequirements: boolean;
   crdLoadError: string | null;
   error: string | null;
+  patientDisplay: string;
+  planDisplay: string;
   requestType: RequestType | null;
   services: CrdServiceOption[];
   serviceCode: ServiceCode | null;
@@ -629,7 +711,7 @@ function ServiceStep({
   return (
     <>
       <h2>Request type and service</h2>
-      <ReadOnlyFields fields={[["Patient", "Maya Chen"], ["Health plan", "Acme Health PPO"]]} />
+      <ReadOnlyFields fields={[["Patient", patientDisplay], ["Health plan", planDisplay]]} />
       <fieldset className="request-type-fieldset">
         <legend>Request type</legend>
         <div className="request-type-grid" role="radiogroup" aria-label="Request type">
@@ -690,6 +772,8 @@ function CoverageStep({
   acknowledgedNotCovered,
   assessmentStatus,
   coverageRequirements,
+  patientDisplay,
+  planDisplay,
   requestType,
   service,
   onAcknowledge,
@@ -699,6 +783,8 @@ function CoverageStep({
   acknowledgedNotCovered: boolean;
   assessmentStatus: AssessmentStatus;
   coverageRequirements: CoverageRequirements | null;
+  patientDisplay: string;
+  planDisplay: string;
   requestType: RequestType | null;
   service: CrdServiceOption | null;
   onAcknowledge: (value: boolean) => void;
@@ -714,8 +800,8 @@ function CoverageStep({
       <h2>Coverage and requirements</h2>
       <ReadOnlyFields
         fields={[
-          ["Patient", "Maya Chen"],
-          ["Health plan", "Acme Health PPO"],
+          ["Patient", patientDisplay],
+          ["Health plan", planDisplay],
           ["Request type", formatRequestType(requestType)],
           ["Service", service?.serviceLabel ?? "Not selected"]
         ]}
@@ -761,6 +847,8 @@ function ReviewStep({
   assessmentStatus,
   coverageRequirements,
   error,
+  patientDisplay,
+  planDisplay,
   requestType,
   service,
   submitting,
@@ -770,6 +858,8 @@ function ReviewStep({
   assessmentStatus: AssessmentStatus;
   coverageRequirements: CoverageRequirements | null;
   error: string | null;
+  patientDisplay: string;
+  planDisplay: string;
   requestType: RequestType | null;
   service: CrdServiceOption | null;
   submitting: boolean;
@@ -783,11 +873,11 @@ function ReviewStep({
       <dl className="review-list review-main">
         <div>
           <dt>Patient</dt>
-          <dd>Maya Chen</dd>
+          <dd>{patientDisplay}</dd>
         </div>
         <div>
           <dt>Health plan</dt>
-          <dd>Acme Health PPO</dd>
+          <dd>{planDisplay}</dd>
         </div>
         <div>
           <dt>Request type</dt>

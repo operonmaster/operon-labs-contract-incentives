@@ -206,6 +206,7 @@ export {
   getCrdServiceOption,
   getCrdServiceOptions,
   getDtrQuestionnaire,
+  getDtrQuestionnaires,
   type CrdServiceOption,
   type DtrAnswerOption,
   type DtrAnswerValue,

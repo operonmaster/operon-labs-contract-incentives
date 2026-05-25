@@ -186,11 +186,12 @@ Required deployed env vars:
 ENVIRONMENT=nonprod
 NODE_ENV=production
 PAS_STORE_BACKEND=firestore
+UM_REFERENCE_STORE_BACKEND=firestore
 GCP_PROJECT_ID=operon-labs-nonprod
 FIRESTORE_DATABASE_ID=(default)
 ```
 
-Local development defaults to the memory backend unless explicitly configured otherwise.
+Local development and deployed Cloud Run default to Firestore. Use `PAS_STORE_BACKEND=memory` and `UM_REFERENCE_STORE_BACKEND=memory` only for isolated tests or offline demos.
 
 ## Security Boundary
 

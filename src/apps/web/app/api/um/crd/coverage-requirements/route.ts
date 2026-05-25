@@ -1,8 +1,12 @@
-import { getCoverageRequirements, type RequestType, type ServiceCode } from "@operon-labs/um-platform";
+import type { RequestType, ServiceCode } from "@operon-labs/um-platform";
 import { NextResponse } from "next/server";
+import { umReferenceDataStore } from "../../../../../lib/um-reference-data";
+
+const defaultPlanId = "acme-health-ppo";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
+  const planId = url.searchParams.get("planId") || defaultPlanId;
   const requestType = url.searchParams.get("requestType");
   const serviceCode = url.searchParams.get("serviceCode");
 
@@ -10,7 +14,16 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "INVALID_CRD_REQUIREMENTS_REQUEST" }, { status: 400 });
   }
 
-  const requirements = getCoverageRequirements(serviceCode);
+  const requirements = await umReferenceDataStore.getCoverageRequirements({
+    planId,
+    requestType,
+    serviceCode
+  });
+
+  if (!requirements) {
+    return NextResponse.json({ error: "CRD_REQUIREMENTS_NOT_FOUND" }, { status: 404 });
+  }
+
   if (requirements.requestType !== requestType) {
     return NextResponse.json({ error: "REQUEST_TYPE_SERVICE_MISMATCH" }, { status: 400 });
   }

@@ -81,6 +81,7 @@ The infra deployment should set these env vars on the Next.js Cloud Run service:
 
 ```bash
 PAS_STORE_BACKEND=firestore
+UM_REFERENCE_STORE_BACKEND=firestore
 GCP_PROJECT_ID=operon-labs-nonprod
 FIRESTORE_DATABASE_ID=(default)
 ```
@@ -98,15 +99,18 @@ Do not set `GOOGLE_APPLICATION_CREDENTIALS` in Cloud Run. Google client librarie
 
 The app will add a server-side store abstraction with two implementations:
 
-- `memory`: local/test fallback
-- `firestore`: deployed persistence
+- `firestore`: default local and deployed persistence/reference data
+- `memory`: explicit local/test fallback
 
-The app will choose the store using `PAS_STORE_BACKEND`.
+The app will choose transactional persistence using `PAS_STORE_BACKEND` and patient/CRD/DTR reference storage using `UM_REFERENCE_STORE_BACKEND`.
 
 Expected app behavior:
 
-- If `PAS_STORE_BACKEND` is missing, use memory for local developer convenience.
-- If `PAS_STORE_BACKEND=firestore`, require `GCP_PROJECT_ID`.
+- If `PAS_STORE_BACKEND` is missing, use Firestore in `operon-labs-nonprod`.
+- If `PAS_STORE_BACKEND=memory`, use in-process memory for isolated tests or offline demos.
+- If `PAS_STORE_BACKEND=firestore`, use `GCP_PROJECT_ID` when set, otherwise default to `operon-labs-nonprod`.
+- If `UM_REFERENCE_STORE_BACKEND` is missing, use Firestore in `operon-labs-nonprod`.
+- If `UM_REFERENCE_STORE_BACKEND=memory`, use seeded in-process patient, CRD, and DTR reference data for isolated tests or offline demos.
 - Use `FIRESTORE_DATABASE_ID` when provided, otherwise default to `(default)`.
 - Never require service account key files in deployed Cloud Run.
 
@@ -114,7 +118,15 @@ Expected app behavior:
 
 Use simple collections. Avoid complex subcollection schemes for the first version.
 
-### `pasRequests/{caseId}`
+Reference-data collections:
+
+- `patients/{patientId}` stores demo Patient display and active Coverage context.
+- `coverageRequirementRules/{planId}_{requestType}_{serviceCode}` stores Da Vinci CRD coverage, PA requirement, billing code, covered-benefit status, and optional `documentationTemplateId` reference rules.
+- `questionnaires/{questionnaireId}` stores FHIR Questionnaire templates used by DTR, including numbered questions and answer options.
+
+Transactional collections:
+
+### `pasClaims/{caseId}`
 
 Stores the submitted prior authorization record, policy-safe evidence projection, and PAS-style synthetic FHIR Bundle. The implemented app shape is intentionally nested so the domain record, policy evidence, and FHIR artifact stay distinct.
 
@@ -174,9 +186,9 @@ Shape:
 }
 ```
 
-### `pasEvents/{eventId}`
+### `auditEvents/{eventId}`
 
-Stores PAS lifecycle events for async incentive processing.
+Stores auditable PAS lifecycle markers for async incentive processing.
 
 Shape:
 
@@ -270,6 +282,7 @@ Runtime:
 5. Configure the Cloud Run service to run as that service account.
 6. Set runtime env vars:
    - `PAS_STORE_BACKEND=firestore`
+   - `UM_REFERENCE_STORE_BACKEND=firestore`
    - `GCP_PROJECT_ID=operon-labs-nonprod`
    - `FIRESTORE_DATABASE_ID=(default)`
 7. Add outputs useful to the app/deploy pipeline:
@@ -308,24 +321,32 @@ Cloud Run resource/module should attach:
 service_account_name = google_service_account.contract_incentives_web.email
 
 env = {
-  PAS_STORE_BACKEND    = "firestore"
-  GCP_PROJECT_ID       = var.project_id
+  PAS_STORE_BACKEND          = "firestore"
+  UM_REFERENCE_STORE_BACKEND = "firestore"
+  GCP_PROJECT_ID             = var.project_id
   FIRESTORE_DATABASE_ID = "(default)"
 }
 ```
 
 ## Local Development Contract
 
-Local development should continue to work without GCP credentials:
+Offline local development can explicitly opt out of Firestore:
 
 ```bash
 PAS_STORE_BACKEND=memory npm run dev
 ```
 
-Firestore local/dev testing options:
+For fully offline local reference data too:
+
+```bash
+PAS_STORE_BACKEND=memory UM_REFERENCE_STORE_BACKEND=memory npm run dev
+```
+
+Firestore local/dev defaults can be made explicit with:
 
 ```bash
 PAS_STORE_BACKEND=firestore
+UM_REFERENCE_STORE_BACKEND=firestore
 GCP_PROJECT_ID=operon-labs-nonprod
 FIRESTORE_DATABASE_ID=(default)
 ```
@@ -340,7 +361,7 @@ Infra is ready when:
 2. The app Cloud Run service runs as a dedicated service account.
 3. That service account can create/read/update documents in the planned collections.
 4. The deployed app has the Firestore env vars set.
-5. Submitting a PA in the deployed app writes a `pasRequests/{caseId}` document.
+5. Submitting a PA in the deployed app writes a `pasClaims/{caseId}` document.
 6. Restarting/redeploying the app does not lose submitted PAS requests.
 7. Plan-side incentive rows remain available after restart once `incentiveEvaluations` persistence is implemented.
 8. No service account keys or Terraform files are introduced into the public app repo.
@@ -352,3 +373,7 @@ Infra is ready when:
 - Firestore IAM roles: https://docs.cloud.google.com/iam/docs/roles-permissions/firestore
 - Cloud Run service identity: https://cloud.google.com/run/docs/configuring/services/service-identity
 - Cloud Run service-to-service auth, for possible future split: https://cloud.google.com/run/docs/authenticating/service-to-service
+- FHIR R4 resource index: https://hl7.org/fhir/R4/resourcelist.html
+- Da Vinci PAS formal specification: https://hl7.org/fhir/us/davinci-pas/STU2.1/specification.html
+- Da Vinci CRD foundational requirements: https://hl7.org/fhir/us/davinci-crd/STU2.1/foundation.html
+- Da Vinci DTR formal specification: https://hl7.org/fhir/us/davinci-dtr/STU2.1/specification.html

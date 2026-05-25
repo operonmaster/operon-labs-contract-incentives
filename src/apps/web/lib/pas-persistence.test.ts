@@ -7,12 +7,20 @@ import {
 import { createInMemoryUmPlatform, buildPasFhirBundle } from "@operon-labs/um-platform";
 
 describe("PAS persistence store selection", () => {
-  it("uses in-process memory when no PAS store backend is configured", () => {
-    expect(createPasPersistenceStoreFromEnv({})).toBeUndefined();
+  it("uses Firestore in operon-labs-nonprod when no PAS store backend is configured", () => {
+    const store = createPasPersistenceStoreFromEnv({});
+
+    expect(store?.backend).toBe("firestore");
   });
 
-  it("requires a GCP project id when Firestore backend is configured", () => {
-    expect(() => createPasPersistenceStoreFromEnv({ PAS_STORE_BACKEND: "firestore" })).toThrow("GCP_PROJECT_ID_REQUIRED");
+  it("allows explicit in-process memory for isolated tests and offline demos", () => {
+    expect(createPasPersistenceStoreFromEnv({ PAS_STORE_BACKEND: "memory" })).toBeUndefined();
+  });
+
+  it("uses the default GCP project id when Firestore backend is configured without project env", () => {
+    const store = createPasPersistenceStoreFromEnv({ PAS_STORE_BACKEND: "firestore" });
+
+    expect(store?.backend).toBe("firestore");
   });
 
   it("creates a Firestore-backed store when backend and project are configured", () => {
@@ -25,7 +33,7 @@ describe("PAS persistence store selection", () => {
     expect(store?.backend).toBe("firestore");
   });
 
-  it("persists PAS requests, PAS events, and incentive rows with Firestore collection boundaries", async () => {
+  it("persists PAS Claims, PAS audit events, and incentive rows with Firestore collection boundaries", async () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(
       {
@@ -90,10 +98,14 @@ describe("PAS persistence store selection", () => {
     await expect(store.listIncentiveRows()).resolves.toEqual([
       expect.objectContaining({ caseId: record.caseId, paymentStatus: "auto_executed" })
     ]);
+    expect(firestore.collectionNames()).toEqual(
+      expect.arrayContaining(["pasClaims", "auditEvents", "incentiveEvaluations"])
+    );
+    expect(firestore.collectionNames()).not.toEqual(expect.arrayContaining(["pasRequests", "pasEvents"]));
   });
 });
 
-function createFakeFirestore(): FirestoreDatabase {
+function createFakeFirestore(): FirestoreDatabase & { collectionNames(): string[] } {
   const collections = new Map<string, Map<string, unknown>>();
 
   return {
@@ -150,6 +162,9 @@ function createFakeFirestore(): FirestoreDatabase {
           };
         }
       };
+    },
+    collectionNames() {
+      return [...collections.keys()];
     }
   };
 }

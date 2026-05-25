@@ -154,7 +154,7 @@ const crdServiceOptions: Record<ServiceCode, CrdServiceOption> = {
   })
 };
 
-const dtrQuestionnaires: Record<string, DtrQuestionnaire> = {
+const questionnaires: Record<string, DtrQuestionnaire> = {
   "knee-mri-pa-dtr-v1": {
     id: "knee-mri-pa-dtr-v1",
     requestType: "outpatient_service",
@@ -232,9 +232,13 @@ export function getCrdCoverageRequirements(serviceCode: ServiceCode): CoverageRe
 }
 
 export function getDtrQuestionnaire(questionnaireId: string): DtrQuestionnaire | null {
-  const questionnaire = dtrQuestionnaires[questionnaireId];
+  const questionnaire = questionnaires[questionnaireId];
 
   return questionnaire ? copyDtrQuestionnaire(questionnaire) : null;
+}
+
+export function getDtrQuestionnaires(): DtrQuestionnaire[] {
+  return Object.values(questionnaires).map(copyDtrQuestionnaire);
 }
 
 export function copyDtrQuestionnaireResponse(
@@ -258,7 +262,7 @@ export function isCompleteDtrQuestionnaireResponse(
     return false;
   }
 
-  const questionnaire = dtrQuestionnaires[expectedQuestionnaireId];
+  const questionnaire = questionnaires[expectedQuestionnaireId];
   if (!questionnaire) {
     return false;
   }
