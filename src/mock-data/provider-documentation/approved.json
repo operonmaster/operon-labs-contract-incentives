@@ -5,7 +5,7 @@
     "id": "lakeside-provider-admin"
   },
   "requestObject": {
-    "caseId": "synthetic-pa-20931",
+    "caseId": "PA-260524-2102-AAAA1111",
     "attachmentChecklistComplete": true,
     "submittedBeforeInitialDecision": true,
     "fhirFieldsPresent": true,

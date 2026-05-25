@@ -89,7 +89,7 @@ Open `/provider-documentation`, submit a knee MRI, switch to Health Plan View, a
 
 **Files:**
 - Modify: `docs/Operon_Labs_Contract_Incentives_Hedera_Bounty_Scope.md`
-- Modify: `src/policies/provider-documentation-completeness.v1.yaml`
+- Modify: `src/apps/web/lib/policy-store.ts`
 - Modify: `README.md`
 
 - [ ] **Step 1: Update requirement language**

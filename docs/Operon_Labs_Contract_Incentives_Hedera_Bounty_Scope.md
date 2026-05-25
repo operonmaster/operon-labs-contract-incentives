@@ -2,7 +2,7 @@
 
 ## Working Summary
 
-Operon Labs Contract Incentives is a policy-gated incentive layer for healthcare operations. Business applications submit structured evidence about work performed. A shared AI/policy agent selects the applicable contract policy, evaluates the submitted evidence, computes the incentive amount, maps the approved submitter to a wallet, and executes an HBAR or USDC incentive payment only when the policy conditions are met.
+Operon Labs Contract Incentives is a policy-gated incentive layer for healthcare operations. Business applications submit structured evidence about work performed. A shared AI/policy agent selects the applicable contract policy, evaluates the submitted evidence, computes the incentive amount, maps the approved submitter to a wallet, and executes a policy-defined token payment only when the policy conditions are met. The bootstrapped Hedera bounty path uses HBAR, while the platform policy model can represent HBAR, USDC, OPER, OPRN, or another explicitly configured token.
 
 The core business claim:
 
@@ -18,7 +18,7 @@ Week 5 positioning:
 
 - Build a policy-constrained agent payment workflow.
 - Use Hedera Agent Kit Hooks and Policies to constrain agent behavior.
-- Enable payments in HBAR or USDC.
+- Enable policy-defined payments, with the submitted demo using HBAR and the model supporting future HBAR, USDC, OPER, or OPRN policies.
 - Show practical policies such as spend limits, allowed counterparties, and contextual approval logic.
 - Demonstrate services or workflows where the policy layer is clearly integrated into the interface and execution flow.
 
@@ -44,7 +44,7 @@ The shared layer accepts evaluation requests from business apps:
     "id": "northstar-um"
   },
   "requestObject": {
-    "caseId": "synthetic-pa-10492",
+    "caseId": "PA-260524-2102-DELEGATE",
     "completedWithinSla": true,
     "documentationComplete": true,
     "reworkRequired": false,
@@ -116,7 +116,7 @@ Incentive trigger:
 - provider submitted clean documentation that reduces avoidable back-and-forth
 - `PAS_SUBMITTED` event carries only `caseId`; the incentive agent pulls policy-safe evidence from the UM Platform
 - eligible requests auto-settle on Hedera testnet under the plan's pre-authorized policy guardrails
-- non-covered or incomplete-documentation requests are still submitted, but policy blocks payment and records `0 USDC`
+- non-covered or incomplete-documentation requests are still submitted, but policy blocks payment and records `0 HBAR`
 
 ### Demo App 3: Appeals Packet Quality
 
@@ -361,11 +361,6 @@ operon-labs-contract-incentives/
     audit-log/
       audit-event.ts
       hash.ts
-  policies/
-    delegate-um-sla-bonus.v1.yaml
-    provider-documentation-completeness.v1.yaml
-    appeals-packet-quality.v1.yaml
-    provider-directory-quality.v1.yaml
   mock-data/
     delegate-um/
     provider-documentation/
@@ -383,7 +378,7 @@ Preferred stack:
 
 - TypeScript / Next.js for the hosted demo.
 - Hedera Agent Kit JavaScript as the core Hedera dependency.
-- YAML or JSON policy definitions.
+- Firestore-backed policy definitions in `incentivePolicies/{evaluationType}`.
 - Deterministic TypeScript policy evaluator.
 - LLM layer for request classification and decision explanation.
 - Hedera testnet for demo payment execution.

@@ -97,14 +97,28 @@ export interface UmPlatform {
   getEvidence(caseId: string): ProviderDocumentationEvidence | null;
 }
 
+export interface UmPlatformOptions {
+  generateCaseId?: () => string;
+}
+
 export function getCoverageRequirements(serviceCode: ServiceCode): CoverageRequirements {
   return getCrdCoverageRequirements(serviceCode);
 }
 
-export function createInMemoryUmPlatform(): UmPlatform {
+export function generatePriorAuthCaseId(date: Date = new Date()): string {
+  const yy = String(date.getFullYear()).slice(-2);
+  const month = formatDatePart(date.getMonth() + 1);
+  const day = formatDatePart(date.getDate());
+  const hour = formatDatePart(date.getHours());
+  const minute = formatDatePart(date.getMinutes());
+
+  return `PA-${yy}${month}${day}-${hour}${minute}-${generateCaseIdSalt()}`;
+}
+
+export function createInMemoryUmPlatform(options: UmPlatformOptions = {}): UmPlatform {
   const records = new Map<string, PriorAuthRecord>();
   const events: PasSubmittedEvent[] = [];
-  let nextCaseNumber = 20931;
+  const generateCaseId = options.generateCaseId ?? generatePriorAuthCaseId;
 
   return {
     submitPriorAuth(input) {
@@ -122,8 +136,7 @@ export function createInMemoryUmPlatform(): UmPlatform {
         throw new Error("NOT_COVERED_ACKNOWLEDGEMENT_REQUIRED");
       }
 
-      const caseId = `synthetic-pa-${nextCaseNumber}`;
-      nextCaseNumber += 1;
+      const caseId = getUnusedCaseId(records, generateCaseId);
 
       const record: PriorAuthRecord = {
         caseId,
@@ -218,6 +231,36 @@ export {
 
 function copyPasSubmittedEvent(event: PasSubmittedEvent): PasSubmittedEvent {
   return { ...event };
+}
+
+function getUnusedCaseId(records: Map<string, PriorAuthRecord>, generateCaseId: () => string): string {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const candidate = generateCaseId();
+
+    if (!records.has(candidate)) {
+      return candidate;
+    }
+  }
+
+  throw new Error("PAS_CASE_ID_GENERATION_LIMIT_EXCEEDED");
+}
+
+function formatDatePart(value: number): string {
+  return value.toString().padStart(2, "0");
+}
+
+function generateCaseIdSalt(length = 8): string {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const cryptoSource = globalThis.crypto;
+
+  if (cryptoSource?.getRandomValues) {
+    const bytes = new Uint8Array(length);
+    cryptoSource.getRandomValues(bytes);
+
+    return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join("");
+  }
+
+  return Array.from({ length }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
 }
 
 function copyPriorAuthRecord(record: PriorAuthRecord): PriorAuthRecord {

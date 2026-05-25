@@ -28,7 +28,7 @@ function isPaymentApprovalRequest(value: unknown): value is PaymentApprovalReque
   return (
     typeof candidate.auditId === "string" &&
     typeof candidate.amount === "number" &&
-    (candidate.currency === "HBAR" || candidate.currency === "USDC") &&
+    typeof candidate.currency === "string" &&
     typeof candidate.walletId === "string"
   );
 }

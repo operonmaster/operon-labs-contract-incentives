@@ -982,6 +982,16 @@ main {
   overflow-wrap: anywhere;
 }
 
+.transaction-link {
+  color: var(--blue);
+  text-decoration: none;
+}
+
+.transaction-link:hover,
+.transaction-link:focus-visible {
+  text-decoration: underline;
+}
+
 .worklist .mono-cell {
   overflow-wrap: normal;
   white-space: nowrap;

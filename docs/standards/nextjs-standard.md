@@ -60,7 +60,6 @@ src/
     policy-engine/          Deterministic policy evaluator
     um-platform/            Synthetic UM/PAS platform
   mock-data/                Synthetic demo data
-  policies/                 Versioned policy definitions
 ```
 
 Use npm workspaces for internal packages. Import internal packages through workspace package names, not deep relative paths across package boundaries.
@@ -160,6 +159,8 @@ Use the platform-style split:
 
 `ENV=prod` is invalid for this repo. The only environment is `nonprod` because the public hackathon app is backed by `operon-labs-nonprod`.
 
+Image publishing uses two tags: the immutable build tag plus generic `latest`. This repo is environment-scoped by GCP project, so `latest` is unambiguous inside `operon-labs-nonprod`. Deployments use the `latest` tag while the immutable tag remains available for traceability.
+
 The deployment script must pass `--cpu-throttling` and must not set infrastructure flags. It may update the image and Terraform-aligned labels only. It must fail if the Cloud Run service does not already exist, because Terraform owns service creation.
 
 Terraform must ignore Cloud Run image drift for this service so CI/CD can own revision images while Terraform owns service shape. The infra layer should preserve the platform pattern:
@@ -187,11 +188,22 @@ ENVIRONMENT=nonprod
 NODE_ENV=production
 PAS_STORE_BACKEND=firestore
 UM_REFERENCE_STORE_BACKEND=firestore
+POLICY_STORE_BACKEND=firestore
 GCP_PROJECT_ID=operon-labs-nonprod
 FIRESTORE_DATABASE_ID=(default)
+HEDERA_SETTLEMENT_MODE=real
+HEDERA_NETWORK=testnet
+HEDERA_OPERATOR_ACCOUNT_ID=<Secret Manager value>
+HEDERA_OPERATOR_PRIVATE_KEY=<Secret Manager value>
+HEDERA_ALLOWED_RECIPIENT_ACCOUNT_IDS=0.0.9049549
+HEDERA_MAX_PAYMENT_HBAR=5
 ```
 
-Local development and deployed Cloud Run default to Firestore. Use `PAS_STORE_BACKEND=memory` and `UM_REFERENCE_STORE_BACKEND=memory` only for isolated tests or offline demos.
+Local development and deployed Cloud Run default to Firestore. Use `PAS_STORE_BACKEND=memory`, `UM_REFERENCE_STORE_BACKEND=memory`, and `POLICY_STORE_BACKEND=memory` only for isolated tests or offline demos.
+
+Hedera settlement defaults to real testnet execution. Use `HEDERA_SETTLEMENT_MODE=simulated` only for isolated tests or offline demos. The public repo must never contain Hedera private keys.
+
+Incentive amount, caps, recipient wallet mapping, and token symbol must come from the selected `incentivePolicies/{evaluationType}` Firestore document. Runtime code must not read YAML policy files or hardcoded policy constants for evaluation. The current real settlement adapter supports HBAR only; policies may model future `USDC`, `OPER`, or `OPRN` payouts, but those require a token-transfer adapter before they can be marked settled.
 
 ## Security Boundary
 

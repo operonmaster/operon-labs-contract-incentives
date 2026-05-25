@@ -83,7 +83,7 @@ export function PlanAuditDetailsModal({ row, onClose }: PlanAuditDetailsModalPro
           </div>
           <div>
             <dt>Transaction</dt>
-            <dd className="mono-cell">{row.transactionId ?? "Not recorded"}</dd>
+            <dd className="mono-cell">{formatTransaction(row.transactionId)}</dd>
           </div>
           <div>
             <dt>Policy guardrails</dt>
@@ -132,7 +132,28 @@ export function formatCurrency(row: IncentiveWorklistRow) {
   return `${row.incentiveValue.toLocaleString("en-US", {
     maximumFractionDigits: 2,
     minimumFractionDigits: 2
-  })} ${row.currency}`;
+  })} ${row.settlementToken?.symbol ?? row.currency}`;
+}
+
+export function formatTransaction(transactionId: string | null) {
+  if (!transactionId) {
+    return "Not recorded";
+  }
+
+  if (transactionId.startsWith("testnet-")) {
+    return transactionId;
+  }
+
+  return (
+    <a
+      className="transaction-link"
+      href={`https://hashscan.io/testnet/transaction/${encodeURIComponent(transactionId)}`}
+      target="_blank"
+      rel="noreferrer"
+    >
+      {transactionId}
+    </a>
+  );
 }
 
 export function formatStatus(status: IncentiveWorklistRow["incentiveStatus"]) {

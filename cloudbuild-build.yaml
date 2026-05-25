@@ -36,7 +36,6 @@ steps:
         npm run lint
         npm test
         npm run typecheck
-        npm run build
 
   - name: "gcr.io/cloud-builders/docker"
     id: "docker-build"
@@ -45,9 +44,7 @@ steps:
       - "--build-arg"
       - "ENVIRONMENT=${_ENV}"
       - "-t"
-      - "us-central1-docker.pkg.dev/${_REGISTRY_PROJECT}/${_ARTIFACT_REPO}/${_SERVICE_NAME}:${BUILD_ID}-${_ENV}"
-      - "-t"
-      - "us-central1-docker.pkg.dev/${_REGISTRY_PROJECT}/${_ARTIFACT_REPO}/${_SERVICE_NAME}:latest-${_ENV}"
+      - "us-central1-docker.pkg.dev/${_REGISTRY_PROJECT}/${_ARTIFACT_REPO}/${_SERVICE_NAME}:${BUILD_ID}"
       - "-t"
       - "us-central1-docker.pkg.dev/${_REGISTRY_PROJECT}/${_ARTIFACT_REPO}/${_SERVICE_NAME}:latest"
       - "-f"
@@ -69,6 +66,5 @@ substitutions:
   _SERVICE_NAME: "contract-incentives-web"
 
 images:
-  - "us-central1-docker.pkg.dev/${_REGISTRY_PROJECT}/${_ARTIFACT_REPO}/${_SERVICE_NAME}:${BUILD_ID}-${_ENV}"
-  - "us-central1-docker.pkg.dev/${_REGISTRY_PROJECT}/${_ARTIFACT_REPO}/${_SERVICE_NAME}:latest-${_ENV}"
+  - "us-central1-docker.pkg.dev/${_REGISTRY_PROJECT}/${_ARTIFACT_REPO}/${_SERVICE_NAME}:${BUILD_ID}"
   - "us-central1-docker.pkg.dev/${_REGISTRY_PROJECT}/${_ARTIFACT_REPO}/${_SERVICE_NAME}:latest"

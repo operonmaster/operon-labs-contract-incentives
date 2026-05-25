@@ -217,5 +217,10 @@ class FirestorePasPersistenceStore implements PasPersistenceStore {
 function stripStoredAt(row: IncentiveWorklistRow & { storedAt?: string }): IncentiveWorklistRow {
   const incentiveRow = { ...row };
   delete (incentiveRow as IncentiveWorklistRow & { storedAt?: string }).storedAt;
-  return incentiveRow;
+  return {
+    ...incentiveRow,
+    settlementToken: incentiveRow.settlementToken ?? {
+      symbol: incentiveRow.currency
+    }
+  };
 }

@@ -71,8 +71,11 @@ describe("PAS persistence store selection", () => {
       denialReason: record.denialReason,
       incentiveStatus: "paid",
       paymentStatus: "auto_executed",
-      incentiveValue: 3,
-      currency: "USDC",
+      incentiveValue: 5,
+      currency: "HBAR",
+      settlementToken: {
+        symbol: "HBAR"
+      },
       reason: "Complete DTR + PAS before cutoff",
       reasonCodes: [],
       policyId: "provider-documentation-completeness-v1",
@@ -88,7 +91,7 @@ describe("PAS persistence store selection", () => {
         transactionId: "testnet-1",
         createdAt: record.submittedAt
       },
-      walletId: "0.0.23456",
+      walletId: "0.0.9049549",
       transactionId: "testnet-1"
     });
 

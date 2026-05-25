@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createProviderDocumentationWorkflow } from "./provider-documentation-workflow";
+import { createProviderDocumentationWorkflow, type IncentiveWorklistRow } from "./provider-documentation-workflow";
 import type { StoredPasRequest } from "./pas-persistence";
+import { createInMemoryPolicyStore, defaultIncentivePolicies } from "./policy-store";
 import { executePolicyBoundPayment } from "@operon-labs/hedera-executor";
-import { createInMemoryUmPlatform, getDtrQuestionnaire } from "@operon-labs/um-platform";
+import { buildPasFhirBundle, createInMemoryUmPlatform, getDtrQuestionnaire } from "@operon-labs/um-platform";
 
 vi.mock("@operon-labs/hedera-executor", () => ({
   executePolicyBoundPayment: vi.fn(async (request: { auditId: string; currency: string }) => {
@@ -17,6 +18,7 @@ vi.mock("@operon-labs/hedera-executor", () => ({
 }));
 
 const executePolicyBoundPaymentMock = vi.mocked(executePolicyBoundPayment);
+const PA_CASE_ID_PATTERN = /^PA-\d{6}-\d{4}-[A-Z0-9]{8}$/;
 
 describe("provider documentation workflow", () => {
   beforeEach(() => {
@@ -38,16 +40,16 @@ describe("provider documentation workflow", () => {
     });
     const rows = await workflow.listIncentiveRows();
 
-    expect(submitted.caseId).toBe("synthetic-pa-20931");
+    expect(submitted.caseId).toMatch(PA_CASE_ID_PATTERN);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
-      caseId: "synthetic-pa-20931",
+      caseId: submitted.caseId,
       serviceLabel: "Knee MRI after injury",
       paResult: "submitted_pending",
       incentiveStatus: "paid",
       paymentStatus: "auto_executed",
-      incentiveValue: 3,
-      currency: "USDC",
+      incentiveValue: 5,
+      currency: "HBAR",
       reason: "Complete DTR + PAS before cutoff"
     });
     expect(rows[0]!.transactionId).toContain("testnet-");
@@ -55,8 +57,8 @@ describe("provider documentation workflow", () => {
       expect.arrayContaining([
         "Allowed submitter and recipient wallet",
         "Request type limited to outpatient service or pharmacy benefit",
-        "3 USDC max per PA request",
-        "300 USDC monthly cap",
+        "5 HBAR max per PA request",
+        "500 HBAR monthly cap",
         "No PHI or prohibited outcome metrics"
       ])
     );
@@ -71,8 +73,8 @@ describe("provider documentation workflow", () => {
         }),
         expect.objectContaining({
           label: "Recipient wallet is approved",
-          expected: "0.0.23456",
-          actual: "0.0.23456",
+          expected: "0.0.9049549",
+          actual: "0.0.9049549",
           passed: true,
           reasonCode: "WALLET_NOT_APPROVED"
         }),
@@ -127,6 +129,49 @@ describe("provider documentation workflow", () => {
       reason: "Complete DTR + PAS before cutoff"
     });
     expect(executePolicyBoundPaymentMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the current policy store document for each submitted PA", async () => {
+    const policyStore = createInMemoryPolicyStore(defaultIncentivePolicies);
+    const workflow = createProviderDocumentationWorkflow(undefined, undefined, policyStore);
+
+    const first = await workflow.submitPriorAuth({
+      requestType: "outpatient_service",
+      serviceCode: "knee_mri",
+      dtr: {
+        symptomDurationConfirmed: true,
+        conservativeTherapyConfirmed: true,
+        examFindingsConfirmed: true,
+        clinicalNoteAttached: true
+      }
+    });
+    await policyStore.savePolicy({
+      ...defaultIncentivePolicies.provider_documentation_completeness,
+      paymentFormula: {
+        ...defaultIncentivePolicies.provider_documentation_completeness.paymentFormula,
+        baseAmount: 2,
+        maxPerRequest: 2
+      }
+    });
+    const second = await workflow.submitPriorAuth({
+      requestType: "outpatient_service",
+      serviceCode: "knee_mri",
+      dtr: {
+        symptomDurationConfirmed: true,
+        conservativeTherapyConfirmed: true,
+        examFindingsConfirmed: true,
+        clinicalNoteAttached: true
+      }
+    });
+
+    await expect(workflow.getIncentiveRow(first.caseId)).resolves.toMatchObject({
+      incentiveValue: 5,
+      currency: "HBAR"
+    });
+    await expect(workflow.getIncentiveRow(second.caseId)).resolves.toMatchObject({
+      incentiveValue: 2,
+      currency: "HBAR"
+    });
   });
 
   it("persists submitted prior authorizations as PAS FHIR bundles", async () => {
@@ -184,6 +229,162 @@ describe("provider documentation workflow", () => {
     });
   });
 
+  it("skips persisted case-id collisions when the local sequence restarts", async () => {
+    const collisionCaseIds = [
+      "PA-260524-2102-AAAA1111",
+      "PA-260524-2102-BBBB2222",
+      "PA-260524-2102-CCCC3333"
+    ];
+    const previousPlatform = createInMemoryUmPlatform({ generateCaseId: createCaseIdGenerator(collisionCaseIds.slice(0, 2)) });
+    const existingKnee = previousPlatform.submitPriorAuth({
+      requestType: "outpatient_service",
+      serviceCode: "knee_mri"
+    });
+    const existingFullBody = previousPlatform.submitPriorAuth({
+      requestType: "outpatient_service",
+      serviceCode: "full_body_wellness_mri",
+      acknowledgedNotCovered: true
+    });
+    const storedRequests: StoredPasRequest[] = [existingKnee, existingFullBody].map((record) => ({
+      record,
+      evidence: previousPlatform.getEvidence(record.caseId)!,
+      fhirBundle: buildPasFhirBundle(record, previousPlatform.getEvidence(record.caseId)!)
+    }));
+    const workflow = createProviderDocumentationWorkflow(createInMemoryUmPlatform({ generateCaseId: createCaseIdGenerator(collisionCaseIds) }), {
+      backend: "firestore",
+      async savePriorAuth(request) {
+        storedRequests.push(request);
+      },
+      async listPriorAuthRecords() {
+        return storedRequests.map((request) => request.record);
+      },
+      async getPriorAuthRecord(caseId) {
+        return storedRequests.find((request) => request.record.caseId === caseId)?.record ?? null;
+      },
+      async getEvidence(caseId) {
+        return storedRequests.find((request) => request.evidence.caseId === caseId)?.evidence ?? null;
+      },
+      async listPasEvents() {
+        return storedRequests.map((request) => ({ eventType: "PAS_SUBMITTED", caseId: request.record.caseId }));
+      },
+      async saveIncentiveRow() {
+        return undefined;
+      },
+      async listIncentiveRows() {
+        return [];
+      },
+      async getIncentiveRow() {
+        return null;
+      }
+    });
+
+    const submitted = await workflow.submitPriorAuth({
+      requestType: "outpatient_service",
+      serviceCode: "knee_mri",
+      dtr: {
+        symptomDurationConfirmed: true,
+        conservativeTherapyConfirmed: true,
+        examFindingsConfirmed: true,
+        clinicalNoteAttached: true
+      }
+    });
+
+    expect(submitted.caseId).toBe("PA-260524-2102-CCCC3333");
+    expect(storedRequests.map((request) => request.record.caseId)).toEqual(collisionCaseIds);
+  });
+
+  it("reprocesses a stale incentive row when a newer PAS claim uses the same case ID", async () => {
+    const platform = createInMemoryUmPlatform();
+    const record = platform.submitPriorAuth({
+      requestType: "outpatient_service",
+      serviceCode: "knee_mri",
+      dtr: {
+        symptomDurationConfirmed: true,
+        conservativeTherapyConfirmed: true,
+        examFindingsConfirmed: true,
+        clinicalNoteAttached: true
+      }
+    });
+    const evidence = platform.getEvidence(record.caseId)!;
+    const storedRequest: StoredPasRequest = {
+      record,
+      evidence,
+      fhirBundle: buildPasFhirBundle(record, evidence)
+    };
+    let incentiveRow: IncentiveWorklistRow | null = {
+      caseId: record.caseId,
+      submittedAt: "2026-05-24T00:00:00.000Z",
+      providerGroupDisplay: record.providerGroupDisplay,
+      requestType: record.requestType,
+      serviceLabel: record.serviceLabel,
+      serviceCode: record.serviceCode,
+      paResult: "submitted_pending",
+      denialReason: null,
+      incentiveStatus: "not_eligible",
+      paymentStatus: "blocked_by_policy",
+      incentiveValue: 0,
+      currency: "USDC",
+      settlementToken: { symbol: "USDC" },
+      reason: "Old stale evaluation",
+      reasonCodes: ["DTR_TEMPLATE_INCOMPLETE"],
+      policyId: "provider-documentation-completeness-v1",
+      policyControls: [],
+      policyCriteria: [],
+      audit: {
+        id: "audit-stale",
+        requestHash: "hash-stale",
+        policyId: "provider-documentation-completeness-v1",
+        policyVersion: "v1",
+        decision: "blocked",
+        reasonCodes: ["DTR_TEMPLATE_INCOMPLETE"],
+        transactionId: null,
+        createdAt: "2026-05-24T00:00:00.000Z"
+      },
+      walletId: null,
+      transactionId: null
+    };
+    const workflow = createProviderDocumentationWorkflow(createInMemoryUmPlatform(), {
+      backend: "firestore",
+      async savePriorAuth() {
+        return undefined;
+      },
+      async listPriorAuthRecords() {
+        return [storedRequest.record];
+      },
+      async getPriorAuthRecord(caseId) {
+        return caseId === record.caseId ? storedRequest.record : null;
+      },
+      async getEvidence(caseId) {
+        return caseId === record.caseId ? storedRequest.evidence : null;
+      },
+      async listPasEvents() {
+        return [{ eventType: "PAS_SUBMITTED", caseId: record.caseId }];
+      },
+      async saveIncentiveRow(row) {
+        incentiveRow = row;
+      },
+      async listIncentiveRows() {
+        return incentiveRow ? [incentiveRow] : [];
+      },
+      async getIncentiveRow(caseId) {
+        return caseId === record.caseId ? incentiveRow : null;
+      }
+    });
+
+    const rows = await workflow.listIncentiveRows();
+
+    expect(rows[0]).toMatchObject({
+      caseId: record.caseId,
+      submittedAt: record.submittedAt,
+      incentiveStatus: "paid",
+      paymentStatus: "auto_executed",
+      currency: "HBAR",
+      settlementToken: { symbol: "HBAR" },
+      reasonCodes: []
+    });
+    expect(executePolicyBoundPaymentMock).toHaveBeenCalledTimes(1);
+  });
+
   it("does not block provider submission when incentive evidence processing is unavailable", async () => {
     const platform = createInMemoryUmPlatform();
     const workflow = createProviderDocumentationWorkflow({
@@ -204,7 +405,7 @@ describe("provider documentation workflow", () => {
       }
     });
 
-    expect(submitted.caseId).toBe("synthetic-pa-20931");
+    expect(submitted.caseId).toMatch(PA_CASE_ID_PATTERN);
     await expect(workflow.listPriorAuths()).resolves.toHaveLength(1);
   });
 
@@ -224,7 +425,7 @@ describe("provider documentation workflow", () => {
       incentiveStatus: "not_eligible",
       paymentStatus: "blocked_by_policy",
       incentiveValue: 0,
-      currency: "USDC",
+      currency: "HBAR",
       reason: "Non-covered benefit"
     });
     expect(rows[0]!.transactionId).toBeNull();
@@ -295,11 +496,11 @@ describe("provider documentation workflow", () => {
     const rows = await workflow.listIncentiveRows();
 
     expect(submitted).toMatchObject({
-      caseId: "synthetic-pa-20931",
       paResult: "submitted_pending"
     });
+    expect(submitted.caseId).toMatch(PA_CASE_ID_PATTERN);
     expect(rows[0]).toMatchObject({
-      caseId: "synthetic-pa-20931",
+      caseId: submitted.caseId,
       serviceLabel: "Knee MRI after injury",
       paResult: "submitted_pending",
       incentiveStatus: "not_eligible",
@@ -315,7 +516,7 @@ describe("provider documentation workflow", () => {
   it("preserves audit metadata across repeated list and get reads", async () => {
     const workflow = createProviderDocumentationWorkflow();
 
-    await workflow.submitPriorAuth({
+    const submitted = await workflow.submitPriorAuth({
       requestType: "outpatient_service",
       serviceCode: "knee_mri",
       dtr: {
@@ -328,7 +529,7 @@ describe("provider documentation workflow", () => {
     const listed = (await workflow.listIncentiveRows())[0];
     await new Promise((resolve) => setTimeout(resolve, 5));
     const relisted = (await workflow.listIncentiveRows())[0];
-    const fetched = await workflow.getIncentiveRow("synthetic-pa-20931");
+    const fetched = await workflow.getIncentiveRow(submitted.caseId);
 
     expect(relisted.audit.createdAt).toBe(listed.audit.createdAt);
     expect(fetched?.audit.createdAt).toBe(listed.audit.createdAt);
@@ -339,7 +540,7 @@ describe("provider documentation workflow", () => {
   it("does not execute duplicate payments across repeated incentive reads", async () => {
     const workflow = createProviderDocumentationWorkflow();
 
-    await workflow.submitPriorAuth({
+    const submitted = await workflow.submitPriorAuth({
       requestType: "outpatient_service",
       serviceCode: "knee_mri",
       dtr: {
@@ -349,10 +550,25 @@ describe("provider documentation workflow", () => {
         clinicalNoteAttached: true
       }
     });
-    const firstPaid = await workflow.getIncentiveRow("synthetic-pa-20931");
-    const secondPaid = await workflow.getIncentiveRow("synthetic-pa-20931");
+    const firstPaid = await workflow.getIncentiveRow(submitted.caseId);
+    const secondPaid = await workflow.getIncentiveRow(submitted.caseId);
 
     expect(secondPaid?.transactionId).toBe(firstPaid?.transactionId);
     expect(executePolicyBoundPaymentMock).toHaveBeenCalledTimes(1);
   });
 });
+
+function createCaseIdGenerator(caseIds: string[]): () => string {
+  let nextIndex = 0;
+
+  return () => {
+    const caseId = caseIds[nextIndex];
+    nextIndex += 1;
+
+    if (!caseId) {
+      throw new Error("CASE_ID_SEQUENCE_EXHAUSTED");
+    }
+
+    return caseId;
+  };
+}

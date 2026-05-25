@@ -22,6 +22,8 @@ describe("plan audit details modal", () => {
     expect(source).toContain("Evidence value");
     expect(source).toContain("row.policyControls.join");
     expect(source).toContain("row.policyCriteria.map");
+    expect(source).toContain("formatTransaction(row.transactionId)");
+    expect(source).toContain("hashscan.io/testnet/transaction");
   });
 
   it("uses concise paid and blocked policy outcome labels", () => {
@@ -42,5 +44,22 @@ describe("plan audit details modal", () => {
     expect(source).toContain("formatRequestType(row.requestType)");
     expect(source).toContain("setDetailsCaseId(row.caseId)");
     expect(source).not.toContain('className="panel detail-panel"');
+  });
+
+  it("keeps the incentives worklist concise without a reason column", () => {
+    const source = readRepoFile("src/apps/web/components/provider-documentation/PlanIncentivesConsole.tsx");
+
+    expect(source).not.toContain("<th>Reason</th>");
+    expect(source).not.toContain("<td>{row.reason}</td>");
+    expect(source).toContain('colSpan={9}');
+  });
+
+  it("does not auto-refresh the health plan incentives worklist", () => {
+    const source = readRepoFile("src/apps/web/components/provider-documentation/PlanIncentivesConsole.tsx");
+
+    expect(source).toContain('onClick={() => void refreshRows("manual")}');
+    expect(source).not.toContain("setInterval");
+    expect(source).not.toContain("clearInterval");
+    expect(source).not.toContain('"poll"');
   });
 });

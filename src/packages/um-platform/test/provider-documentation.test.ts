@@ -1,13 +1,22 @@
 import { describe, expect, it } from "vitest";
 import {
   createInMemoryUmPlatform,
+  generatePriorAuthCaseId,
   getCrdServiceOptions,
   getCoverageRequirements,
   getDtrQuestionnaire,
   type PriorAuthSubmissionInput
 } from "../src/index";
 
+const PA_CASE_ID_PATTERN = /^PA-\d{6}-\d{4}-[A-Z0-9]{8}$/;
+
 describe("provider documentation UM Platform", () => {
+  it("generates PA IDs with YYMMDD-HHMM timestamp and an 8-character salt", () => {
+    const caseId = generatePriorAuthCaseId(new Date(2026, 4, 24, 21, 2));
+
+    expect(caseId).toMatch(/^PA-260524-2102-[A-Z0-9]{8}$/);
+  });
+
   it("returns covered PA-required CRD requirements for knee MRI", () => {
     expect(getCoverageRequirements("knee_mri")).toMatchObject({
       serviceCode: "knee_mri",
@@ -112,14 +121,14 @@ describe("provider documentation UM Platform", () => {
     const submitted = platform.submitPriorAuth({ requestType: "outpatient_service", serviceCode: "knee_mri" });
 
     expect(submitted).toMatchObject({
-      caseId: "synthetic-pa-20931",
       requestType: "outpatient_service",
       serviceCode: "knee_mri",
       paResult: "submitted_pending",
       denialReason: null,
       dtr: null
     });
-    expect(platform.getEvidence("synthetic-pa-20931")).toMatchObject({
+    expect(submitted.caseId).toMatch(PA_CASE_ID_PATTERN);
+    expect(platform.getEvidence(submitted.caseId)).toMatchObject({
       serviceCode: "knee_mri",
       requestType: "outpatient_service",
       crdCoveredBenefit: true,
@@ -134,7 +143,7 @@ describe("provider documentation UM Platform", () => {
   it("stores incomplete knee MRI assessment as incomplete evidence instead of blocking submission", () => {
     const platform = createInMemoryUmPlatform();
 
-    platform.submitPriorAuth({
+    const submitted = platform.submitPriorAuth({
       requestType: "outpatient_service",
       serviceCode: "knee_mri",
       dtr: {
@@ -145,7 +154,7 @@ describe("provider documentation UM Platform", () => {
       }
     });
 
-    expect(platform.getEvidence("synthetic-pa-20931")).toMatchObject({
+    expect(platform.getEvidence(submitted.caseId)).toMatchObject({
       dtrTemplateCompleted: false,
       attachmentChecklistComplete: false,
       fhirFieldsPresent: false
@@ -167,19 +176,19 @@ describe("provider documentation UM Platform", () => {
     });
 
     expect(submitted).toMatchObject({
-      caseId: "synthetic-pa-20931",
       requestType: "outpatient_service",
       serviceCode: "knee_mri",
       paResult: "submitted_pending"
     });
+    expect(submitted.caseId).toMatch(PA_CASE_ID_PATTERN);
     expect(platform.listEvents()).toEqual([
       {
         eventType: "PAS_SUBMITTED",
-        caseId: "synthetic-pa-20931"
+        caseId: submitted.caseId
       }
     ]);
-    expect(platform.getEvidence("synthetic-pa-20931")).toMatchObject({
-      caseId: "synthetic-pa-20931",
+    expect(platform.getEvidence(submitted.caseId)).toMatchObject({
+      caseId: submitted.caseId,
       requestType: "outpatient_service",
       serviceCode: "knee_mri",
       crdCoverageChecked: true,
@@ -198,7 +207,7 @@ describe("provider documentation UM Platform", () => {
   it("stores DTR questionnaire responses and treats all answered questions as complete evidence", () => {
     const platform = createInMemoryUmPlatform();
 
-    platform.submitPriorAuth({
+    const submitted = platform.submitPriorAuth({
       requestType: "outpatient_service",
       serviceCode: "knee_mri",
       dtrQuestionnaireResponse: {
@@ -223,7 +232,7 @@ describe("provider documentation UM Platform", () => {
         ])
       }
     });
-    expect(platform.getEvidence("synthetic-pa-20931")).toMatchObject({
+    expect(platform.getEvidence(submitted.caseId)).toMatchObject({
       dtrTemplateCompleted: true,
       attachmentChecklistComplete: true,
       fhirFieldsPresent: true
@@ -245,13 +254,13 @@ describe("provider documentation UM Platform", () => {
     });
 
     expect(submitted).toMatchObject({
-      caseId: "synthetic-pa-20931",
       requestType: "pharmacy_benefit",
       serviceCode: "wegovy_semaglutide",
       serviceLabel: "Wegovy (semaglutide) injection",
       paResult: "submitted_pending"
     });
-    expect(platform.getEvidence("synthetic-pa-20931")).toMatchObject({
+    expect(submitted.caseId).toMatch(PA_CASE_ID_PATTERN);
+    expect(platform.getEvidence(submitted.caseId)).toMatchObject({
       requestType: "pharmacy_benefit",
       serviceCode: "wegovy_semaglutide",
       crdCoveredBenefit: true,
@@ -264,7 +273,7 @@ describe("provider documentation UM Platform", () => {
 
   it("does not let returned PAS events mutate stored events", () => {
     const platform = createInMemoryUmPlatform();
-    platform.submitPriorAuth({
+    const submitted = platform.submitPriorAuth({
       requestType: "outpatient_service",
       serviceCode: "knee_mri",
       dtr: {
@@ -275,12 +284,12 @@ describe("provider documentation UM Platform", () => {
       }
     });
 
-    platform.listEvents()[0]!.caseId = "synthetic-pa-mutated";
+    platform.listEvents()[0]!.caseId = "PA-260524-2102-MUTATED1";
 
     expect(platform.listEvents()).toEqual([
       {
         eventType: "PAS_SUBMITTED",
-        caseId: "synthetic-pa-20931"
+        caseId: submitted.caseId
       }
     ]);
   });
@@ -305,13 +314,13 @@ describe("provider documentation UM Platform", () => {
     });
 
     expect(submitted).toMatchObject({
-      caseId: "synthetic-pa-20932",
       requestType: "outpatient_service",
       serviceCode: "full_body_wellness_mri",
       paResult: "denied_not_covered",
       denialReason: "BENEFIT_NOT_COVERED"
     });
-    expect(platform.getEvidence("synthetic-pa-20932")).toMatchObject({
+    expect(submitted.caseId).toMatch(PA_CASE_ID_PATTERN);
+    expect(platform.getEvidence(submitted.caseId)).toMatchObject({
       serviceCode: "full_body_wellness_mri",
       requestType: "outpatient_service",
       crdCoveredBenefit: false,
@@ -330,7 +339,7 @@ describe("provider documentation UM Platform", () => {
   it("returns null for missing case evidence", () => {
     const platform = createInMemoryUmPlatform();
 
-    expect(platform.getEvidence("synthetic-pa-missing")).toBeNull();
+    expect(platform.getEvidence("PA-260524-2102-MISSING1")).toBeNull();
   });
 
   it("does not let returned prior auth records mutate stored evidence", () => {
@@ -351,7 +360,7 @@ describe("provider documentation UM Platform", () => {
     submitted.dtr!.clinicalNoteAttached = false;
     platform.listPriorAuths()[0]!.dtr!.examFindingsConfirmed = false;
 
-    expect(platform.getEvidence("synthetic-pa-20931")).toMatchObject({
+    expect(platform.getEvidence(submitted.caseId)).toMatchObject({
       crdCoveredBenefit: true,
       dtrTemplateCompleted: true,
       attachmentChecklistComplete: true,

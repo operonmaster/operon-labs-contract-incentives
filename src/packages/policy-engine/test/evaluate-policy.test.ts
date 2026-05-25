@@ -4,7 +4,6 @@ import { evaluatePolicy, type EvaluationRequest, type IncentivePolicy } from "..
 const basePolicy: IncentivePolicy = {
   id: "delegate-um-sla-bonus-v1",
   evaluationType: "delegate_um_sla_bonus",
-  currency: "HBAR",
   submitterRules: {
     allowedSubmitterTypes: ["delegate_vendor"],
     allowedSubmitters: ["northstar-um"],
@@ -30,7 +29,10 @@ const basePolicy: IncentivePolicy = {
   paymentFormula: {
     baseAmount: 5,
     maxPerRequest: 5,
-    monthlyCap: 500
+    monthlyCap: 500,
+    token: {
+      symbol: "HBAR"
+    }
   },
   requiresHumanApproval: true
 };
@@ -42,7 +44,7 @@ const approvedRequest: EvaluationRequest = {
     id: "northstar-um"
   },
   requestObject: {
-    caseId: "synthetic-pa-10492",
+    caseId: "PA-260524-2102-DELEGATE",
     completedWithinSla: true,
     documentationComplete: true,
     qualityAuditPassed: true,
@@ -68,6 +70,32 @@ describe("evaluatePolicy", () => {
       walletId: "0.0.12345",
       requiresHumanApproval: true,
       reasonCodes: []
+    });
+  });
+
+  it("uses the policy payment formula token as the settlement currency", () => {
+    const result = evaluatePolicy({
+      policy: {
+        ...basePolicy,
+        paymentFormula: {
+          ...basePolicy.paymentFormula,
+          token: {
+            symbol: "OPRN",
+            hederaTokenId: "0.0.7777"
+          }
+        }
+      },
+      request: approvedRequest,
+      monthToDateAmount: 0
+    });
+
+    expect(result).toMatchObject({
+      amount: 5,
+      currency: "OPRN",
+      settlementToken: {
+        symbol: "OPRN",
+        hederaTokenId: "0.0.7777"
+      }
     });
   });
 

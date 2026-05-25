@@ -10,14 +10,13 @@
   ],
   "scripts": {
     "dev": "npm --workspace @operon-labs/web run dev",
+    "dev:real": "./run-local-server.sh",
+    "dev:simulated": "HEDERA_SETTLEMENT_MODE=simulated npm run dev",
     "build": "npm --workspace @operon-labs/web run build",
     "lint": "npm --workspace @operon-labs/web run lint",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit -p tsconfig.json && npm --workspace @operon-labs/web run typecheck"
-  },
-  "dependencies": {
-    "yaml": "2.9.0"
   },
   "overrides": {
     "@hiero-ledger/proto": {

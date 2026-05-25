@@ -1,6 +1,6 @@
 # Operon Labs Contract Incentives
 
-Policy-gated healthcare operations incentive demo for the Hedera hackathon. The demo keeps the public repo focused on app code, mock policies, Hedera Agent Kit integration points, and a simulated testnet execution boundary.
+Policy-gated healthcare operations incentive demo for the Hedera hackathon. The demo keeps the public repo focused on app code, mock policies, Hedera Agent Kit integration points, and Hedera testnet settlement without exposing private infrastructure or wallet keys.
 
 ## Structure
 
@@ -12,11 +12,10 @@ src/
   apps/web/                  Next.js demo app and API routes
   mock-data/                 Demo payloads for each incentive workflow
   packages/audit-log/        Audit record and hash helpers
-  packages/hedera-executor/  Simulated Hedera payment executor
+  packages/hedera-executor/  Hedera Agent Kit policy-bound payment executor
   packages/incentive-agent/  Demo orchestration over policies and requests
   packages/policy-engine/    Deterministic policy evaluator
   packages/um-platform/      Synthetic CRD/DTR/PAS prior-auth platform
-  policies/                  Versioned YAML incentive policies
 ```
 
 ## Demo Surfaces
@@ -40,16 +39,16 @@ Demo sequence:
 1. In the provider portal, select `Maya Chen`, `Acme Health PPO`, and `Knee MRI after injury`.
 2. Check requirements, complete the assessment, and submit the prior authorization.
 3. Use the top navigation or confirmation CTA to open the health-plan audit console.
-4. Review the `3 USDC` policy-paid row and inspect the Hedera testnet transaction details.
+4. Review the `5 HBAR` policy-paid row and inspect the Hedera testnet transaction details.
 5. Return to the provider portal and submit a second `Knee MRI after injury` request, but skip the assessment.
-6. In the plan console, review the `0 USDC` policy-blocked row with missing documentation reasons.
+6. In the plan console, review the `0 HBAR` policy-blocked row with missing documentation reasons.
 7. Return to the provider portal and submit `Full-body wellness MRI screening` after acknowledging the not-covered warning.
-8. In the plan console, review the `0 USDC` policy-blocked row with `BENEFIT_NOT_COVERED`.
+8. In the plan console, review the `0 HBAR` policy-blocked row with `BENEFIT_NOT_COVERED`.
 
 ## API Routes
 
 - `POST /api/evaluations` - evaluates a demo request against a versioned policy
-- `POST /api/payments/approve` - simulates policy-gated payment approval
+- `POST /api/payments/approve` - deprecated generic demo route for policy-gated payment approval
 - `GET /api/audit/[id]` - returns a deterministic demo audit record
 - `GET /api/um/prior-auths` - lists synthetic prior-auth submissions
 - `POST /api/um/prior-auths` - submits a synthetic prior-auth request
@@ -60,6 +59,31 @@ Demo sequence:
 
 Provider-documentation incentives are triggered asynchronously after `PAS_SUBMITTED`. The agent receives only the PA `caseId`, pulls policy-safe evidence from the synthetic UM Platform, and records either an automatic testnet transaction or a zero-value policy block.
 
+## Hedera Settlement
+
+Provider-documentation incentives are policy-defined: the plan policy owns the amount, cap, recipient wallet mapping, and token symbol. The bootstrapped demo policy computes a `5 HBAR` incentive for eligible provider-documentation requests and the current real executor submits a Hedera Agent Kit `transfer_hbar_tool` transaction when real settlement is configured.
+
+The policy model can represent `HBAR`, `USDC`, `OPER`, `OPRN`, or another token symbol. Real settlement for non-HBAR tokens requires a future HTS token-transfer executor; those policy evaluations should not be treated as settled until that adapter exists.
+
+Required deployed env vars are owned by `operon-labs-infra`:
+
+```bash
+HEDERA_SETTLEMENT_MODE=real
+HEDERA_NETWORK=testnet
+HEDERA_OPERATOR_ACCOUNT_ID=<Secret Manager value>
+HEDERA_OPERATOR_PRIVATE_KEY=<Secret Manager value>
+HEDERA_ALLOWED_RECIPIENT_ACCOUNT_IDS=0.0.9049549
+HEDERA_MAX_PAYMENT_HBAR=5
+```
+
+For tests or offline demos only:
+
+```bash
+HEDERA_SETTLEMENT_MODE=simulated
+```
+
+No wallet private keys belong in this public repo. See `docs/operon-labs-infra-hedera-settlement-scope.md` for the Terraform handoff.
+
 ## PAS Persistence
 
 Local development and deployed Cloud Run default to Firestore-backed PAS persistence in `operon-labs-nonprod`:
@@ -67,16 +91,18 @@ Local development and deployed Cloud Run default to Firestore-backed PAS persist
 ```bash
 PAS_STORE_BACKEND=firestore
 UM_REFERENCE_STORE_BACKEND=firestore
+POLICY_STORE_BACKEND=firestore
 GCP_PROJECT_ID=operon-labs-nonprod
 FIRESTORE_DATABASE_ID=(default)
 ```
 
 For isolated test runs or offline demos, explicitly opt out with `PAS_STORE_BACKEND=memory`.
 
-UM reference data also defaults to Firestore. Use `UM_REFERENCE_STORE_BACKEND=memory` only for isolated tests or offline demos.
+UM reference data and incentive policies also default to Firestore. Use `UM_REFERENCE_STORE_BACKEND=memory` and `POLICY_STORE_BACKEND=memory` only for isolated tests or offline demos.
 
 The Firestore adapter writes:
 
+- `incentivePolicies/{evaluationType}` with the active policy object used by runtime evaluation and payment controls.
 - `pasClaims/{caseId}` with the prior-auth record, policy-safe evidence, and PAS-style FHIR `Bundle` containing the `Claim`.
 - `auditEvents/{caseId}-PAS_SUBMITTED` for auditable async incentive processing.
 - `incentiveEvaluations/{caseId}` so policy payment outcomes are idempotent across Cloud Run restarts.
@@ -95,6 +121,28 @@ Full FHIR bundles stay server-side. The incentive agent receives policy-safe evi
 nvm use
 npm install
 npm run dev
+```
+
+Local real-settlement dev follows the Operon website startup-script pattern. It uses GCP Secret Manager values only in the spawned process environment and does not write `.env.local` or any other local secret file:
+
+```bash
+gcloud auth login pavel@operon.cloud
+gcloud auth application-default login
+./run-local-server.sh
+```
+
+Optional custom port:
+
+```bash
+./run-local-server.sh 3001
+```
+
+`npm run dev:real` is a thin alias to the same script.
+
+For local UI work without Hedera transfers:
+
+```bash
+npm run dev:simulated
 ```
 
 Useful checks:
@@ -121,9 +169,10 @@ Build and push the initial image before applying the `operon-labs-infra` `web-ap
 make ci-build
 ```
 
-That publishes all tags expected by the deployment flow, including the Terraform bootstrap tag:
+That publishes the two image tags expected by the deployment flow:
 
 ```text
+us-central1-docker.pkg.dev/operon-labs-nonprod/operon-labs-docker/contract-incentives-web:<git-sha-or-build-id>
 us-central1-docker.pkg.dev/operon-labs-nonprod/operon-labs-docker/contract-incentives-web:latest
 ```
 

@@ -1,4 +1,5 @@
-export type Currency = "HBAR" | "USDC";
+export type TokenSymbol = "HBAR" | "USDC" | "OPER" | "OPRN" | (string & {});
+export type Currency = TokenSymbol;
 
 export type PolicyDecision = "approved" | "blocked" | "manual_review";
 
@@ -28,12 +29,24 @@ export interface PaymentFormula {
   baseAmount: number;
   maxPerRequest: number;
   monthlyCap: number;
+  token: SettlementToken;
+}
+
+export interface SettlementToken {
+  symbol: TokenSymbol;
+  hederaTokenId?: string;
+  displayName?: string;
+  decimals?: number;
 }
 
 export interface IncentivePolicy {
   id: string;
   evaluationType: string;
-  currency: Currency;
+  /**
+   * @deprecated Use paymentFormula.token.symbol. Kept as a compatibility field
+   * for older demo payloads and documents.
+   */
+  currency?: Currency;
   submitterRules: SubmitterRules;
   requiredEvidence: string[];
   approvalRules: ApprovalRule[];
@@ -53,6 +66,7 @@ export interface PolicyEvaluationResult {
   policyVersion: string;
   amount: number;
   currency: Currency;
+  settlementToken: SettlementToken;
   walletId: string | null;
   requiresHumanApproval: boolean;
   reasonCodes: string[];
@@ -101,13 +115,17 @@ export function evaluatePolicy(input: EvaluatePolicyInput): PolicyEvaluationResu
   }
 
   const blocked = reasonCodes.length > 0;
+  const settlementToken = policy.paymentFormula.token ?? {
+    symbol: policy.currency ?? "HBAR"
+  };
 
   return {
     decision: blocked ? "blocked" : "approved",
     policyId: policy.id,
     policyVersion: extractPolicyVersion(policy.id),
     amount: blocked ? 0 : proposedAmount,
-    currency: policy.currency,
+    currency: settlementToken.symbol,
+    settlementToken,
     walletId: blocked ? null : walletId,
     requiresHumanApproval: policy.requiresHumanApproval,
     reasonCodes

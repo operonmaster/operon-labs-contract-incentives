@@ -21,8 +21,7 @@ endif
 IMAGE_REPO := $(DOCKER_REGISTRY)/$(PROJECT_ID)/$(ARTIFACT_REPO)/$(SERVICE_NAME)
 IMAGE_TAG := $(VERSION)
 IMAGE_FULL := $(IMAGE_REPO):$(IMAGE_TAG)
-IMAGE_LATEST := $(IMAGE_REPO):latest-$(ENV)
-IMAGE_TERRAFORM := $(IMAGE_REPO):latest
+IMAGE_LATEST := $(IMAGE_REPO):latest
 
 TF_LABELS := environment=$(ENV),managed_by=terraform,project=operon-labs,app=contract-incentives
 TF_REMOVE_LABELS := commit,deployed-by,deployed-at,deployment-time
@@ -90,7 +89,7 @@ env-info:
 	@echo "  Version: $(VERSION)"
 	@echo "  Branch: $(GIT_BRANCH)"
 	@echo "  Image: $(IMAGE_FULL)"
-	@echo "  Terraform bootstrap image: $(IMAGE_TERRAFORM)"
+	@echo "  Latest image: $(IMAGE_LATEST)"
 
 .PHONY: compliance-check
 compliance-check:
@@ -112,24 +111,22 @@ docker-build:
 	@echo "$(YELLOW)Building Docker image $(IMAGE_FULL) (ENVIRONMENT=$(ENV))...$(NC)"
 	@if [ -n "$(CI)" ]; then \
 		$(MAKE) docker-setup && \
-		docker buildx build \
-			--platform linux/amd64 \
-			--build-arg ENVIRONMENT=$(ENV) \
-			--cache-to $(DOCKER_BUILDX_CACHE) \
-			--cache-from $(DOCKER_BUILDX_CACHE) \
-			--tag "$(IMAGE_FULL)" \
-			--tag "$(IMAGE_LATEST)" \
-			--tag "$(IMAGE_TERRAFORM)" \
-			--file Dockerfile \
-			--push \
-			.; \
+			docker buildx build \
+				--platform linux/amd64 \
+				--build-arg ENVIRONMENT=$(ENV) \
+				--cache-to $(DOCKER_BUILDX_CACHE) \
+				--cache-from $(DOCKER_BUILDX_CACHE) \
+				--tag "$(IMAGE_FULL)" \
+				--tag "$(IMAGE_LATEST)" \
+				--file Dockerfile \
+				--push \
+				.; \
 	else \
 		docker build \
 			--platform linux/amd64 \
 			--build-arg ENVIRONMENT=$(ENV) \
 			-t "$(IMAGE_FULL)" \
 			-t "$(IMAGE_LATEST)" \
-			-t "$(IMAGE_TERRAFORM)" \
 			--file Dockerfile \
 			.; \
 	fi
@@ -139,7 +136,6 @@ docker-push:
 	@echo "$(YELLOW)Pushing Docker image...$(NC)"
 	@docker push "$(IMAGE_FULL)"
 	@docker push "$(IMAGE_LATEST)"
-	@docker push "$(IMAGE_TERRAFORM)"
 
 .PHONY: deploy
 deploy:
@@ -147,14 +143,14 @@ deploy:
 	@scripts/ci/deploy.sh \
 		"$(SERVICE_NAME)" \
 		"$(ENV)" \
-		"$(IMAGE_FULL)" \
+		"$(IMAGE_LATEST)" \
 		"$(GIT_COMMIT)" \
 		"$(PROJECT_ID)" \
 		"$(TF_LABELS)" \
 		"$(TF_REMOVE_LABELS)"
 
 .PHONY: ci-validate
-ci-validate: clean install lint test typecheck build compliance-check
+ci-validate: clean install lint test typecheck compliance-check
 	@echo "$(GREEN)Validation complete$(NC)"
 
 .PHONY: ci-build
@@ -188,11 +184,11 @@ help:
 	@echo ""
 	@echo "$(GREEN)Docker / Deployment$(NC)"
 	@echo "  make docker-build  Build container image"
-	@echo "  make docker-push   Push commit, latest-nonprod, and latest tags"
+	@echo "  make docker-push   Push commit and latest tags"
 	@echo "  make deploy        Update existing Terraform-managed Cloud Run service"
 	@echo ""
 	@echo "$(GREEN)CI Pipeline$(NC)"
-	@echo "  make ci-validate   Install, lint, test, typecheck, build"
+	@echo "  make ci-validate   Install, lint, test, typecheck"
 	@echo "  make ci-build      Build and push image"
 	@echo "  make ci-deploy     Deploy image"
 	@echo "  make ci-all        Full CI pipeline"

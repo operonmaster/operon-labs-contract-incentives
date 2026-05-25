@@ -82,6 +82,7 @@ The infra deployment should set these env vars on the Next.js Cloud Run service:
 ```bash
 PAS_STORE_BACKEND=firestore
 UM_REFERENCE_STORE_BACKEND=firestore
+POLICY_STORE_BACKEND=firestore
 GCP_PROJECT_ID=operon-labs-nonprod
 FIRESTORE_DATABASE_ID=(default)
 ```
@@ -102,7 +103,7 @@ The app will add a server-side store abstraction with two implementations:
 - `firestore`: default local and deployed persistence/reference data
 - `memory`: explicit local/test fallback
 
-The app will choose transactional persistence using `PAS_STORE_BACKEND` and patient/CRD/DTR reference storage using `UM_REFERENCE_STORE_BACKEND`.
+The app will choose transactional persistence using `PAS_STORE_BACKEND`, patient/CRD/DTR reference storage using `UM_REFERENCE_STORE_BACKEND`, and policy storage using `POLICY_STORE_BACKEND`.
 
 Expected app behavior:
 
@@ -111,6 +112,8 @@ Expected app behavior:
 - If `PAS_STORE_BACKEND=firestore`, use `GCP_PROJECT_ID` when set, otherwise default to `operon-labs-nonprod`.
 - If `UM_REFERENCE_STORE_BACKEND` is missing, use Firestore in `operon-labs-nonprod`.
 - If `UM_REFERENCE_STORE_BACKEND=memory`, use seeded in-process patient, CRD, and DTR reference data for isolated tests or offline demos.
+- If `POLICY_STORE_BACKEND` is missing, use Firestore in `operon-labs-nonprod`.
+- If `POLICY_STORE_BACKEND=memory`, use seeded in-process policies for isolated tests only.
 - Use `FIRESTORE_DATABASE_ID` when provided, otherwise default to `(default)`.
 - Never require service account key files in deployed Cloud Run.
 
@@ -126,6 +129,46 @@ Reference-data collections:
 
 Transactional collections:
 
+### `incentivePolicies/{evaluationType}`
+
+Stores the active policy object used by runtime evaluation and payment controls. The document id is the `evaluationType`, for example `provider_documentation_completeness`.
+
+Shape:
+
+```json
+{
+  "evaluationType": "provider_documentation_completeness",
+  "policyId": "provider-documentation-completeness-v1",
+  "status": "active",
+  "policy": {
+    "id": "provider-documentation-completeness-v1",
+    "evaluationType": "provider_documentation_completeness",
+    "submitterRules": {
+      "allowedSubmitterTypes": ["provider_admin_team"],
+      "allowedSubmitters": ["lakeside-provider-admin"],
+      "walletMap": {
+        "lakeside-provider-admin": "0.0.9049549"
+      }
+    },
+    "requiredEvidence": ["caseId", "requestType"],
+    "approvalRules": [],
+    "paymentFormula": {
+      "baseAmount": 5,
+      "maxPerRequest": 5,
+      "monthlyCap": 500,
+      "token": {
+        "symbol": "HBAR"
+      }
+    },
+    "requiresHumanApproval": false
+  },
+  "updatedAt": "2026-05-24T00:00:00.000Z",
+  "updatedBy": "operon-labs-contract-incentives"
+}
+```
+
+Runtime evaluation reads the current Firestore document on each evaluation. Do not use YAML policy files as a runtime source of truth.
+
 ### `pasClaims/{caseId}`
 
 Stores the submitted prior authorization record, policy-safe evidence projection, and PAS-style synthetic FHIR Bundle. The implemented app shape is intentionally nested so the domain record, policy evidence, and FHIR artifact stay distinct.
@@ -135,7 +178,7 @@ Shape:
 ```json
 {
   "record": {
-    "caseId": "synthetic-pa-20931",
+    "caseId": "PA-260524-2102-AAAA1111",
     "patientId": "patient-maya-chen",
     "patientDisplay": "Maya Chen",
     "providerGroupId": "lakeside-provider-admin",
@@ -152,7 +195,7 @@ Shape:
     "denialReason": null
   },
   "evidence": {
-    "caseId": "synthetic-pa-20931",
+    "caseId": "PA-260524-2102-AAAA1111",
     "requestType": "outpatient_service",
     "serviceCode": "knee_mri",
     "codingSystem": "CPT",
@@ -171,7 +214,7 @@ Shape:
   },
   "fhirBundle": {
     "resourceType": "Bundle",
-    "id": "pas-synthetic-pa-20931",
+    "id": "pas-PA-260524-2102-AAAA1111",
     "type": "collection",
     "entry": [
       {
@@ -195,7 +238,7 @@ Shape:
 ```json
 {
   "eventType": "PAS_SUBMITTED",
-  "caseId": "synthetic-pa-20931",
+  "caseId": "PA-260524-2102-AAAA1111",
   "submittedAt": "2026-05-24T00:00:00.000Z",
   "storedAt": "2026-05-24T00:00:00.000Z"
 }
@@ -209,20 +252,23 @@ Shape:
 
 ```json
 {
-  "caseId": "synthetic-pa-20931",
+  "caseId": "PA-260524-2102-AAAA1111",
   "submittedAt": "2026-05-24T00:00:00.000Z",
   "policyId": "provider-documentation-completeness-v1",
   "incentiveStatus": "paid",
   "paymentStatus": "auto_executed",
-  "incentiveValue": 3,
-  "currency": "USDC",
+  "incentiveValue": 5,
+  "currency": "HBAR",
+  "settlementToken": {
+    "symbol": "HBAR"
+  },
   "reasonCodes": [],
   "policyCriteria": [],
   "audit": {
     "id": "audit_abc123",
-    "transactionId": "testnet-audit_abc123-usdc-..."
+    "transactionId": "0.0.1001@1716500000.000000001"
   },
-  "transactionId": "testnet-audit_abc123-usdc-...",
+  "transactionId": "0.0.1001@1716500000.000000001",
   "storedAt": "2026-05-24T00:00:00.000Z"
 }
 ```
@@ -283,6 +329,7 @@ Runtime:
 6. Set runtime env vars:
    - `PAS_STORE_BACKEND=firestore`
    - `UM_REFERENCE_STORE_BACKEND=firestore`
+   - `POLICY_STORE_BACKEND=firestore`
    - `GCP_PROJECT_ID=operon-labs-nonprod`
    - `FIRESTORE_DATABASE_ID=(default)`
 7. Add outputs useful to the app/deploy pipeline:
@@ -347,6 +394,7 @@ Firestore local/dev defaults can be made explicit with:
 ```bash
 PAS_STORE_BACKEND=firestore
 UM_REFERENCE_STORE_BACKEND=firestore
+POLICY_STORE_BACKEND=firestore
 GCP_PROJECT_ID=operon-labs-nonprod
 FIRESTORE_DATABASE_ID=(default)
 ```

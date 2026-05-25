@@ -21,12 +21,12 @@ describe("PAS FHIR Bundle mapping", () => {
 
     expect(bundle).toMatchObject({
       resourceType: "Bundle",
-      id: "pas-synthetic-pa-20931",
+      id: `pas-${record.caseId}`,
       type: "collection"
     });
     expect(claim).toMatchObject({
       resourceType: "Claim",
-      id: "claim-synthetic-pa-20931",
+      id: `claim-${record.caseId}`,
       status: "active",
       use: "preauthorization",
       patient: { reference: "Patient/patient-maya-chen" },

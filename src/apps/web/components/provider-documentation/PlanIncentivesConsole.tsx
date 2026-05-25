@@ -19,7 +19,7 @@ interface IncentiveRowsResponse {
   rows: IncentiveWorklistRow[];
 }
 
-type RefreshSource = "initial" | "manual" | "poll";
+type RefreshSource = "initial" | "manual";
 
 export function PlanIncentivesConsole({ initialCaseId = null }: { initialCaseId?: string | null }) {
   const requestedCaseId = initialCaseId;
@@ -31,28 +31,18 @@ export function PlanIncentivesConsole({ initialCaseId = null }: { initialCaseId?
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(false);
   const refreshSequenceRef = useRef(0);
-  const priorityRefreshCountRef = useRef(0);
 
   const detailsRow = rows.find((row) => row.caseId === detailsCaseId) ?? null;
 
   const refreshRows = useCallback(async (source: RefreshSource = "manual") => {
-    if (source === "poll" && priorityRefreshCountRef.current > 0) {
-      return false;
-    }
-
     const requestId = refreshSequenceRef.current + 1;
     refreshSequenceRef.current = requestId;
-    const isPriorityRefresh = source === "manual";
-
-    if (isPriorityRefresh) {
-      priorityRefreshCountRef.current += 1;
-    }
 
     if (source === "manual" && mountedRef.current) {
       setRefreshing(true);
     }
 
-    if (source !== "poll" && mountedRef.current) {
+    if (mountedRef.current) {
       setError(null);
     }
 
@@ -99,10 +89,6 @@ export function PlanIncentivesConsole({ initialCaseId = null }: { initialCaseId?
       if (mountedRef.current && source === "manual") {
         setRefreshing(false);
       }
-
-      if (isPriorityRefresh) {
-        priorityRefreshCountRef.current = Math.max(0, priorityRefreshCountRef.current - 1);
-      }
     }
   }, [requestedCaseId]);
 
@@ -111,14 +97,10 @@ export function PlanIncentivesConsole({ initialCaseId = null }: { initialCaseId?
     const initialRefreshId = window.setTimeout(() => {
       void refreshRows("initial");
     }, 0);
-    const intervalId = window.setInterval(() => {
-      void refreshRows("poll");
-    }, 4000);
 
     return () => {
       mountedRef.current = false;
       window.clearTimeout(initialRefreshId);
-      window.clearInterval(intervalId);
     };
   }, [refreshRows]);
 
@@ -173,7 +155,6 @@ export function PlanIncentivesConsole({ initialCaseId = null }: { initialCaseId?
                 <th>Policy outcome</th>
                 <th>Value</th>
                 <th>Payment</th>
-                <th>Reason</th>
                 <th>Action</th>
               </tr>
             </thead>
@@ -192,7 +173,6 @@ export function PlanIncentivesConsole({ initialCaseId = null }: { initialCaseId?
                   </td>
                   <td>{formatCurrency(row)}</td>
                   <td>{formatPaymentStatus(row)}</td>
-                  <td>{row.reason}</td>
                   <td>
                     <button
                       className="row-action"
@@ -209,7 +189,7 @@ export function PlanIncentivesConsole({ initialCaseId = null }: { initialCaseId?
               ))}
               {!initialLoading && rows.length === 0 ? (
                 <tr>
-                  <td className="empty-state" colSpan={10}>
+                  <td className="empty-state" colSpan={9}>
                     No submitted PA incentive events yet. Submit a prior authorization from the provider portal.
                   </td>
                 </tr>

@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   canContinueFromSetup,
   canEditHealthPlan,
@@ -9,6 +11,10 @@ import {
   type AssessmentQuestionContent,
   wizardSteps
 } from "./provider-portal-content";
+
+function readRepoFile(path: string) {
+  return readFileSync(resolve(process.cwd(), path), "utf8");
+}
 
 describe("provider portal content", () => {
   it("uses a four-step portal flow with patient and plan collapsed into one step", () => {
@@ -75,5 +81,14 @@ describe("provider portal content", () => {
       answeredCount: assessmentQuestions.length,
       isComplete: true
     });
+  });
+
+  it("defers the initial patient fetch so Strict Mode remount cleanup prevents duplicate requests", () => {
+    const source = readRepoFile("src/apps/web/components/provider-documentation/ProviderDocumentationWizard.tsx");
+
+    expect(source).toContain("const patientLoadId = window.setTimeout");
+    expect(source).toContain("window.clearTimeout(patientLoadId)");
+    expect(source).toMatch(/const patientLoadId = window\.setTimeout\(\(\) => \{\n\s+void loadPatients\(\);/);
+    expect(source).toContain('fetch("/api/um/patients")');
   });
 });

@@ -108,10 +108,13 @@ export function ProviderDocumentationWizard() {
       }
     }
 
-    void loadPatients();
+    const patientLoadId = window.setTimeout(() => {
+      void loadPatients();
+    }, 0);
 
     return () => {
       cancelled = true;
+      window.clearTimeout(patientLoadId);
     };
   }, []);
 
