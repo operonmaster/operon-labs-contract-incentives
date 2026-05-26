@@ -3,7 +3,7 @@ import { evaluateDemoScenario } from "@operon-labs/incentive-agent";
 import { createAuditRecord } from "@operon-labs/audit-log";
 import { policyStore } from "../lib/policy-store";
 import { getScenario } from "./demo-catalog";
-import { LabsHero, LabsPageShell, LabsPanel, LabsProductFrame } from "./labs-ui";
+import { LabsBadge, LabsHero, LabsPageShell, LabsPanel, LabsProductFrame } from "./labs-ui";
 
 export async function DemoPage({ slug }: Readonly<{ slug: string }>) {
   const scenario = getScenario(slug);
@@ -35,7 +35,7 @@ export async function DemoPage({ slug }: Readonly<{ slug: string }>) {
 
       <LabsPanel>
         <h2>Policy decision</h2>
-        <span className={`status ${evaluation.result.decision}`}>{evaluation.result.decision}</span>
+        <LabsBadge variant={decisionBadgeVariant(evaluation.result.decision)}>{evaluation.result.decision}</LabsBadge>
         <ul>
           <li>Policy: {evaluation.result.policyId}</li>
           <li>Amount: {evaluation.result.amount} {evaluation.result.currency}</li>
@@ -49,4 +49,16 @@ export async function DemoPage({ slug }: Readonly<{ slug: string }>) {
       </LabsProductFrame>
     </LabsPageShell>
   );
+}
+
+function decisionBadgeVariant(decision: string): "success" | "warning" | "neutral" {
+  if (decision === "approved") {
+    return "success";
+  }
+
+  if (decision === "blocked") {
+    return "warning";
+  }
+
+  return "neutral";
 }

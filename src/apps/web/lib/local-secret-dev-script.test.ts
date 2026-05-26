@@ -17,10 +17,11 @@ describe("local real-settlement dev script", () => {
     expect(script).toContain("gcloud secrets versions access latest");
     expect(script).toContain("contract-incentives-hedera-operator-account-id");
     expect(script).toContain("contract-incentives-hedera-operator-private-key");
-    expect(script).toContain("contract-incentives-hedera-allowed-recipient-account-ids");
     expect(script).toContain("export HEDERA_OPERATOR_ACCOUNT_ID");
     expect(script).toContain("export HEDERA_OPERATOR_PRIVATE_KEY");
-    expect(script).toContain("export HEDERA_ALLOWED_RECIPIENT_ACCOUNT_IDS");
+    expect(script).toContain("export PAYMENT_POLICY_STORE_BACKEND");
+    expect(script).toContain("export PAYMENT_POLICY_EVIDENCE_STORE_BACKEND");
+    expect(script).not.toContain("contract-incentives-hedera-allowed-recipient-account-ids");
     expect(script).toContain("npm --workspace @operon-labs/web run dev");
     expect(script).not.toMatch(/>\s*\.env/);
     expect(script).not.toContain("set -x");

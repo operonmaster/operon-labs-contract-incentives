@@ -68,6 +68,10 @@ describe("PAS FHIR Bundle mapping", () => {
   it("maps a pharmacy benefit prior authorization to NDC-coded Claim item", () => {
     const platform = createInMemoryUmPlatform();
     const record = platform.submitPriorAuth({
+      patientId: "patient-andre-williams",
+      patientDisplay: "Andre Williams",
+      planId: "summit-health-hmo",
+      planDisplay: "Summit Health HMO",
       requestType: "pharmacy_benefit",
       serviceCode: "wegovy_semaglutide",
       dtr: {
@@ -85,6 +89,8 @@ describe("PAS FHIR Bundle mapping", () => {
     expect(claim).toMatchObject({
       resourceType: "Claim",
       use: "preauthorization",
+      patient: { reference: "Patient/patient-andre-williams", display: "Andre Williams" },
+      insurer: { reference: "Organization/summit-health-hmo", display: "Summit Health HMO" },
       item: [
         {
           productOrService: {

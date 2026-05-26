@@ -17,6 +17,15 @@ import {
 import { createPasPersistenceStoreFromEnv, type PasPersistenceStore } from "./pas-persistence";
 import { createPaymentIntentStoreFromEnv } from "./payment-intent-store";
 import { createPolicyStoreFromEnv, type PolicyStore } from "./policy-store";
+import { createBusinessEvaluationAttestationStore } from "./business-evaluation-attestation-store";
+import { createPaymentPolicyStoreFromEnv, type PaymentPlanPolicy, type PaymentPolicyStore } from "./payment-policy-store";
+import {
+  createPaymentPolicyEvidenceStoreFromEnv,
+  type PaymentPolicyControlEvidence,
+  type PaymentPolicyEvidence,
+  type PaymentPolicyEvidenceOutcome,
+  type PaymentPolicyEvidenceStore
+} from "./payment-policy-evidence-store";
 
 export type IncentiveStatus = "not_eligible" | "paid" | "payment_failed";
 export type PaymentStatus = "auto_executed" | "blocked_by_policy" | "execution_failed";
@@ -32,6 +41,8 @@ export interface PolicyCriterionMatch {
 
 export interface IncentiveWorklistRow {
   caseId: string;
+  planId?: string;
+  planDisplay?: string;
   submittedAt: string;
   providerGroupDisplay: string;
   requestType: RequestType;
@@ -70,7 +81,9 @@ export function createProviderDocumentationWorkflow(
   platform: UmPlatform = createInMemoryUmPlatform(),
   persistence: PasPersistenceStore | undefined = createPasPersistenceStoreFromEnv(),
   policyStore: PolicyStore = createPolicyStoreFromEnv(),
-  paymentIntentStore: PaymentIntentStore | undefined = createPaymentIntentStoreFromEnv()
+  paymentIntentStore: PaymentIntentStore | undefined = createPaymentIntentStoreFromEnv(),
+  paymentPolicyStore: PaymentPolicyStore = createPaymentPolicyStoreFromEnv(),
+  paymentPolicyEvidenceStore: PaymentPolicyEvidenceStore | undefined = createPaymentPolicyEvidenceStoreFromEnv()
 ): ProviderDocumentationWorkflow {
   const rows = new Map<string, IncentiveWorklistRow>();
   const settlementsInFlight = new Map<string, Promise<IncentiveWorklistRow | null>>();
@@ -116,16 +129,26 @@ export function createProviderDocumentationWorkflow(
       return null;
     }
 
-    const policy = await policyStore.getPolicy("provider_documentation_completeness");
-    if (!policy) {
+    const policies = await policyStore.findPolicies({
+      evaluationType: "provider_documentation_completeness",
+      planId: evidence.planId,
+      providerId: evidence.providerId,
+      requestType: evidence.requestType,
+      submittedAt: record.submittedAt
+    });
+    if (policies.length === 0) {
       return null;
     }
 
-    const evaluation = evaluateProviderDocumentationEvent(event, {
-      getEvidenceByCaseId: () => evidence,
-      policy,
-      monthToDateAmount: 0
-    });
+    const evaluation = selectProviderDocumentationEvaluation(
+      policies.map((policy) =>
+        evaluateProviderDocumentationEvent(event, {
+          getEvidenceByCaseId: () => evidence,
+          policy,
+          monthToDateAmount: 0
+        })
+      )
+    );
     const policyControls = buildProviderDocumentationPolicyControls(evaluation);
     const audit = createAuditRecord({
       request: evaluation.request,
@@ -134,6 +157,8 @@ export function createProviderDocumentationWorkflow(
     });
     const baseRow: IncentiveWorklistRow = {
       caseId: record.caseId,
+      planId: record.planId,
+      planDisplay: record.planDisplay,
       submittedAt: record.submittedAt,
       providerGroupDisplay: record.providerGroupDisplay,
       requestType: record.requestType,
@@ -163,9 +188,20 @@ export function createProviderDocumentationWorkflow(
       return baseRow;
     }
 
+    let paymentPolicy: PaymentPlanPolicy | null = null;
+
     try {
+      rows.set(event.caseId, baseRow);
+      await persistence?.saveIncentiveRow(baseRow);
+      paymentPolicy = await paymentPolicyStore.getPolicyForPlan(evidence.planId);
+      if (!paymentPolicy) {
+        throw new Error("HEDERA_PLAN_POLICY_NOT_FOUND");
+      }
+
       const payment = await executePolicyBoundPayment({
         auditId: audit.id,
+        incentiveEvaluationId: event.caseId,
+        planId: evidence.planId,
         amount: evaluation.result.amount,
         currency: evaluation.result.currency,
         walletId: evaluation.result.walletId,
@@ -175,7 +211,16 @@ export function createProviderDocumentationWorkflow(
         triggerEvent: event.eventType,
         policyControls
       }, {
-        paymentIntentStore
+        paymentIntentStore,
+        planPolicy: paymentPolicy,
+        businessEvaluationStore: createBusinessEvaluationAttestationStore(
+          persistence ?? {
+            async getIncentiveRow(incentiveEvaluationId) {
+              return rows.get(incentiveEvaluationId) ?? null;
+            }
+          },
+          policyStore
+        )
       });
       const paid: IncentiveWorklistRow = {
         ...baseRow,
@@ -189,8 +234,24 @@ export function createProviderDocumentationWorkflow(
 
       rows.set(event.caseId, paid);
       await persistence?.saveIncentiveRow(paid);
+      await paymentPolicyEvidenceStore?.saveEvidence(
+        buildPaymentPolicyEvidence({
+          row: paid,
+          paymentPolicy,
+          outcome: payment.status === "simulated" ? "simulated" : "paid",
+          failureCode: null,
+          paymentIntentId: payment.paymentIntentId ?? null,
+          transactionId: payment.transactionId ?? null
+        })
+      );
       return paid;
-    } catch {
+    } catch (error) {
+      const existing = rows.get(event.caseId) ?? (await persistence?.getIncentiveRow(event.caseId)) ?? null;
+      if (existing && isCurrentIncentiveRow(existing, record) && existing.incentiveStatus === "paid" && existing.transactionId) {
+        rows.set(event.caseId, existing);
+        return existing;
+      }
+
       const failed: IncentiveWorklistRow = {
         ...baseRow,
         incentiveStatus: "payment_failed",
@@ -201,6 +262,18 @@ export function createProviderDocumentationWorkflow(
 
       rows.set(event.caseId, failed);
       await persistence?.saveIncentiveRow(failed);
+      if (paymentPolicy) {
+        await paymentPolicyEvidenceStore?.saveEvidence(
+          buildPaymentPolicyEvidence({
+            row: failed,
+            paymentPolicy,
+            outcome: "blocked",
+            failureCode: toPaymentPolicyFailureCode(error),
+            paymentIntentId: null,
+            transactionId: null
+          })
+        );
+      }
       return failed;
     }
   }
@@ -284,27 +357,75 @@ function summarizeReason(record: PriorAuthRecord, reasonCodes: string[]): string
   }
 
   if (reasonCodes.length === 0) {
-    return "Complete DTR + PAS before cutoff";
+    return "Completed requested DTR";
   }
 
-  if (reasonCodes.includes("DTR_TEMPLATE_INCOMPLETE") || reasonCodes.includes("ATTACHMENT_CHECKLIST_INCOMPLETE")) {
-    return "Missing required documentation";
+  if (reasonCodes.includes("DTR_TEMPLATE_INCOMPLETE")) {
+    return "Requested DTR incomplete";
+  }
+
+  if (reasonCodes.includes("DTR_NOT_REQUESTED")) {
+    return "DTR not requested for this policy";
+  }
+
+  if (reasonCodes.includes("MANUAL_REVIEW_REQUIRED")) {
+    return "Manual settlement review required";
+  }
+
+  if (reasonCodes.includes("MULTIPLE_POLICY_MATCHES")) {
+    return "Multiple matching policies require configuration review";
   }
 
   return reasonCodes.join(", ");
 }
 
 function buildProviderDocumentationPolicyControls(evaluation: ReturnType<typeof evaluateProviderDocumentationEvent>): string[] {
-  const formula = evaluation.policy.paymentFormula;
-  const token = formula.token.symbol;
+  const payout = evaluation.policy.payout;
+  const requestTypeScope = (evaluation.policy.incentiveScope.eligibleRequestTypes ?? evaluation.policy.incentiveScope.excludedRequestTypes ?? [])
+    .map((requestType) => formatRequestType(requestType as RequestType))
+    .join(" or ");
+  const requestTypeControl = evaluation.policy.incentiveScope.eligibleRequestTypes?.length
+    ? `Request type limited to ${requestTypeScope}`
+    : `Request type excludes ${requestTypeScope}`;
 
   return [
     "Allowed submitter and recipient wallet",
-    "Request type limited to outpatient service or pharmacy benefit",
-    `${formula.maxPerRequest} ${token} max per PA request`,
-    `${formula.monthlyCap} ${token} monthly cap`,
-    "No PHI or prohibited outcome metrics"
+    requestTypeControl,
+    "Service code limited to policy scope",
+    "DTR requested and completed",
+    `${payout.amountPerEligibleRequest} ${payout.token} per eligible request`,
+    `${payout.monthlyCap} ${payout.token} monthly cap`
   ];
+}
+
+function selectProviderDocumentationEvaluation(
+  evaluations: Array<ReturnType<typeof evaluateProviderDocumentationEvent>>
+): ReturnType<typeof evaluateProviderDocumentationEvent> {
+  const approved = evaluations.filter((evaluation) => evaluation.result.decision === "approved");
+  if (approved.length === 1) {
+    return approved[0]!;
+  }
+
+  if (approved.length > 1) {
+    const [first] = approved;
+    return {
+      ...first!,
+      result: {
+        ...first!.result,
+        decision: "blocked",
+        amount: 0,
+        walletId: null,
+        reasonCodes: ["MULTIPLE_POLICY_MATCHES"]
+      }
+    };
+  }
+
+  const blocked = evaluations.find((evaluation) => evaluation.result.decision === "blocked");
+  if (blocked) {
+    return blocked;
+  }
+
+  return evaluations[0]!;
 }
 
 function buildProviderDocumentationPolicyCriteria(
@@ -312,25 +433,46 @@ function buildProviderDocumentationPolicyCriteria(
 ): PolicyCriterionMatch[] {
   const evidence = evaluation.request.requestObject;
   const reasonCodes = evaluation.result.reasonCodes;
-  const expectedWalletId = evaluation.policy.submitterRules.walletMap[evaluation.request.submitter.id] ?? "Not assigned";
+  const expectedWalletId = evaluation.policy.settlement.recipientWalletId;
   const actualWalletId = evaluation.result.walletId ?? "Not assigned";
+  const codingGroup = String(evidence.codingSystem).toUpperCase() === "NDC" ? "ndc" : "cpt";
+  const scopedServiceCodes =
+    evaluation.policy.incentiveScope.includedServiceCodes?.[codingGroup] ??
+    evaluation.policy.incentiveScope.excludedServiceCodes?.[codingGroup] ??
+    [];
+  const expectedServiceCodes = scopedServiceCodes.join(", ");
+  const eligibleRequestTypes = evaluation.policy.incentiveScope.eligibleRequestTypes ?? [];
+  const excludedRequestTypes = evaluation.policy.incentiveScope.excludedRequestTypes ?? [];
+  const usesEligibleRequestTypes = eligibleRequestTypes.length > 0;
+  const usesIncludedServiceCodes = Boolean(evaluation.policy.incentiveScope.includedServiceCodes);
+  const requestTypeInScope =
+    usesEligibleRequestTypes
+      ? eligibleRequestTypes.includes(String(evidence.requestType))
+      : !excludedRequestTypes.includes(String(evidence.requestType));
+  const serviceCodeInScope = usesIncludedServiceCodes
+    ? scopedServiceCodes.includes(String(evidence.billingCode)) && !reasonCodes.includes("SERVICE_CODE_NOT_INCLUDED")
+    : !scopedServiceCodes.includes(String(evidence.billingCode)) && !reasonCodes.includes("SERVICE_CODE_EXCLUDED");
+  const requestTypeReasonCode = usesEligibleRequestTypes ? "REQUEST_TYPE_NOT_ELIGIBLE" : "REQUEST_TYPE_EXCLUDED";
+  const serviceCodeReasonCode = usesIncludedServiceCodes ? "SERVICE_CODE_NOT_INCLUDED" : "SERVICE_CODE_EXCLUDED";
 
   return [
     criterion({
-      id: "submitter_type",
-      label: "Submitter type is allowed",
-      expected: "provider_admin_team",
-      actual: evaluation.request.submitter.type,
-      reasonCode: "SUBMITTER_TYPE_NOT_ALLOWED",
-      passed: evaluation.request.submitter.type === "provider_admin_team" && !reasonCodes.includes("SUBMITTER_TYPE_NOT_ALLOWED")
+      id: "plan",
+      label: "Plan is in the contract pair",
+      expected: evaluation.policy.contractPair.planId,
+      actual: formatPolicyValue(evidence.planId),
+      reasonCode: "PLAN_NOT_IN_CONTRACT",
+      passed: evidence.planId === evaluation.policy.contractPair.planId && !reasonCodes.includes("PLAN_NOT_IN_CONTRACT")
     }),
     criterion({
-      id: "submitter_id",
-      label: "Submitter ID is allowed",
-      expected: "lakeside-provider-admin",
+      id: "provider",
+      label: "Provider is in the contract pair",
+      expected: evaluation.policy.contractPair.providerId,
       actual: evaluation.request.submitter.id,
-      reasonCode: "SUBMITTER_NOT_ALLOWED",
-      passed: evaluation.request.submitter.id === "lakeside-provider-admin" && !reasonCodes.includes("SUBMITTER_NOT_ALLOWED")
+      reasonCode: "PROVIDER_NOT_IN_CONTRACT",
+      passed:
+        evaluation.request.submitter.id === evaluation.policy.contractPair.providerId &&
+        !reasonCodes.includes("PROVIDER_NOT_IN_CONTRACT")
     }),
     criterion({
       id: "wallet",
@@ -343,54 +485,186 @@ function buildProviderDocumentationPolicyCriteria(
     criterion({
       id: "settlement_token",
       label: "Settlement token is policy-defined",
-      expected: evaluation.policy.paymentFormula.token.symbol,
+      expected: evaluation.policy.payout.token,
       actual: evaluation.result.currency,
       reasonCode: "SETTLEMENT_TOKEN_CONFIGURED",
-      passed: evaluation.result.currency === evaluation.policy.paymentFormula.token.symbol
+      passed: evaluation.result.currency === evaluation.policy.payout.token
     }),
     criterion({
       id: "requestType",
-      label: "Request type is eligible",
-      expected: "Outpatient Service or Pharmacy Benefit",
+      label: usesEligibleRequestTypes ? "Request type is eligible" : "Request type is not excluded",
+      expected: (usesEligibleRequestTypes ? eligibleRequestTypes : excludedRequestTypes)
+        .map((requestType) => formatRequestType(requestType as RequestType))
+        .join(" or "),
       actual: formatRequestType(evidence.requestType as RequestType),
-      reasonCode: "REQUEST_TYPE_NOT_ELIGIBLE",
+      reasonCode: requestTypeReasonCode,
       passed:
-        (evidence.requestType === "outpatient_service" || evidence.requestType === "pharmacy_benefit") &&
-        !reasonCodes.includes("REQUEST_TYPE_NOT_ELIGIBLE")
+        requestTypeInScope &&
+        !reasonCodes.includes(requestTypeReasonCode)
     }),
-    evidenceCriterion(evidence, "crdCoverageChecked", "Coverage check completed", true, "CRD_COVERAGE_NOT_CHECKED", reasonCodes),
-    evidenceCriterion(evidence, "crdCoveredBenefit", "Service is covered benefit", true, "SERVICE_NOT_COVERED", reasonCodes),
-    evidenceCriterion(evidence, "dtrTemplateCompleted", "DTR assessment completed", true, "DTR_TEMPLATE_INCOMPLETE", reasonCodes),
-    evidenceCriterion(evidence, "attachmentChecklistComplete", "Attachment checklist complete", true, "ATTACHMENT_CHECKLIST_INCOMPLETE", reasonCodes),
-    evidenceCriterion(evidence, "fhirFieldsPresent", "Required FHIR fields present", true, "FHIR_FIELDS_MISSING", reasonCodes),
-    evidenceCriterion(evidence, "pasSubmitted", "PAS submitted", true, "PAS_NOT_SUBMITTED", reasonCodes),
-    evidenceCriterion(
-      evidence,
-      "submittedBeforeInitialDecision",
-      "Submitted before initial decision",
-      true,
-      "SUBMITTED_AFTER_INITIAL_DECISION",
-      reasonCodes
-    ),
-    evidenceCriterion(
-      evidence,
-      "paResultUsedForPositivePayment",
-      "PA result not used for positive payment",
-      false,
-      "PROHIBITED_PA_RESULT_METRIC",
-      reasonCodes
-    ),
-    evidenceCriterion(evidence, "approvalOutcomeUsed", "Approval outcome not used", false, "PROHIBITED_OUTCOME_METRIC", reasonCodes),
-    evidenceCriterion(
-      evidence,
-      "referralVolumeMetricUsed",
-      "Referral volume metric not used",
-      false,
-      "PROHIBITED_REFERRAL_VOLUME_METRIC",
-      reasonCodes
-    ),
-    evidenceCriterion(evidence, "containsPhi", "No PHI in policy payload", false, "PHI_BLOCKED", reasonCodes)
+    criterion({
+      id: "service_code",
+      label: usesIncludedServiceCodes ? "Service code is included" : "Service code is not excluded",
+      expected: expectedServiceCodes,
+      actual: formatPolicyValue(evidence.billingCode),
+      reasonCode: serviceCodeReasonCode,
+      passed:
+        serviceCodeInScope && !reasonCodes.includes(serviceCodeReasonCode)
+    }),
+    evidenceCriterion(evidence, "coveredBenefit", "Request is a covered benefit", true, "BENEFIT_NOT_COVERED", reasonCodes),
+    evidenceCriterion(evidence, "dtrRequested", "DTR was requested", true, "DTR_NOT_REQUESTED", reasonCodes),
+    evidenceCriterion(evidence, "dtrTemplateCompleted", "Requested DTR is complete", true, "DTR_TEMPLATE_INCOMPLETE", reasonCodes)
   ];
+}
+
+function buildPaymentPolicyEvidence({
+  row,
+  paymentPolicy,
+  outcome,
+  failureCode,
+  paymentIntentId,
+  transactionId
+}: {
+  row: IncentiveWorklistRow;
+  paymentPolicy: PaymentPlanPolicy;
+  outcome: PaymentPolicyEvidenceOutcome;
+  failureCode: string | null;
+  paymentIntentId: string | null;
+  transactionId: string | null;
+}): PaymentPolicyEvidence {
+  const now = new Date().toISOString();
+  const amount = row.incentiveValue;
+  const token = row.currency;
+
+  return {
+    incentiveEvaluationId: row.caseId,
+    caseId: row.caseId,
+    planId: paymentPolicy.planId,
+    paymentPolicyId: paymentPolicy.planId,
+    businessPolicyId: row.policyId,
+    runtime: "hedera-agent-kit-policy",
+    outcome,
+    failureCode,
+    requestedPayment: {
+      amount,
+      token,
+      recipientWalletId: row.walletId ?? "Not assigned"
+    },
+    controls: buildPaymentPolicyControlEvidence({
+      row,
+      paymentPolicy,
+      outcome,
+      failureCode
+    }),
+    paymentIntentId,
+    transactionId,
+    createdAt: now,
+    updatedAt: now
+  };
+}
+
+function buildPaymentPolicyControlEvidence({
+  row,
+  paymentPolicy,
+  outcome,
+  failureCode
+}: {
+  row: IncentiveWorklistRow;
+  paymentPolicy: PaymentPlanPolicy;
+  outcome: PaymentPolicyEvidenceOutcome;
+  failureCode: string | null;
+}): PaymentPolicyControlEvidence[] {
+  const amount = row.incentiveValue;
+  const token = row.currency;
+  const success = outcome === "paid" || outcome === "simulated";
+
+  return [
+    {
+      id: "businessEvaluationAttestation",
+      label: "Business evaluation attestation",
+      status: paymentPolicy.businessEvaluationAttestation
+        ? controlStatus(failureCode, "BUSINESS_EVALUATION", success || failureCode !== null)
+        : "not_run"
+    },
+    {
+      id: "paymentToken",
+      label: "Payment token",
+      status: paymentPolicy.paymentToken === token && failureCode !== "HEDERA_PAYMENT_TOKEN_NOT_ALLOWED" ? "passed" : "failed",
+      expected: paymentPolicy.paymentToken,
+      actual: token,
+      failureCode: failureCode === "HEDERA_PAYMENT_TOKEN_NOT_ALLOWED" ? failureCode : undefined
+    },
+    {
+      id: "maxPaymentPerRequest",
+      label: "Max payment per request",
+      status: paymentPolicy.maxPaymentPerRequest
+        ? amount > paymentPolicy.maxPaymentAmount || failureCode === "HEDERA_PAYMENT_AMOUNT_EXCEEDS_PLAN_MAX"
+          ? "failed"
+          : "passed"
+        : "not_run",
+      expected: `<= ${paymentPolicy.maxPaymentAmount} ${paymentPolicy.paymentToken}`,
+      actual: `${amount} ${token}`,
+      failureCode: failureCode === "HEDERA_PAYMENT_AMOUNT_EXCEEDS_PLAN_MAX" ? failureCode : undefined
+    },
+    {
+      id: "duplicatePaymentPrevention",
+      label: "Duplicate payment prevention",
+      status: paymentPolicy.duplicatePaymentPrevention
+        ? failureCode === "DUPLICATE_PAYMENT_BLOCKED"
+          ? "failed"
+          : success
+            ? "passed"
+            : "not_run"
+        : "not_run",
+      failureCode: failureCode === "DUPLICATE_PAYMENT_BLOCKED" ? failureCode : undefined
+    },
+    {
+      id: "paymentEnvelopeIntegrity",
+      label: "Payment envelope integrity",
+      status: paymentPolicy.paymentEnvelopeIntegrity
+        ? isEnvelopeFailure(failureCode)
+          ? "failed"
+          : success
+            ? "passed"
+            : "not_run"
+        : "not_run",
+      failureCode: isEnvelopeFailure(failureCode) ? failureCode ?? undefined : undefined
+    }
+  ];
+}
+
+function controlStatus(
+  failureCode: string | null,
+  failurePrefix: string,
+  evaluated: boolean
+): PaymentPolicyControlEvidence["status"] {
+  if (!evaluated) {
+    return "not_run";
+  }
+
+  return failureCode?.startsWith(failurePrefix) ? "failed" : "passed";
+}
+
+function isEnvelopeFailure(failureCode: string | null): boolean {
+  return Boolean(
+    failureCode &&
+      [
+        "HEDERA_POLICY_SOURCE_ACCOUNT_MISMATCH",
+        "HEDERA_POLICY_RECIPIENT_MISMATCH",
+        "HEDERA_POLICY_AMOUNT_MISMATCH",
+        "HEDERA_POLICY_MEMO_MISMATCH",
+        "BUSINESS_EVALUATION_WALLET_MISMATCH",
+        "BUSINESS_EVALUATION_AMOUNT_MISMATCH"
+      ].includes(failureCode)
+  );
+}
+
+function toPaymentPolicyFailureCode(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return "PAYMENT_POLICY_EXECUTION_FAILED";
 }
 
 function evidenceCriterion(

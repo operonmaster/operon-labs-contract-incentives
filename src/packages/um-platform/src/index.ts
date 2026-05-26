@@ -8,6 +8,7 @@ import {
 export type RequestType = "outpatient_service" | "pharmacy_benefit" | "inpatient_admission";
 export type ServiceCode = "knee_mri" | "full_body_wellness_mri" | "wegovy_semaglutide" | "humira_adalimumab";
 export type CodingSystem = "CPT" | "NDC";
+export type PlanId = "acme-health-ppo" | "summit-health-hmo";
 export type PaResult = "submitted_pending" | "denied_not_covered";
 export type PasEventType = "PAS_SUBMITTED";
 
@@ -32,6 +33,10 @@ export interface DtrAnswers {
 }
 
 export interface PriorAuthSubmissionInput {
+  patientId?: string;
+  patientDisplay?: string;
+  planId?: PlanId;
+  planDisplay?: string;
   requestType: RequestType;
   serviceCode: ServiceCode;
   dtr?: DtrAnswers;
@@ -41,8 +46,10 @@ export interface PriorAuthSubmissionInput {
 
 export interface PriorAuthRecord {
   caseId: string;
-  patientId: "patient-maya-chen";
-  patientDisplay: "Maya Chen";
+  patientId: string;
+  patientDisplay: string;
+  planId: PlanId;
+  planDisplay: string;
   providerGroupId: "lakeside-provider-admin";
   providerGroupDisplay: "Lakeside Provider Admin";
   requestType: RequestType;
@@ -67,14 +74,18 @@ export interface PasSubmittedEvent {
 
 export interface ProviderDocumentationEvidence {
   caseId: string;
+  planId: PlanId;
   submitter: {
-    type: "provider_admin_team";
     id: "lakeside-provider-admin";
   };
+  providerId: "lakeside-provider-admin";
   requestType: RequestType;
   serviceCode: ServiceCode;
   codingSystem: CodingSystem;
   billingCode: string;
+  coverageStatusConfirmed: boolean;
+  coveredBenefit: boolean;
+  dtrRequested: boolean;
   crdCoverageChecked: boolean;
   crdCoveredBenefit: boolean;
   dtrTemplateCompleted: boolean;
@@ -100,6 +111,22 @@ export interface UmPlatform {
 export interface UmPlatformOptions {
   generateCaseId?: () => string;
 }
+
+const defaultPlanDisplayById: Record<PlanId, string> = {
+  "acme-health-ppo": "Acme Health PPO",
+  "summit-health-hmo": "Summit Health HMO"
+};
+
+const defaultPatientByPlanId: Record<PlanId, { patientId: string; patientDisplay: string }> = {
+  "acme-health-ppo": {
+    patientId: "patient-maya-chen",
+    patientDisplay: "Maya Chen"
+  },
+  "summit-health-hmo": {
+    patientId: "patient-andre-williams",
+    patientDisplay: "Andre Williams"
+  }
+};
 
 export function getCoverageRequirements(serviceCode: ServiceCode): CoverageRequirements {
   return getCrdCoverageRequirements(serviceCode);
@@ -137,11 +164,15 @@ export function createInMemoryUmPlatform(options: UmPlatformOptions = {}): UmPla
       }
 
       const caseId = getUnusedCaseId(records, generateCaseId);
+      const planId = input.planId ?? "acme-health-ppo";
+      const defaultPatient = defaultPatientByPlanId[planId];
 
       const record: PriorAuthRecord = {
         caseId,
-        patientId: "patient-maya-chen",
-        patientDisplay: "Maya Chen",
+        patientId: input.patientId ?? defaultPatient.patientId,
+        patientDisplay: input.patientDisplay ?? defaultPatient.patientDisplay,
+        planId,
+        planDisplay: input.planDisplay ?? defaultPlanDisplayById[planId],
         providerGroupId: "lakeside-provider-admin",
         providerGroupDisplay: "Lakeside Provider Admin",
         requestType: input.requestType,
@@ -190,14 +221,18 @@ export function buildProviderDocumentationEvidence(record: PriorAuthRecord): Pro
 
   return {
     caseId: record.caseId,
+    planId: record.planId,
     submitter: {
-      type: "provider_admin_team",
       id: "lakeside-provider-admin"
     },
+    providerId: "lakeside-provider-admin",
     requestType: record.requestType,
     serviceCode: record.serviceCode,
     codingSystem: record.codingSystem,
     billingCode: record.billingCode,
+    coverageStatusConfirmed: true,
+    coveredBenefit: record.coverage.coveredBenefit,
+    dtrRequested: Boolean(record.coverage.documentationTemplateId),
     crdCoverageChecked: true,
     crdCoveredBenefit: record.coverage.coveredBenefit,
     dtrTemplateCompleted,

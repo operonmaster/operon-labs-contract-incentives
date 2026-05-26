@@ -46,6 +46,9 @@ export function explainDecision(result: PolicyEvaluationResult): string {
       ? `Policy ${result.policyId} approved a ${result.amount} ${result.currency} payment proposal pending human approval.`
       : `Policy ${result.policyId} approved a ${result.amount} ${result.currency} policy-bound payment for automatic settlement.`;
   }
+  if (result.decision === "not_applicable") {
+    return `Policy ${result.policyId} did not apply because ${result.reasonCodes.join(", ")}.`;
+  }
 
   return `Policy ${result.policyId} blocked payment because ${result.reasonCodes.join(", ")}.`;
 }
@@ -69,21 +72,15 @@ export function evaluateProviderDocumentationEvent(
     submitter: evidence.submitter,
     requestObject: {
       caseId: evidence.caseId,
+      planId: evidence.planId,
+      providerId: evidence.providerId,
       requestType: evidence.requestType,
       serviceCode: evidence.serviceCode,
       codingSystem: evidence.codingSystem,
       billingCode: evidence.billingCode,
-      crdCoverageChecked: evidence.crdCoverageChecked,
-      crdCoveredBenefit: evidence.crdCoveredBenefit,
-      dtrTemplateCompleted: evidence.dtrTemplateCompleted,
-      attachmentChecklistComplete: evidence.attachmentChecklistComplete,
-      fhirFieldsPresent: evidence.fhirFieldsPresent,
-      pasSubmitted: evidence.pasSubmitted,
-      submittedBeforeInitialDecision: evidence.submittedBeforeInitialDecision,
-      paResultUsedForPositivePayment: evidence.paResultUsedForPositivePayment,
-      approvalOutcomeUsed: evidence.approvalOutcomeUsed,
-      referralVolumeMetricUsed: evidence.referralVolumeMetricUsed,
-      containsPhi: evidence.containsPhi
+      coveredBenefit: evidence.coveredBenefit,
+      dtrRequested: evidence.dtrRequested,
+      dtrTemplateCompleted: evidence.dtrTemplateCompleted
     }
   };
 
@@ -104,7 +101,7 @@ export function evaluateProviderDocumentationEvent(
 const demoRequests: Record<string, EvaluationRequest> = {
   delegate_um_sla_bonus: {
     evaluationType: "delegate_um_sla_bonus",
-    submitter: { type: "delegate_vendor", id: "northstar-um" },
+    submitter: { id: "northstar-um" },
     requestObject: {
       caseId: "PA-260524-2102-DELEGATE",
       completedWithinSla: true,
@@ -116,29 +113,23 @@ const demoRequests: Record<string, EvaluationRequest> = {
   },
   provider_documentation_completeness: {
     evaluationType: "provider_documentation_completeness",
-    submitter: { type: "provider_admin_team", id: "lakeside-provider-admin" },
+    submitter: { id: "lakeside-provider-admin" },
     requestObject: {
       caseId: "PA-260524-2102-AAAA1111",
+      planId: "acme-health-ppo",
+      providerId: "lakeside-provider-admin",
       requestType: "outpatient_service",
       serviceCode: "knee_mri",
       codingSystem: "CPT",
       billingCode: "73721",
-      crdCoverageChecked: true,
-      crdCoveredBenefit: true,
-      dtrTemplateCompleted: true,
-      attachmentChecklistComplete: true,
-      fhirFieldsPresent: true,
-      pasSubmitted: true,
-      submittedBeforeInitialDecision: true,
-      paResultUsedForPositivePayment: false,
-      approvalOutcomeUsed: false,
-      referralVolumeMetricUsed: false,
-      containsPhi: false
+      coveredBenefit: true,
+      dtrRequested: true,
+      dtrTemplateCompleted: true
     }
   },
   appeals_packet_quality: {
     evaluationType: "appeals_packet_quality",
-    submitter: { type: "appeals_delegate", id: "summit-appeals-ops" },
+    submitter: { id: "summit-appeals-ops" },
     requestObject: {
       appealId: "synthetic-appeal-8831",
       packetSubmittedWithinSla: true,
@@ -154,7 +145,7 @@ const demoRequests: Record<string, EvaluationRequest> = {
   },
   provider_directory_quality: {
     evaluationType: "provider_directory_quality",
-    submitter: { type: "roster_vendor", id: "clearpath-rosters" },
+    submitter: { id: "clearpath-rosters" },
     requestObject: {
       rosterBatchId: "synthetic-roster-2026-06",
       submittedBeforeDeadline: true,

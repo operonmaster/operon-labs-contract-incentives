@@ -83,6 +83,8 @@ The infra deployment should set these env vars on the Next.js Cloud Run service:
 PAS_STORE_BACKEND=firestore
 UM_REFERENCE_STORE_BACKEND=firestore
 POLICY_STORE_BACKEND=firestore
+PAYMENT_POLICY_STORE_BACKEND=firestore
+PAYMENT_POLICY_EVIDENCE_STORE_BACKEND=firestore
 PAYMENT_INTENT_STORE_BACKEND=firestore
 GCP_PROJECT_ID=operon-labs-nonprod
 FIRESTORE_DATABASE_ID=(default)
@@ -104,7 +106,7 @@ The app will add a server-side store abstraction with two implementations:
 - `firestore`: default local and deployed persistence/reference data
 - `memory`: explicit local/test fallback
 
-The app will choose transactional persistence using `PAS_STORE_BACKEND`, patient/CRD/DTR reference storage using `UM_REFERENCE_STORE_BACKEND`, policy storage using `POLICY_STORE_BACKEND`, and Hedera payment-intent reservation using `PAYMENT_INTENT_STORE_BACKEND`.
+The app will choose transactional persistence using `PAS_STORE_BACKEND`, patient/CRD/DTR reference storage using `UM_REFERENCE_STORE_BACKEND`, business policy storage using `POLICY_STORE_BACKEND`, payment policy storage using `PAYMENT_POLICY_STORE_BACKEND`, payment-policy evidence storage using `PAYMENT_POLICY_EVIDENCE_STORE_BACKEND`, and Hedera payment-intent reservation using `PAYMENT_INTENT_STORE_BACKEND`.
 
 Expected app behavior:
 
@@ -115,6 +117,10 @@ Expected app behavior:
 - If `UM_REFERENCE_STORE_BACKEND=memory`, use seeded in-process patient, CRD, and DTR reference data for isolated tests or offline demos.
 - If `POLICY_STORE_BACKEND` is missing, use Firestore in `operon-labs-nonprod`.
 - If `POLICY_STORE_BACKEND=memory`, use seeded in-process policies for isolated tests only.
+- If `PAYMENT_POLICY_STORE_BACKEND` is missing, use Firestore in `operon-labs-nonprod`.
+- If `PAYMENT_POLICY_STORE_BACKEND=memory`, use seeded in-process payment policies for isolated tests only.
+- If `PAYMENT_POLICY_EVIDENCE_STORE_BACKEND` is missing, use Firestore in `operon-labs-nonprod`.
+- If `PAYMENT_POLICY_EVIDENCE_STORE_BACKEND=memory`, skip durable payment-policy evidence writes for isolated tests only.
 - If `PAYMENT_INTENT_STORE_BACKEND` is missing, use Firestore in `operon-labs-nonprod`.
 - If `PAYMENT_INTENT_STORE_BACKEND=memory`, skip durable payment-intent reservation for isolated tests only.
 - Use `FIRESTORE_DATABASE_ID` when provided, otherwise default to `(default)`.
@@ -132,37 +138,56 @@ Reference-data collections:
 
 Transactional collections:
 
-### `incentivePolicies/{evaluationType}`
+### `incentivePolicies/{policyId}`
 
-Stores the active policy object used by runtime evaluation and payment controls. The document id is the `evaluationType`, for example `provider_documentation_completeness`.
+Stores pair/request-type-scoped business incentive policies used by runtime evaluation and payment controls. A plan/provider pair can have more than one active policy, usually split by request type, service-code block, or payout. The document id is an opaque policy id, not the `evaluationType`; runtime lookup filters by `evaluationType`, `contractPair.planId`, `contractPair.providerId`, optional `requestType`, `status`, and `effectivePeriod`. Store plan and provider display names alongside ids to keep policy views self-contained.
+
+The demo seed set includes four Provider Documentation Completeness policies:
+
+- Acme Health PPO + Lakeside Provider Admin + outpatient service
+- Acme Health PPO + Lakeside Provider Admin + pharmacy benefit
+- Summit Health HMO + Lakeside Provider Admin + outpatient service
+- Summit Health HMO + Lakeside Provider Admin + pharmacy benefit
+
+Do not store a free-text policy display name. UI labels are generated from the plan name, provider name, and request-type scope.
 
 Shape:
 
 ```json
 {
-  "evaluationType": "provider_documentation_completeness",
-  "policyId": "provider-documentation-completeness-v1",
+  "policyId": "plcy_8K2M4Q6R9T1V3X5Z7B0C",
+  "version": "v1",
   "status": "active",
-  "policy": {
-    "id": "provider-documentation-completeness-v1",
-    "evaluationType": "provider_documentation_completeness",
-    "submitterRules": {
-      "allowedSubmitterTypes": ["provider_admin_team"],
-      "allowedSubmitters": ["lakeside-provider-admin"],
-      "walletMap": {
-        "lakeside-provider-admin": "0.0.9049549"
-      }
-    },
-    "requiredEvidence": ["caseId", "requestType"],
-    "approvalRules": [],
-    "paymentFormula": {
-      "baseAmount": 5,
-      "maxPerRequest": 5,
-      "monthlyCap": 500,
-      "token": {
-        "symbol": "HBAR"
-      }
-    },
+  "evaluationType": "provider_documentation_completeness",
+  "contractPair": {
+    "planId": "acme-health-ppo",
+    "planName": "Acme Health PPO",
+    "providerId": "lakeside-provider-admin",
+    "providerName": "Lakeside Provider Admin"
+  },
+  "effectivePeriod": {
+    "startsOn": "2026-05-01",
+    "endsOn": null
+  },
+  "incentiveScope": {
+    "eligibleRequestTypes": ["outpatient_service"],
+    "includedServiceCodes": {
+      "cpt": ["73721"],
+      "ndc": []
+    }
+  },
+  "eligibilityCriteria": {
+    "appliesOnlyToCoveredBenefits": true,
+    "requiresDtrCompletionWhenRequested": true
+  },
+  "payout": {
+    "token": "HBAR",
+    "amountPerEligibleRequest": 5,
+    "monthlyCap": 500
+  },
+  "settlement": {
+    "mode": "auto",
+    "recipientWalletId": "0.0.9049549",
     "requiresHumanApproval": false
   },
   "updatedAt": "2026-05-24T00:00:00.000Z",
@@ -170,7 +195,79 @@ Shape:
 }
 ```
 
-Runtime evaluation reads the current Firestore document on each evaluation. Do not use YAML policy files as a runtime source of truth.
+Runtime evaluation reads current Firestore policy documents during lookup. Do not use YAML policy files as a runtime source of truth. CRD coverage rules and DTR questionnaire rules stay in their own UM reference collections; they do not belong inside the business incentive policy.
+
+### `paymentPolicies/{planId}`
+
+Stores flat plan-level Hedera Agent Kit settlement controls. These documents do not re-run CRD, DTR, or business incentive logic. They select centrally maintained Agent Kit control blocks for a participating plan and provide the token and amount limits used immediately before transfer execution.
+
+The demo seed set includes two policies:
+
+- Acme Health PPO
+- Summit Health HMO
+
+Shape:
+
+```json
+{
+  "planId": "acme-health-ppo",
+  "planName": "Acme Health PPO",
+  "status": "active",
+  "version": "v1",
+  "businessEvaluationAttestation": true,
+  "duplicatePaymentPrevention": true,
+  "maxPaymentPerRequest": true,
+  "paymentToken": "HBAR",
+  "maxPaymentAmount": 5,
+  "paymentEnvelopeIntegrity": true,
+  "updatedAt": "2026-05-24T00:00:00.000Z",
+  "updatedBy": "operon-labs-contract-incentives"
+}
+```
+
+The business evaluation attestation control fetches `incentiveEvaluations/{caseId}` and `incentivePolicies/{policyId}` once during payment execution to confirm that the approved evaluation was recorded and that the referenced business policy remains active. It does not fetch PAS evidence or re-evaluate healthcare business criteria.
+
+### `paymentPolicyEvidences/{incentiveEvaluationId}`
+
+Stores the runtime output of the Hedera Agent Kit payment policy checks. This is the audit bridge between the internal business-policy evaluation and the Hedera settlement attempt. The document id matches the incentive evaluation id so judges and operators can cross-reference the local audit trail to the Hedera transaction memo.
+
+Shape:
+
+```json
+{
+  "incentiveEvaluationId": "PA-260524-2102-AAAA1111",
+  "caseId": "PA-260524-2102-AAAA1111",
+  "planId": "acme-health-ppo",
+  "paymentPolicyId": "acme-health-ppo",
+  "businessPolicyId": "plcy_8K2M4Q6R9T1V3X5Z7B0C",
+  "runtime": "hedera-agent-kit-policy",
+  "outcome": "paid",
+  "failureCode": null,
+  "requestedPayment": {
+    "amount": 5,
+    "token": "HBAR",
+    "recipientWalletId": "0.0.9049549"
+  },
+  "controls": [
+    {
+      "id": "businessEvaluationAttestation",
+      "label": "Business evaluation attestation",
+      "status": "passed"
+    },
+    {
+      "id": "maxPaymentPerRequest",
+      "label": "Max payment per request",
+      "status": "passed",
+      "expected": "<= 5 HBAR",
+      "actual": "5 HBAR"
+    }
+  ],
+  "paymentIntentId": "pi_9998988d92a70ee853bdc929848893fc",
+  "transactionId": "0.0.6870566@1779686274.765050870",
+  "createdAt": "2026-05-24T00:00:00.000Z",
+  "updatedAt": "2026-05-24T00:00:00.000Z"
+}
+```
 
 ### `pasClaims/{caseId}`
 
@@ -199,12 +296,15 @@ Shape:
   },
   "evidence": {
     "caseId": "PA-260524-2102-AAAA1111",
+    "planId": "acme-health-ppo",
+    "providerId": "lakeside-provider-admin",
     "requestType": "outpatient_service",
     "serviceCode": "knee_mri",
     "codingSystem": "CPT",
     "billingCode": "73721",
     "crdCoverageChecked": true,
     "crdCoveredBenefit": true,
+    "dtrRequested": true,
     "dtrTemplateCompleted": true,
     "attachmentChecklistComplete": true,
     "fhirFieldsPresent": true,
@@ -280,7 +380,7 @@ Persisting `incentiveEvaluations` is recommended once Firestore is introduced, b
 
 ### `paymentIntents/{paymentIntentId}`
 
-Stores the durable Hedera Agent Kit settlement intent used to prevent duplicate payments at transfer execution time. The document id is deterministic from `caseId + policyId + triggerEvent + token`, so retries for the same PA/policy/event/token reserve the same id.
+Stores the durable Hedera Agent Kit settlement intent used to prevent duplicate payments at transfer execution time. The document id is deterministic from `planId + incentiveEvaluationId + policyId + token`, so retries for the same plan/evaluation/policy/token reserve the same id.
 
 Shape:
 
@@ -289,6 +389,8 @@ Shape:
   "id": "pi_9998988d92a70ee853bdc929848893fc",
   "auditId": "audit_abc123",
   "caseId": "PA-260524-2102-AAAA1111",
+  "incentiveEvaluationId": "PA-260524-2102-AAAA1111",
+  "planId": "acme-health-ppo",
   "policyId": "provider-documentation-completeness-v1",
   "policyVersion": "v1",
   "triggerEvent": "PAS_SUBMITTED",
@@ -296,7 +398,7 @@ Shape:
   "amount": 5,
   "sourceAccountId": "0.0.6870566",
   "recipientAccountId": "0.0.9049549",
-  "transactionMemo": "olabs|case:PA-260524-2102-AAAA1111|policy:provider-documentation-completeness-v1|event:PAS_SUBMITTED",
+  "transactionMemo": "PA-260524-2102-AAAA1111",
   "status": "submitted",
   "transactionId": "0.0.6870566@1779686274.765050870",
   "createdAt": "2026-05-24T00:00:00.000Z",
@@ -304,7 +406,7 @@ Shape:
 }
 ```
 
-The Agent Kit hook blocks execution when this intent already exists, when the recipient wallet is not trusted, when the transfer envelope is changed, or when the transfer amount exceeds the configured request maximum.
+The Agent Kit hook blocks execution when this intent already exists, when the recorded business evaluation cannot be attested, when the transfer envelope is changed, or when the transfer amount exceeds the plan policy maximum.
 
 ## FHIR/PAS Expectations
 
@@ -361,6 +463,8 @@ Runtime:
    - `PAS_STORE_BACKEND=firestore`
    - `UM_REFERENCE_STORE_BACKEND=firestore`
    - `POLICY_STORE_BACKEND=firestore`
+   - `PAYMENT_POLICY_STORE_BACKEND=firestore`
+   - `PAYMENT_POLICY_EVIDENCE_STORE_BACKEND=firestore`
    - `PAYMENT_INTENT_STORE_BACKEND=firestore`
    - `GCP_PROJECT_ID=operon-labs-nonprod`
    - `FIRESTORE_DATABASE_ID=(default)`
@@ -403,6 +507,8 @@ env = {
   PAS_STORE_BACKEND            = "firestore"
   UM_REFERENCE_STORE_BACKEND   = "firestore"
   POLICY_STORE_BACKEND         = "firestore"
+  PAYMENT_POLICY_STORE_BACKEND          = "firestore"
+  PAYMENT_POLICY_EVIDENCE_STORE_BACKEND = "firestore"
   PAYMENT_INTENT_STORE_BACKEND = "firestore"
   GCP_PROJECT_ID               = var.project_id
   FIRESTORE_DATABASE_ID        = "(default)"
@@ -429,6 +535,8 @@ Firestore local/dev defaults can be made explicit with:
 PAS_STORE_BACKEND=firestore
 UM_REFERENCE_STORE_BACKEND=firestore
 POLICY_STORE_BACKEND=firestore
+PAYMENT_POLICY_STORE_BACKEND=firestore
+PAYMENT_POLICY_EVIDENCE_STORE_BACKEND=firestore
 PAYMENT_INTENT_STORE_BACKEND=firestore
 GCP_PROJECT_ID=operon-labs-nonprod
 FIRESTORE_DATABASE_ID=(default)

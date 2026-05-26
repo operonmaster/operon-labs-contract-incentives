@@ -118,9 +118,20 @@ describe("provider documentation UM Platform", () => {
   it("allows knee MRI submission when assessment is skipped and exposes incomplete evidence", () => {
     const platform = createInMemoryUmPlatform();
 
-    const submitted = platform.submitPriorAuth({ requestType: "outpatient_service", serviceCode: "knee_mri" });
+    const submitted = platform.submitPriorAuth({
+      patientId: "patient-andre-williams",
+      patientDisplay: "Andre Williams",
+      planId: "summit-health-hmo",
+      planDisplay: "Summit Health HMO",
+      requestType: "outpatient_service",
+      serviceCode: "knee_mri"
+    });
 
     expect(submitted).toMatchObject({
+      patientId: "patient-andre-williams",
+      patientDisplay: "Andre Williams",
+      planId: "summit-health-hmo",
+      planDisplay: "Summit Health HMO",
       requestType: "outpatient_service",
       serviceCode: "knee_mri",
       paResult: "submitted_pending",

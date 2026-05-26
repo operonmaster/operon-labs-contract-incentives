@@ -1,6 +1,7 @@
 "use client";
 
 import type { IncentiveWorklistRow } from "../../lib/provider-documentation-workflow";
+import { LabsBadge } from "../labs-ui";
 
 interface PlanAuditDetailsModalProps {
   row: IncentiveWorklistRow;
@@ -50,12 +51,16 @@ export function PlanAuditDetailsModal({ row, onClose }: PlanAuditDetailsModalPro
             <dd>{formatPaResult(row.paResult)}</dd>
           </div>
           <div>
-            <dt>Policy ID</dt>
+            <dt>Business policy ID</dt>
             <dd className="mono-cell">{row.policyId}</dd>
           </div>
           <div>
-            <dt>Policy outcome</dt>
-            <dd>{formatStatus(row.incentiveStatus)}</dd>
+            <dt>Business policy</dt>
+            <dd>
+              <LabsBadge variant={businessPolicyBadgeVariant(row.incentiveStatus)}>
+                {formatStatus(row.incentiveStatus)}
+              </LabsBadge>
+            </dd>
           </div>
           <div>
             <dt>Payment status</dt>
@@ -104,7 +109,7 @@ export function PlanAuditDetailsModal({ row, onClose }: PlanAuditDetailsModalPro
                   <th>Criterion</th>
                   <th>Expected</th>
                   <th>Evidence value</th>
-                  <th>Result</th>
+                  <th className="badge-cell">Result</th>
                 </tr>
               </thead>
               <tbody>
@@ -112,14 +117,14 @@ export function PlanAuditDetailsModal({ row, onClose }: PlanAuditDetailsModalPro
                   <tr key={criterion.id}>
                     <td>
                       <strong>{criterion.label}</strong>
-                      <span>{criterion.reasonCode}</span>
+                      <span className="criterion-reason-code">{criterion.reasonCode}</span>
                     </td>
                     <td>{criterion.expected}</td>
                     <td>{criterion.actual}</td>
-                    <td>
-                      <span className={`status ${criterion.passed ? "approved" : "blocked"}`}>
+                    <td className="badge-cell">
+                      <LabsBadge variant={criterion.passed ? "success" : "warning"}>
                         {criterion.passed ? "Passed" : "Failed"}
-                      </span>
+                      </LabsBadge>
                     </td>
                   </tr>
                 ))}
@@ -163,11 +168,11 @@ export function formatTransaction(transactionId: string | null) {
 export function formatStatus(status: IncentiveWorklistRow["incentiveStatus"]) {
   switch (status) {
     case "not_eligible":
-      return "Blocked";
+      return "Rejected";
     case "paid":
-      return "Paid";
+      return "Approved";
     case "payment_failed":
-      return "Paid";
+      return "Rejected";
   }
 }
 
@@ -186,14 +191,14 @@ export function formatRequestType(requestType: IncentiveWorklistRow["requestType
   }
 }
 
-export function statusClass(status: IncentiveWorklistRow["incentiveStatus"]) {
+export function businessPolicyBadgeVariant(status: IncentiveWorklistRow["incentiveStatus"]): "success" | "warning" {
   switch (status) {
     case "not_eligible":
-      return "blocked";
+      return "warning";
     case "paid":
-      return "approved";
+      return "success";
     case "payment_failed":
-      return "approved";
+      return "warning";
   }
 }
 

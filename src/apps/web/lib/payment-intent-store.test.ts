@@ -36,7 +36,7 @@ describe("payment intent store", () => {
       },
       {
         sourceAccountId: "0.0.6870566",
-        transactionMemo: "olabs|case:PA-260525-1015-ABCD1234|policy:provider-documentation-completeness-v1|event:PAS_SUBMITTED"
+        transactionMemo: "PA-260525-1015-ABCD1234"
       }
     );
 
@@ -46,6 +46,12 @@ describe("payment intent store", () => {
       reasonCode: "DUPLICATE_PAYMENT_BLOCKED"
     });
     await store.markIntentSubmitted(intent.id, "0.0.6870566@1779686274.765050870");
+    await expect(store.getIntent(intent.id)).resolves.toMatchObject({
+      id: intent.id,
+      status: "submitted",
+      transactionId: "0.0.6870566@1779686274.765050870"
+    });
+    await store.markIntentFailed(intent.id, "DUPLICATE_PAYMENT_BLOCKED");
     await expect(store.getIntent(intent.id)).resolves.toMatchObject({
       id: intent.id,
       status: "submitted",

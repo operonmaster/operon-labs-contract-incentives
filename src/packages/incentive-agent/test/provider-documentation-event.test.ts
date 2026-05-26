@@ -5,7 +5,7 @@ import type { ProviderDocumentationEvidence } from "@operon-labs/um-platform";
 import { evaluateDemoScenario, evaluateProviderDocumentationEvent } from "../src/index";
 
 describe("evaluateProviderDocumentationEvent", () => {
-  it("evaluates a demo scenario using the caller supplied Firestore policy", () => {
+  it("evaluates a demo scenario using the caller supplied pair-specific Firestore policy", () => {
     const policy = createProviderDocumentationPolicy(2);
     const evaluation = evaluateDemoScenario("provider_documentation_completeness", policy);
 
@@ -23,6 +23,7 @@ describe("evaluateProviderDocumentationEvent", () => {
   it("uses the caller supplied Firestore policy for provider documentation events", () => {
     const platform = createInMemoryUmPlatform();
     const priorAuth = platform.submitPriorAuth({
+      planId: "acme-health-ppo",
       requestType: "outpatient_service",
       serviceCode: "knee_mri",
       dtr: {
@@ -49,38 +50,10 @@ describe("evaluateProviderDocumentationEvent", () => {
     });
   });
 
-  it("defines every supplied demo policy as a 5 HBAR incentive", () => {
-    for (const evaluationType of [
-      "delegate_um_sla_bonus",
-      "provider_documentation_completeness",
-      "appeals_packet_quality",
-      "provider_directory_quality"
-    ]) {
-      const policy = createGenericPolicy(evaluationType);
-      const evaluation = evaluateDemoScenario(evaluationType, policy);
-
-      expect(evaluation.policy.paymentFormula).toMatchObject({
-        baseAmount: 5,
-        maxPerRequest: 5,
-        monthlyCap: 500,
-        token: {
-          symbol: "HBAR"
-        }
-      });
-      expect(evaluation.result).toMatchObject({
-        decision: "approved",
-        amount: 5,
-        currency: "HBAR",
-        settlementToken: {
-          symbol: "HBAR"
-        }
-      });
-    }
-  });
-
-  it("pulls evidence by caseId and approves complete knee MRI documentation", () => {
+  it("pulls policy-safe evidence by caseId and approves complete knee MRI DTR documentation", () => {
     const platform = createInMemoryUmPlatform();
     const priorAuth = platform.submitPriorAuth({
+      planId: "acme-health-ppo",
       requestType: "outpatient_service",
       serviceCode: "knee_mri",
       dtr: {
@@ -100,11 +73,18 @@ describe("evaluateProviderDocumentationEvent", () => {
     expect(getEvidence).toHaveBeenCalledWith(priorAuth.caseId);
     expect(evaluation.request.requestObject).toMatchObject({
       caseId: priorAuth.caseId,
+      planId: "acme-health-ppo",
+      providerId: "lakeside-provider-admin",
       requestType: "outpatient_service",
-      crdCoveredBenefit: true,
-      dtrTemplateCompleted: true,
-      pasSubmitted: true
+      codingSystem: "CPT",
+      billingCode: "73721",
+      coveredBenefit: true,
+      dtrRequested: true,
+      dtrTemplateCompleted: true
     });
+    expect(evaluation.request.requestObject).not.toHaveProperty("pasSubmitted");
+    expect(evaluation.request.requestObject).not.toHaveProperty("attachmentChecklistComplete");
+    expect(evaluation.request.requestObject).not.toHaveProperty("fhirFieldsPresent");
     expect(evaluation.result).toMatchObject({
       decision: "approved",
       amount: 5,
@@ -115,14 +95,12 @@ describe("evaluateProviderDocumentationEvent", () => {
       walletId: "0.0.9049549",
       reasonCodes: []
     });
-    expect(evaluation.policy.paymentFormula.token).toMatchObject({
-      symbol: "HBAR"
-    });
   });
 
   it("blocks full-body wellness MRI with zero incentive", () => {
     const platform = createInMemoryUmPlatform();
     const priorAuth = platform.submitPriorAuth({
+      planId: "acme-health-ppo",
       requestType: "outpatient_service",
       serviceCode: "full_body_wellness_mri",
       acknowledgedNotCovered: true
@@ -130,25 +108,26 @@ describe("evaluateProviderDocumentationEvent", () => {
 
     const evaluation = evaluateProviderDocumentationEvent(
       { eventType: "PAS_SUBMITTED", caseId: priorAuth.caseId },
-      { getEvidenceByCaseId: platform.getEvidence, policy: createProviderDocumentationPolicy(5), monthToDateAmount: 0 }
+      {
+        getEvidenceByCaseId: platform.getEvidence,
+        policy: createProviderDocumentationPolicy(5),
+        monthToDateAmount: 0
+      }
     );
 
     expect(evaluation.result).toMatchObject({
       decision: "blocked",
       amount: 0,
       walletId: null,
-      reasonCodes: expect.arrayContaining([
-        "SERVICE_NOT_COVERED",
-        "DTR_TEMPLATE_INCOMPLETE",
-        "ATTACHMENT_CHECKLIST_INCOMPLETE",
-        "FHIR_FIELDS_MISSING"
-      ])
+      reasonCodes: expect.arrayContaining(["SERVICE_CODE_NOT_INCLUDED", "BENEFIT_NOT_COVERED"])
     });
+    expect(evaluation.result.reasonCodes).not.toContain("DTR_TEMPLATE_INCOMPLETE");
   });
 
-  it("approves complete pharmacy benefit documentation when the request type is eligible", () => {
+  it("approves complete pharmacy benefit DTR documentation when the NDC is in scope", () => {
     const platform = createInMemoryUmPlatform();
     const priorAuth = platform.submitPriorAuth({
+      planId: "acme-health-ppo",
       requestType: "pharmacy_benefit",
       serviceCode: "humira_adalimumab",
       dtr: {
@@ -161,14 +140,18 @@ describe("evaluateProviderDocumentationEvent", () => {
 
     const evaluation = evaluateProviderDocumentationEvent(
       { eventType: "PAS_SUBMITTED", caseId: priorAuth.caseId },
-      { getEvidenceByCaseId: platform.getEvidence, policy: createProviderDocumentationPolicy(5), monthToDateAmount: 0 }
+      {
+        getEvidenceByCaseId: platform.getEvidence,
+        policy: createProviderDocumentationPolicy(5, "pharmacy_benefit"),
+        monthToDateAmount: 0
+      }
     );
 
     expect(evaluation.request.requestObject).toMatchObject({
       caseId: priorAuth.caseId,
       requestType: "pharmacy_benefit",
-      serviceCode: "humira_adalimumab",
-      crdCoveredBenefit: true,
+      billingCode: "0074-0554-02",
+      dtrRequested: true,
       dtrTemplateCompleted: true
     });
     expect(evaluation.result).toMatchObject({
@@ -204,27 +187,19 @@ describe("evaluateProviderDocumentationEvent", () => {
     expect(getEvidence).toHaveBeenCalledWith(missingCaseId);
   });
 
-  it("blocks payment when a prohibited approval outcome metric is present", () => {
+  it("treats covered services without requested DTR as not applicable to this policy", () => {
     const evidence = {
       caseId: "PA-260524-2102-AAAA1111",
-      submitter: { type: "provider_admin_team", id: "lakeside-provider-admin" },
+      planId: "acme-health-ppo",
+      submitter: { id: "lakeside-provider-admin" },
+      providerId: "lakeside-provider-admin",
       requestType: "outpatient_service",
       serviceCode: "knee_mri",
       codingSystem: "CPT",
       billingCode: "73721",
-      crdCoverageChecked: true,
-      crdCoveredBenefit: true,
-      dtrTemplateCompleted: true,
-      attachmentChecklistComplete: true,
-      fhirFieldsPresent: true,
-      pasSubmitted: true,
-      submittedBeforeInitialDecision: true,
-      paResult: "submitted_pending",
-      denialReason: null,
-      paResultUsedForPositivePayment: false,
-      approvalOutcomeUsed: true,
-      referralVolumeMetricUsed: false,
-      containsPhi: false
+      coveredBenefit: true,
+      dtrRequested: false,
+      dtrTemplateCompleted: false
     } as unknown as ProviderDocumentationEvidence;
 
     const evaluation = evaluateProviderDocumentationEvent(
@@ -233,95 +208,55 @@ describe("evaluateProviderDocumentationEvent", () => {
     );
 
     expect(evaluation.result).toMatchObject({
-      decision: "blocked",
+      decision: "not_applicable",
       amount: 0,
       walletId: null,
-      reasonCodes: expect.arrayContaining(["PROHIBITED_OUTCOME_METRIC"])
+      reasonCodes: ["DTR_NOT_REQUESTED"]
     });
   });
 });
 
-function createGenericPolicy(evaluationType: string): IncentivePolicy {
-  return {
-    id: `${evaluationType.replaceAll("_", "-")}-v1`,
-    evaluationType,
-    submitterRules: {
-      allowedSubmitterTypes: ["provider_admin_team", "delegate_vendor", "appeals_delegate", "roster_vendor"],
-      allowedSubmitters: ["lakeside-provider-admin", "northstar-um", "summit-appeals-ops", "clearpath-rosters"],
-      walletMap: {
-        "lakeside-provider-admin": "0.0.9049549",
-        "northstar-um": "0.0.12345",
-        "summit-appeals-ops": "0.0.54321",
-        "clearpath-rosters": "0.0.34567"
-      }
-    },
-    requiredEvidence: [],
-    approvalRules: [],
-    paymentFormula: {
-      baseAmount: 5,
-      maxPerRequest: 5,
-      monthlyCap: 500,
-      token: {
-        symbol: "HBAR"
-      }
-    },
-    requiresHumanApproval: false
-  };
-}
+function createProviderDocumentationPolicy(
+  amount: number,
+  requestType: "outpatient_service" | "pharmacy_benefit" = "outpatient_service"
+): IncentivePolicy {
+  const pharmacy = requestType === "pharmacy_benefit";
 
-function createProviderDocumentationPolicy(amount: number): IncentivePolicy {
   return {
-    id: "provider-documentation-completeness-v1",
+    policyId: pharmacy ? "plcy_2N7P5R8T0V4X6Z1B3D9F" : "plcy_8K2M4Q6R9T1V3X5Z7B0C",
+    version: "v1",
+    status: "active",
     evaluationType: "provider_documentation_completeness",
-    submitterRules: {
-      allowedSubmitterTypes: ["provider_admin_team"],
-      allowedSubmitters: ["lakeside-provider-admin"],
-      walletMap: {
-        "lakeside-provider-admin": "0.0.9049549"
+    contractPair: {
+      planId: "acme-health-ppo",
+      planName: "Acme Health PPO",
+      providerId: "lakeside-provider-admin",
+      providerName: "Lakeside Provider Admin"
+    },
+    effectivePeriod: {
+      startsOn: "2026-05-01",
+      endsOn: null
+    },
+    incentiveScope: {
+      eligibleRequestTypes: [requestType],
+      includedServiceCodes: {
+        cpt: pharmacy ? [] : ["73721"],
+        ndc: pharmacy ? ["0169-4525-14", "0074-0554-02"] : []
       }
     },
-    requiredEvidence: [
-      "caseId",
-      "requestType",
-      "crdCoverageChecked",
-      "crdCoveredBenefit",
-      "dtrTemplateCompleted",
-      "attachmentChecklistComplete",
-      "fhirFieldsPresent",
-      "pasSubmitted",
-      "submittedBeforeInitialDecision",
-      "paResultUsedForPositivePayment",
-      "approvalOutcomeUsed",
-      "referralVolumeMetricUsed",
-      "containsPhi"
-    ],
-    approvalRules: [
-      {
-        field: "requestType",
-        operator: "in",
-        value: ["outpatient_service", "pharmacy_benefit"],
-        reasonCode: "REQUEST_TYPE_NOT_ELIGIBLE"
-      },
-      { field: "crdCoverageChecked", operator: "equals", value: true, reasonCode: "CRD_COVERAGE_NOT_CHECKED" },
-      { field: "crdCoveredBenefit", operator: "equals", value: true, reasonCode: "SERVICE_NOT_COVERED" },
-      { field: "dtrTemplateCompleted", operator: "equals", value: true, reasonCode: "DTR_TEMPLATE_INCOMPLETE" },
-      { field: "attachmentChecklistComplete", operator: "equals", value: true, reasonCode: "ATTACHMENT_CHECKLIST_INCOMPLETE" },
-      { field: "fhirFieldsPresent", operator: "equals", value: true, reasonCode: "FHIR_FIELDS_MISSING" },
-      { field: "pasSubmitted", operator: "equals", value: true, reasonCode: "PAS_NOT_SUBMITTED" },
-      { field: "submittedBeforeInitialDecision", operator: "equals", value: true, reasonCode: "SUBMITTED_AFTER_INITIAL_DECISION" },
-      { field: "paResultUsedForPositivePayment", operator: "equals", value: false, reasonCode: "PROHIBITED_PA_RESULT_METRIC" },
-      { field: "approvalOutcomeUsed", operator: "equals", value: false, reasonCode: "PROHIBITED_OUTCOME_METRIC" },
-      { field: "referralVolumeMetricUsed", operator: "equals", value: false, reasonCode: "PROHIBITED_REFERRAL_VOLUME_METRIC" },
-      { field: "containsPhi", operator: "equals", value: false, reasonCode: "PHI_BLOCKED" }
-    ],
-    paymentFormula: {
-      baseAmount: amount,
-      maxPerRequest: amount,
-      monthlyCap: 500,
-      token: {
-        symbol: "HBAR"
-      }
+    eligibilityCriteria: {
+      appliesOnlyToCoveredBenefits: true,
+      requiresDtrCompletionWhenRequested: true
     },
-    requiresHumanApproval: false
+    payout: {
+      token: "HBAR",
+      amountPerEligibleRequest: amount,
+      monthlyCap: 500
+    },
+    settlement: {
+      mode: "auto",
+      recipientWalletId: "0.0.9049549",
+      requiresHumanApproval: false
+    }
   };
 }

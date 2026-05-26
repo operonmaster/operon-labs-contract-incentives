@@ -130,6 +130,31 @@ describe("UM reference data store", () => {
     );
     expect((await firestore.collection("patients").get()).docs).toHaveLength(6);
   });
+
+  it("does not overwrite existing Firestore reference documents while repairing missing defaults", async () => {
+    const firestore = createFakeFirestore();
+    await firestore.collection("patients").doc("patient-maya-chen").set({
+      patientId: "patient-maya-chen",
+      patientDisplay: "Maya Chen Custom",
+      dateOfBirth: "1987-04-12",
+      plans: [{ planId: "acme-health-ppo", planDisplay: "Acme Health PPO" }],
+      displayOrder: 1
+    });
+    const store = createFirestoreUmReferenceDataStore(
+      {
+        projectId: "operon-labs-nonprod",
+        databaseId: "(default)"
+      },
+      firestore
+    );
+
+    const patients = await store.listPatients();
+
+    expect(patients.find((patient) => patient.patientId === "patient-maya-chen")).toMatchObject({
+      patientDisplay: "Maya Chen Custom"
+    });
+    expect(patients).toHaveLength(6);
+  });
 });
 
 function createFakeFirestore(): FirestoreDatabase & { collectionNames(): string[] } {

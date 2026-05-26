@@ -4,6 +4,7 @@ export interface DemoScenario {
   submitter: string;
   purpose: string;
   evaluationType: string;
+  status: "active" | "dormant";
 }
 
 export const demoScenarios: DemoScenario[] = [
@@ -12,28 +13,32 @@ export const demoScenarios: DemoScenario[] = [
     title: "Provider Documentation Completeness",
     submitter: "Provider administrative team",
     purpose: "Reward complete prior-auth-ready documentation submitted before initial decision.",
-    evaluationType: "provider_documentation_completeness"
+    evaluationType: "provider_documentation_completeness",
+    status: "active"
   },
   {
     slug: "delegate-um",
     title: "Delegate UM SLA Bonus",
     submitter: "Delegated UM vendor",
     purpose: "Reward timely, complete, audit-ready delegated utilization-management work.",
-    evaluationType: "delegate_um_sla_bonus"
+    evaluationType: "delegate_um_sla_bonus",
+    status: "dormant"
   },
   {
     slug: "appeals",
     title: "Appeals Packet Quality",
     submitter: "Appeals operations partner",
     purpose: "Reward complete, timely, well-rationalized appeal packets without outcome incentives.",
-    evaluationType: "appeals_packet_quality"
+    evaluationType: "appeals_packet_quality",
+    status: "dormant"
   },
   {
     slug: "provider-directory",
     title: "Provider Directory Data Quality",
     submitter: "Roster-management vendor",
     purpose: "Reward accurate, validated provider directory updates submitted before deadline.",
-    evaluationType: "provider_directory_quality"
+    evaluationType: "provider_directory_quality",
+    status: "dormant"
   }
 ];
 

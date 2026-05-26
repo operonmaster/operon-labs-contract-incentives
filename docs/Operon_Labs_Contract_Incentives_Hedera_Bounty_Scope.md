@@ -185,57 +185,44 @@ Policies should own:
 - prohibited metrics
 - payment formulas
 - currency
-- per-request caps
+- amount per eligible request
 - monthly caps
 - settlement mode: pre-authorized auto-settlement or human approval
 - audit fields
 
-Example policy:
+Example policy object. The demo stores four objects like this: two plans times two request-type scopes. UI labels are generated from the plan name, provider name, and request type instead of storing a free-text display name.
 
 ```yaml
-id: appeals-packet-quality-v1
-evaluationType: appeals_packet_quality
-currency: USDC
-
-submitterRules:
-  allowedSubmitterTypes:
-    - appeals_delegate
-  allowedSubmitters:
-    - summit-appeals-ops
-  walletMap:
-    summit-appeals-ops: "0.0.54321"
-
-requiredEvidence:
-  - appealId
-  - packetSubmittedAt
-  - slaHours
-  - requiredDocumentsPresent
-  - clinicalRationaleIncluded
-  - policyCitationIncluded
-  - evidenceIndexComplete
-  - qualityAuditPassed
-  - appealOutcomeUsed
-  - costSavingsMetricUsed
-  - containsPhi
-
-approvalRules:
-  - packetSubmittedWithinSla == true
-  - requiredDocumentsPresent == true
-  - clinicalRationaleIncluded == true
-  - policyCitationIncluded == true
-  - evidenceIndexComplete == true
-  - qualityAuditPassed == true
-  - appealOutcomeUsed == false
-  - costSavingsMetricUsed == false
-  - containsPhi == false
-
-paymentFormula:
-  baseAmount: 4.00
-  auditReadyBonus:
-    ifQualityAuditPassed: true
-    add: 2.00
-  maxPerRequest: 6.00
-  monthlyCap: 600.00
+policyId: plcy_8K2M4Q6R9T1V3X5Z7B0C
+version: v1
+status: active
+evaluationType: provider_documentation_completeness
+contractPair:
+  planId: acme-health-ppo
+  planName: Acme Health PPO
+  providerId: lakeside-provider-admin
+  providerName: Lakeside Provider Admin
+effectivePeriod:
+  startsOn: "2026-05-01"
+  endsOn: null
+incentiveScope:
+  eligibleRequestTypes:
+    - outpatient_service
+  includedServiceCodes:
+    cpt:
+      - "73721"
+    ndc: []
+eligibilityCriteria:
+  appliesOnlyToCoveredBenefits: true
+  requiresDtrCompletionWhenRequested: true
+payout:
+  token: HBAR
+  amountPerEligibleRequest: 5
+  monthlyCap: 500
+settlement:
+  mode: auto
+  recipientWalletId: "0.0.9049549"
+  requiresHumanApproval: false
 ```
 
 ## AI Agent Role
@@ -378,7 +365,7 @@ Preferred stack:
 
 - TypeScript / Next.js for the hosted demo.
 - Hedera Agent Kit JavaScript as the core Hedera dependency.
-- Firestore-backed policy definitions in `incentivePolicies/{evaluationType}`.
+- Firestore-backed pair-scoped policy definitions in `incentivePolicies/{policyId}`.
 - Deterministic TypeScript policy evaluator.
 - LLM layer for request classification and decision explanation.
 - Hedera testnet for demo payment execution.

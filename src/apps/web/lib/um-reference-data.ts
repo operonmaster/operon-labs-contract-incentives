@@ -7,7 +7,7 @@ import {
   type RequestType,
   type ServiceCode
 } from "@operon-labs/um-platform";
-import type { FirestoreDatabase } from "./pas-persistence";
+import type { FirestoreDatabase, FirestoreDocumentReference } from "./pas-persistence";
 
 export type UmReferenceStoreBackend = "firestore" | "memory";
 
@@ -201,13 +201,13 @@ class FirestoreUmReferenceDataStore implements UmReferenceDataStore {
     const firestore = await this.getFirestore();
     await Promise.all([
       ...defaultPatients.map((patient) =>
-        firestore.collection(PATIENTS_COLLECTION).doc(patient.patientId).set(copyPatientCoverageContext(patient))
+        setIfMissing(firestore.collection(PATIENTS_COLLECTION).doc(patient.patientId), copyPatientCoverageContext(patient))
       ),
       ...defaultCoverageRequirementRules().map((rule) =>
-        firestore.collection(COVERAGE_REQUIREMENT_RULES_COLLECTION).doc(rule.ruleId).set(copyCoverageRequirementRule(rule))
+        setIfMissing(firestore.collection(COVERAGE_REQUIREMENT_RULES_COLLECTION).doc(rule.ruleId), copyCoverageRequirementRule(rule))
       ),
       ...getDtrQuestionnaires().map((questionnaire) =>
-        firestore.collection(QUESTIONNAIRES_COLLECTION).doc(questionnaire.id).set(copyDtrQuestionnaire(questionnaire))
+        setIfMissing(firestore.collection(QUESTIONNAIRES_COLLECTION).doc(questionnaire.id), copyDtrQuestionnaire(questionnaire))
       )
     ]);
     this.seeded = true;
@@ -292,6 +292,15 @@ class FirestoreUmReferenceDataStore implements UmReferenceDataStore {
 }
 
 export const umReferenceDataStore = createUmReferenceDataStoreFromEnv();
+
+async function setIfMissing(ref: FirestoreDocumentReference, value: unknown): Promise<void> {
+  const existing = await ref.get();
+  if (existing.exists) {
+    return;
+  }
+
+  await ref.set(value);
+}
 
 function defaultCoverageRequirementRules(): StoredCoverageRequirementRule[] {
   return supportedPlans.flatMap((plan) =>

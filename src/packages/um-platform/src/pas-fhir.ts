@@ -89,15 +89,10 @@ interface FhirCodeableConcept {
   text?: string;
 }
 
-const acmeHealthPlan = {
-  id: "acme-health-ppo",
-  display: "Acme Health PPO"
-};
-
 export function buildPasFhirBundle(record: PriorAuthRecord, evidence: ProviderDocumentationEvidence): PasFhirBundle {
   const patientReference = `Patient/${record.patientId}`;
   const providerReference = `Organization/${record.providerGroupId}`;
-  const insurerReference = `Organization/${acmeHealthPlan.id}`;
+  const insurerReference = `Organization/${record.planId}`;
   const coverageReference = `Coverage/coverage-${record.caseId}`;
   const claim: PasFhirClaim = {
     resourceType: "Claim",
@@ -121,7 +116,7 @@ export function buildPasFhirBundle(record: PriorAuthRecord, evidence: ProviderDo
     },
     insurer: {
       reference: insurerReference,
-      display: acmeHealthPlan.display
+      display: record.planDisplay
     },
     insurance: [
       {
@@ -197,11 +192,11 @@ export function buildPasFhirBundle(record: PriorAuthRecord, evidence: ProviderDo
       }
     },
     {
-      fullUrl: `urn:uuid:${acmeHealthPlan.id}`,
+      fullUrl: `urn:uuid:${record.planId}`,
       resource: {
         resourceType: "Organization",
-        id: acmeHealthPlan.id,
-        name: acmeHealthPlan.display,
+        id: record.planId,
+        name: record.planDisplay,
         type: [
           {
             text: "Health plan"
@@ -221,7 +216,7 @@ export function buildPasFhirBundle(record: PriorAuthRecord, evidence: ProviderDo
         payor: [
           {
             reference: insurerReference,
-            display: acmeHealthPlan.display
+            display: record.planDisplay
           }
         ]
       }

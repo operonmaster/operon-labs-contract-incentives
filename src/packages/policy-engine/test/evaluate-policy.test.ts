@@ -2,59 +2,63 @@ import { describe, expect, it } from "vitest";
 import { evaluatePolicy, type EvaluationRequest, type IncentivePolicy } from "../src/index";
 
 const basePolicy: IncentivePolicy = {
-  id: "delegate-um-sla-bonus-v1",
-  evaluationType: "delegate_um_sla_bonus",
-  submitterRules: {
-    allowedSubmitterTypes: ["delegate_vendor"],
-    allowedSubmitters: ["northstar-um"],
-    walletMap: {
-      "northstar-um": "0.0.12345"
+  policyId: "plcy_8K2M4Q6R9T1V3X5Z7B0C",
+  version: "v1",
+  status: "active",
+  evaluationType: "provider_documentation_completeness",
+  contractPair: {
+    planId: "acme-health-ppo",
+    planName: "Acme Health PPO",
+    providerId: "lakeside-provider-admin",
+    providerName: "Lakeside Provider Admin"
+  },
+  effectivePeriod: {
+    startsOn: "2026-05-01",
+    endsOn: null
+  },
+  incentiveScope: {
+    eligibleRequestTypes: ["outpatient_service"],
+    includedServiceCodes: {
+      cpt: ["73721"],
+      ndc: []
     }
   },
-  requiredEvidence: [
-    "caseId",
-    "completedWithinSla",
-    "documentationComplete",
-    "qualityAuditPassed",
-    "denialOutcomeUsed",
-    "containsPhi"
-  ],
-  approvalRules: [
-    { field: "completedWithinSla", operator: "equals", value: true, reasonCode: "SLA_NOT_MET" },
-    { field: "documentationComplete", operator: "equals", value: true, reasonCode: "DOCUMENTATION_INCOMPLETE" },
-    { field: "qualityAuditPassed", operator: "equals", value: true, reasonCode: "QUALITY_AUDIT_FAILED" },
-    { field: "denialOutcomeUsed", operator: "equals", value: false, reasonCode: "PROHIBITED_DENIAL_METRIC" },
-    { field: "containsPhi", operator: "equals", value: false, reasonCode: "PHI_BLOCKED" }
-  ],
-  paymentFormula: {
-    baseAmount: 5,
-    maxPerRequest: 5,
-    monthlyCap: 500,
-    token: {
-      symbol: "HBAR"
-    }
+  eligibilityCriteria: {
+    appliesOnlyToCoveredBenefits: true,
+    requiresDtrCompletionWhenRequested: true
   },
-  requiresHumanApproval: true
+  payout: {
+    token: "HBAR",
+    amountPerEligibleRequest: 5,
+    monthlyCap: 500
+  },
+  settlement: {
+    mode: "auto",
+    recipientWalletId: "0.0.9049549",
+    requiresHumanApproval: false
+  }
 };
 
 const approvedRequest: EvaluationRequest = {
-  evaluationType: "delegate_um_sla_bonus",
+  evaluationType: "provider_documentation_completeness",
   submitter: {
-    type: "delegate_vendor",
-    id: "northstar-um"
+    id: "lakeside-provider-admin"
   },
   requestObject: {
-    caseId: "PA-260524-2102-DELEGATE",
-    completedWithinSla: true,
-    documentationComplete: true,
-    qualityAuditPassed: true,
-    denialOutcomeUsed: false,
-    containsPhi: false
+    caseId: "PA-260524-2102-AAAA1111",
+    planId: "acme-health-ppo",
+    providerId: "lakeside-provider-admin",
+    requestType: "outpatient_service",
+    codingSystem: "CPT",
+    billingCode: "73721",
+    coveredBenefit: true,
+    dtrRequested: true,
+    dtrTemplateCompleted: true
   }
 };
 
 describe("evaluatePolicy", () => {
-  it("approves eligible evidence and computes the capped payment proposal", () => {
+  it("approves a pair-scoped DTR completion incentive and computes the flat payout", () => {
     const result = evaluatePolicy({
       policy: basePolicy,
       request: approvedRequest,
@@ -63,26 +67,23 @@ describe("evaluatePolicy", () => {
 
     expect(result).toMatchObject({
       decision: "approved",
-      policyId: "delegate-um-sla-bonus-v1",
+      policyId: "plcy_8K2M4Q6R9T1V3X5Z7B0C",
       policyVersion: "v1",
       amount: 5,
       currency: "HBAR",
-      walletId: "0.0.12345",
-      requiresHumanApproval: true,
+      walletId: "0.0.9049549",
+      requiresHumanApproval: false,
       reasonCodes: []
     });
   });
 
-  it("uses the policy payment formula token as the settlement currency", () => {
+  it("uses the policy payout token as the settlement currency", () => {
     const result = evaluatePolicy({
       policy: {
         ...basePolicy,
-        paymentFormula: {
-          ...basePolicy.paymentFormula,
-          token: {
-            symbol: "OPRN",
-            hederaTokenId: "0.0.7777"
-          }
+        payout: {
+          ...basePolicy.payout,
+          token: "OPRN"
         }
       },
       request: approvedRequest,
@@ -93,20 +94,45 @@ describe("evaluatePolicy", () => {
       amount: 5,
       currency: "OPRN",
       settlementToken: {
-        symbol: "OPRN",
-        hederaTokenId: "0.0.7777"
+        symbol: "OPRN"
       }
     });
   });
 
-  it("blocks unknown submitters before producing any payment proposal", () => {
+  it("routes manual settlement policies to manual review instead of approval", () => {
+    const result = evaluatePolicy({
+      policy: {
+        ...basePolicy,
+        settlement: {
+          ...basePolicy.settlement,
+          mode: "manual",
+          requiresHumanApproval: true
+        }
+      },
+      request: approvedRequest,
+      monthToDateAmount: 0
+    });
+
+    expect(result).toMatchObject({
+      decision: "manual_review",
+      amount: 0,
+      walletId: null,
+      requiresHumanApproval: true,
+      reasonCodes: ["MANUAL_REVIEW_REQUIRED"]
+    });
+  });
+
+  it("blocks when the submitting provider is not the contract provider", () => {
     const result = evaluatePolicy({
       policy: basePolicy,
       request: {
         ...approvedRequest,
         submitter: {
-          type: "delegate_vendor",
-          id: "unknown-vendor"
+          id: "unknown-provider"
+        },
+        requestObject: {
+          ...approvedRequest.requestObject,
+          providerId: "unknown-provider"
         }
       },
       monthToDateAmount: 0
@@ -116,52 +142,131 @@ describe("evaluatePolicy", () => {
       decision: "blocked",
       amount: 0,
       walletId: null,
-      reasonCodes: ["SUBMITTER_NOT_ALLOWED", "WALLET_NOT_APPROVED"]
+      reasonCodes: ["PROVIDER_NOT_IN_CONTRACT"]
     });
   });
 
-  it("supports membership rules for request type eligibility", () => {
-    const policy: IncentivePolicy = {
-      ...basePolicy,
-      requiredEvidence: [...basePolicy.requiredEvidence, "requestType"],
-      approvalRules: [
-        ...basePolicy.approvalRules,
-        {
-          field: "requestType",
-          operator: "in",
-          value: ["outpatient_service", "pharmacy_benefit"],
-          reasonCode: "REQUEST_TYPE_NOT_ELIGIBLE"
+  it("enforces request type and service code scope with configured inclusion lists", () => {
+    const notIncludedCovered = evaluatePolicy({
+      policy: basePolicy,
+      request: {
+        ...approvedRequest,
+        requestObject: {
+          ...approvedRequest.requestObject,
+          billingCode: "76498",
+          coveredBenefit: false,
+          dtrRequested: false,
+          dtrTemplateCompleted: false
         }
-      ]
+      },
+      monthToDateAmount: 0
+    });
+    const notIncluded = evaluatePolicy({
+      policy: basePolicy,
+      request: {
+        ...approvedRequest,
+        requestObject: {
+          ...approvedRequest.requestObject,
+          billingCode: "99999"
+        }
+      },
+      monthToDateAmount: 0
+    });
+
+    expect(notIncludedCovered).toMatchObject({
+      decision: "blocked",
+      reasonCodes: expect.arrayContaining(["SERVICE_CODE_NOT_INCLUDED", "BENEFIT_NOT_COVERED"])
+    });
+    expect(notIncluded).toMatchObject({
+      decision: "blocked",
+      reasonCodes: expect.arrayContaining(["SERVICE_CODE_NOT_INCLUDED"])
+    });
+  });
+
+  it("supports exclusion-only request type and service code policies", () => {
+    const exclusionPolicy: IncentivePolicy = {
+      ...basePolicy,
+      incentiveScope: {
+        excludedRequestTypes: ["inpatient_admission"],
+        excludedServiceCodes: {
+          cpt: ["76498"],
+          ndc: []
+        }
+      }
     };
 
-    const approved = evaluatePolicy({
-      policy,
+    const result = evaluatePolicy({
+      policy: exclusionPolicy,
       request: {
         ...approvedRequest,
         requestObject: {
           ...approvedRequest.requestObject,
-          requestType: "pharmacy_benefit"
-        }
-      },
-      monthToDateAmount: 0
-    });
-    const blocked = evaluatePolicy({
-      policy,
-      request: {
-        ...approvedRequest,
-        requestObject: {
-          ...approvedRequest.requestObject,
-          requestType: "inpatient_admission"
+          billingCode: "76498"
         }
       },
       monthToDateAmount: 0
     });
 
-    expect(approved.reasonCodes).toEqual([]);
-    expect(blocked).toMatchObject({
+    expect(result).toMatchObject({
       decision: "blocked",
-      reasonCodes: expect.arrayContaining(["REQUEST_TYPE_NOT_ELIGIBLE"])
+      reasonCodes: ["SERVICE_CODE_EXCLUDED"]
+    });
+  });
+
+  it("treats covered services without a requested DTR as not applicable to this policy", () => {
+    const result = evaluatePolicy({
+      policy: basePolicy,
+      request: {
+        ...approvedRequest,
+        requestObject: {
+          ...approvedRequest.requestObject,
+          dtrRequested: false,
+          dtrTemplateCompleted: false
+        }
+      },
+      monthToDateAmount: 0
+    });
+
+    expect(result).toMatchObject({
+      decision: "not_applicable",
+      amount: 0,
+      walletId: null,
+      reasonCodes: ["DTR_NOT_REQUESTED"]
+    });
+  });
+
+  it("blocks requested DTR submissions that were not completed", () => {
+    const result = evaluatePolicy({
+      policy: basePolicy,
+      request: {
+        ...approvedRequest,
+        requestObject: {
+          ...approvedRequest.requestObject,
+          dtrTemplateCompleted: false
+        }
+      },
+      monthToDateAmount: 0
+    });
+
+    expect(result).toMatchObject({
+      decision: "blocked",
+      amount: 0,
+      walletId: null,
+      reasonCodes: ["DTR_TEMPLATE_INCOMPLETE"]
+    });
+  });
+
+  it("blocks payments that would exceed the monthly cap", () => {
+    const result = evaluatePolicy({
+      policy: basePolicy,
+      request: approvedRequest,
+      monthToDateAmount: 500
+    });
+
+    expect(result).toMatchObject({
+      decision: "blocked",
+      amount: 0,
+      reasonCodes: ["MONTHLY_CAP_EXCEEDED"]
     });
   });
 });

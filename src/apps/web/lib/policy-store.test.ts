@@ -7,7 +7,7 @@ import {
 } from "./policy-store";
 
 describe("policy store", () => {
-  it("auto-seeds active incentive policies into Firestore before reading", async () => {
+  it("auto-seeds request-type-specific active incentive policies for every demo plan/provider pair into Firestore", async () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePolicyStore(
       {
@@ -17,23 +17,111 @@ describe("policy store", () => {
       firestore
     );
 
-    const policy = await store.getPolicy("provider_documentation_completeness");
+    const policies = await store.listPolicies("provider_documentation_completeness");
 
-    expect(policy).toMatchObject({
-      id: "provider-documentation-completeness-v1",
-      evaluationType: "provider_documentation_completeness",
-      paymentFormula: {
-        baseAmount: 5,
-        maxPerRequest: 5,
-        monthlyCap: 500,
-        token: {
-          symbol: "HBAR"
-        }
-      }
-    });
+    expect(policies).toHaveLength(4);
+    expect(policies.map((policy) => policy.policyId).sort()).toEqual([
+      "plcy_2N7P5R8T0V4X6Z1B3D9F",
+      "plcy_5R1T8W3Y6B0D9F2H4K7M",
+      "plcy_8K2M4Q6R9T1V3X5Z7B0C",
+      "plcy_9Q3S6V1X8Z2B5D7F0H4K"
+    ]);
+    expect(policies).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          policyId: "plcy_8K2M4Q6R9T1V3X5Z7B0C",
+          contractPair: {
+            planId: "acme-health-ppo",
+            planName: "Acme Health PPO",
+            providerId: "lakeside-provider-admin",
+            providerName: "Lakeside Provider Admin"
+          },
+          incentiveScope: expect.objectContaining({
+            eligibleRequestTypes: ["outpatient_service"],
+            includedServiceCodes: {
+              cpt: ["73721"],
+              ndc: []
+            }
+          })
+        }),
+        expect.objectContaining({
+          policyId: "plcy_5R1T8W3Y6B0D9F2H4K7M",
+          contractPair: {
+            planId: "summit-health-hmo",
+            planName: "Summit Health HMO",
+            providerId: "lakeside-provider-admin",
+            providerName: "Lakeside Provider Admin"
+          },
+          incentiveScope: expect.objectContaining({
+            eligibleRequestTypes: ["pharmacy_benefit"],
+            includedServiceCodes: {
+              cpt: [],
+              ndc: ["0169-4525-14", "0074-0554-02"]
+            }
+          }),
+          payout: {
+            token: "HBAR",
+            amountPerEligibleRequest: 5,
+            monthlyCap: 500
+          },
+          settlement: {
+            mode: "auto",
+            recipientWalletId: "0.0.9049549",
+            requiresHumanApproval: false
+          }
+        })
+      ])
+    );
+    expect(policies.every((policy) => !("displayName" in policy))).toBe(true);
     expect((await firestore.collection("incentivePolicies").get()).docs).toHaveLength(4);
     expect(firestore.collectionNames()).toEqual(expect.arrayContaining(["incentivePolicies"]));
     expect(firestore.collectionNames()).not.toEqual(expect.arrayContaining(["policies", "policyYaml"]));
+  });
+
+  it("finds current policies by evaluation type, plan/provider pair, and optional request type", async () => {
+    const firestore = createFakeFirestore();
+    const store = createFirestorePolicyStore(
+      {
+        projectId: "operon-labs-nonprod",
+        databaseId: "(default)"
+      },
+      firestore
+    );
+
+    const pairPolicies = await store.findPolicies({
+      evaluationType: "provider_documentation_completeness",
+      planId: "acme-health-ppo",
+      providerId: "lakeside-provider-admin",
+      submittedAt: "2026-05-25T12:00:00.000Z"
+    });
+    const outpatientPolicies = await store.findPolicies({
+      evaluationType: "provider_documentation_completeness",
+      planId: "acme-health-ppo",
+      providerId: "lakeside-provider-admin",
+      requestType: "outpatient_service",
+      submittedAt: "2026-05-25T12:00:00.000Z"
+    });
+    const pharmacyPolicies = await store.findPolicies({
+      evaluationType: "provider_documentation_completeness",
+      planId: "summit-health-hmo",
+      providerId: "lakeside-provider-admin",
+      requestType: "pharmacy_benefit",
+      submittedAt: "2026-05-25T12:00:00.000Z"
+    });
+    const missing = await store.findPolicy({
+      evaluationType: "provider_documentation_completeness",
+      planId: "unknown-plan",
+      providerId: "lakeside-provider-admin",
+      submittedAt: "2026-05-25T12:00:00.000Z"
+    });
+
+    expect(pairPolicies.map((policy) => policy.policyId).sort()).toEqual([
+      "plcy_2N7P5R8T0V4X6Z1B3D9F",
+      "plcy_8K2M4Q6R9T1V3X5Z7B0C"
+    ]);
+    expect(outpatientPolicies.map((policy) => policy.policyId)).toEqual(["plcy_8K2M4Q6R9T1V3X5Z7B0C"]);
+    expect(pharmacyPolicies.map((policy) => policy.policyId)).toEqual(["plcy_5R1T8W3Y6B0D9F2H4K7M"]);
+    expect(missing).toBeNull();
   });
 
   it("reads the current Firestore policy document on every lookup", async () => {
@@ -45,42 +133,214 @@ describe("policy store", () => {
       },
       firestore
     );
-    const first = await store.getPolicy("provider_documentation_completeness");
+    const first = await store.findPolicy({
+      evaluationType: "provider_documentation_completeness",
+      planId: "acme-health-ppo",
+      providerId: "lakeside-provider-admin",
+      requestType: "outpatient_service"
+    });
     const changed = {
       ...first!,
-      paymentFormula: {
-        ...first!.paymentFormula,
-        baseAmount: 2,
-        maxPerRequest: 2
+      payout: {
+        ...first!.payout,
+        amountPerEligibleRequest: 2
       }
     };
 
+    await firestore.collection("incentivePolicies").doc(changed.policyId).set(changed);
+
+    const second = await store.findPolicy({
+      evaluationType: "provider_documentation_completeness",
+      planId: "acme-health-ppo",
+      providerId: "lakeside-provider-admin",
+      requestType: "outpatient_service"
+    });
+
+    expect(second?.payout.amountPerEligibleRequest).toBe(2);
+  });
+
+  it("preserves Firestore contract and scope edits for default policy ids", async () => {
+    const firestore = createFakeFirestore();
+    const store = createFirestorePolicyStore(
+      {
+        projectId: "operon-labs-nonprod",
+        databaseId: "(default)"
+      },
+      firestore
+    );
+    await store.listPolicies("provider_documentation_completeness");
+    await firestore.collection("incentivePolicies").doc("plcy_8K2M4Q6R9T1V3X5Z7B0C").set({
+      ...defaultIncentivePolicies.provider_documentation_acme_outpatient,
+      contractPair: {
+        planId: "custom-health-plan",
+        planName: "Custom Health Plan",
+        providerId: "lakeside-provider-admin",
+        providerName: "Lakeside Provider Admin"
+      },
+      incentiveScope: {
+        eligibleRequestTypes: ["pharmacy_benefit"],
+        includedServiceCodes: {
+          cpt: [],
+          ndc: ["0169-4525-14"]
+        }
+      }
+    });
+
+    const policy = await store.findPolicy({
+      evaluationType: "provider_documentation_completeness",
+      planId: "custom-health-plan",
+      providerId: "lakeside-provider-admin",
+      requestType: "pharmacy_benefit"
+    });
+
+    expect(policy).toMatchObject({
+      policyId: "plcy_8K2M4Q6R9T1V3X5Z7B0C",
+      contractPair: {
+        planId: "custom-health-plan",
+        planName: "Custom Health Plan"
+      },
+      incentiveScope: {
+        eligibleRequestTypes: ["pharmacy_benefit"],
+        includedServiceCodes: {
+          cpt: [],
+          ndc: ["0169-4525-14"]
+        }
+      }
+    });
+  });
+
+  it("migrates deprecated wrapped policy documents to the pair-specific model", async () => {
+    const firestore = createFakeFirestore();
+    const store = createFirestorePolicyStore(
+      {
+        projectId: "operon-labs-nonprod",
+        databaseId: "(default)"
+      },
+      firestore
+    );
     await firestore.collection("incentivePolicies").doc("provider_documentation_completeness").set({
-      policy: changed,
+      policyId: "provider-documentation-completeness-v1",
+      evaluationType: "provider_documentation_completeness",
       status: "active",
-      policyId: changed.id,
-      evaluationType: changed.evaluationType,
+      policy: {
+        id: "provider-documentation-completeness-v1",
+        evaluationType: "provider_documentation_completeness",
+        paymentFormula: {
+          baseAmount: 7,
+          maxPerRequest: 7,
+          monthlyCap: 700,
+          token: { symbol: "HBAR" }
+        },
+        submitterRules: {
+          allowedSubmitters: ["lakeside-provider-admin"],
+          allowedSubmitterTypes: ["provider_admin_team"],
+          walletMap: {
+            "lakeside-provider-admin": "0.0.9049549"
+          }
+        },
+        requiredEvidence: ["caseId", "requestType", "crdCoverageChecked", "crdCoveredBenefit", "dtrTemplateCompleted"],
+        approvalRules: [],
+        requiresHumanApproval: false
+      },
       updatedAt: "2026-05-25T00:00:00.000Z",
       updatedBy: "test"
     });
 
-    const second = await store.getPolicy("provider_documentation_completeness");
+    const policy = await store.findPolicy({
+      evaluationType: "provider_documentation_completeness",
+      planId: "acme-health-ppo",
+      providerId: "lakeside-provider-admin"
+    });
+    const docs = (await firestore.collection("incentivePolicies").get()).docs.map((doc) => doc.data());
 
-    expect(second?.paymentFormula.baseAmount).toBe(2);
-    expect(second?.paymentFormula.maxPerRequest).toBe(2);
+    expect(policy).toMatchObject({
+      policyId: "plcy_8K2M4Q6R9T1V3X5Z7B0C",
+      payout: {
+        amountPerEligibleRequest: 7,
+        monthlyCap: 700
+      }
+    });
+    expect(docs).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        policyId: "plcy_8K2M4Q6R9T1V3X5Z7B0C",
+        contractPair: {
+          planId: "acme-health-ppo",
+          planName: "Acme Health PPO",
+          providerId: "lakeside-provider-admin",
+          providerName: "Lakeside Provider Admin"
+        }
+      })
+    ]));
+    expect(docs).toHaveLength(4);
+  });
+
+  it("stores either included or excluded scope lists, not both, for request types and service codes", async () => {
+    const store = createInMemoryPolicyStore(defaultIncentivePolicies);
+    const policies = await store.listPolicies("provider_documentation_completeness");
+
+    expect(policies).toHaveLength(4);
+    for (const policy of policies) {
+      expect(policy.contractPair.planName).toMatch(/Health/);
+      expect(policy.contractPair.providerName).toBe("Lakeside Provider Admin");
+      expect(Boolean(policy.incentiveScope.eligibleRequestTypes?.length)).not.toBe(
+        Boolean(policy.incentiveScope.excludedRequestTypes?.length)
+      );
+      expect(hasConfiguredServiceCodes(policy.incentiveScope.includedServiceCodes)).not.toBe(
+        hasConfiguredServiceCodes(policy.incentiveScope.excludedServiceCodes)
+      );
+    }
+  });
+
+  it("removes the deprecated combined provider documentation policy when seeding the four-policy demo dataset", async () => {
+    const firestore = createFakeFirestore();
+    const store = createFirestorePolicyStore(
+      {
+        projectId: "operon-labs-nonprod",
+        databaseId: "(default)"
+      },
+      firestore
+    );
+    await firestore.collection("incentivePolicies").doc("plcy_7M4K9Q2X8N1R5T6W3B0C").set({
+      ...defaultIncentivePolicies.provider_documentation_acme_outpatient,
+      displayName: "Acme Health PPO / Lakeside Provider Admin - DTR Completion Incentive",
+      policyId: "plcy_7M4K9Q2X8N1R5T6W3B0C",
+      incentiveScope: {
+        eligibleRequestTypes: ["outpatient_service", "pharmacy_benefit"],
+        excludedRequestTypes: ["inpatient_admission"],
+        includedServiceCodes: {
+          cpt: ["73721"],
+          ndc: ["0169-4525-14", "0074-0554-02"]
+        },
+        excludedServiceCodes: {
+          cpt: ["76498"],
+          ndc: []
+        }
+      }
+    });
+
+    const policies = await store.listPolicies("provider_documentation_completeness");
+    const docs = (await firestore.collection("incentivePolicies").get()).docs.map((doc) => doc.id);
+
+    expect(policies).toHaveLength(4);
+    expect(policies.every((policy) => !("displayName" in policy))).toBe(true);
+    expect(policies.map((policy) => policy.policyId)).not.toContain("plcy_7M4K9Q2X8N1R5T6W3B0C");
+    expect(docs).not.toContain("plcy_7M4K9Q2X8N1R5T6W3B0C");
   });
 
   it("keeps in-memory policy store behavior aligned with Firestore for isolated tests", async () => {
     const store = createInMemoryPolicyStore(defaultIncentivePolicies);
-    const policy = await store.getPolicy("appeals_packet_quality");
+    const policy = await store.findPolicy({
+      evaluationType: "provider_documentation_completeness",
+      planId: "acme-health-ppo",
+      providerId: "lakeside-provider-admin",
+      requestType: "outpatient_service"
+    });
 
     expect(policy).toMatchObject({
-      evaluationType: "appeals_packet_quality",
-      paymentFormula: {
-        baseAmount: 5,
-        token: {
-          symbol: "HBAR"
-        }
+      evaluationType: "provider_documentation_completeness",
+      payout: {
+        amountPerEligibleRequest: 5,
+        token: "HBAR"
       }
     });
   });
@@ -103,6 +363,9 @@ function createFakeFirestore(): FirestoreDatabase & { collectionNames(): string[
             async set(value) {
               collection.set(id, structuredClone(value));
             },
+            async delete() {
+              collection.delete(id);
+            },
             async get() {
               const value = collection.get(id);
 
@@ -117,7 +380,8 @@ function createFakeFirestore(): FirestoreDatabase & { collectionNames(): string[
         },
         async get() {
           return {
-            docs: [...collection.values()].map((value) => ({
+            docs: [...collection.entries()].map(([id, value]) => ({
+              id,
               data() {
                 return value;
               }
@@ -137,7 +401,8 @@ function createFakeFirestore(): FirestoreDatabase & { collectionNames(): string[
               }
 
               return {
-                docs: values.map((value) => ({
+                docs: values.map((value, index) => ({
+                  id: [...collection.keys()][index],
                   data() {
                     return value;
                   }
@@ -156,8 +421,12 @@ function createFakeFirestore(): FirestoreDatabase & { collectionNames(): string[
 
 function getSortableValue(value: unknown, field: string): unknown {
   if (typeof value !== "object" || value === null) {
-    return "";
+    return undefined;
   }
 
-  return (value as Record<string, unknown>)[field] ?? "";
+  return (value as Record<string, unknown>)[field];
+}
+
+function hasConfiguredServiceCodes(value: { cpt?: string[]; ndc?: string[] } | undefined): boolean {
+  return Boolean(value?.cpt?.length || value?.ndc?.length);
 }

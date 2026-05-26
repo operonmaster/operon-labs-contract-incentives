@@ -91,4 +91,37 @@ describe("provider portal content", () => {
     expect(source).toMatch(/const patientLoadId = window\.setTimeout\(\(\) => \{\n\s+void loadPatients\(\);/);
     expect(source).toContain('fetch("/api/um/patients")');
   });
+
+  it("submits selected patient context and cancels stale coverage checks when the selected path changes", () => {
+    const source = readRepoFile("src/apps/web/components/provider-documentation/ProviderDocumentationWizard.tsx");
+
+    expect(source).toContain("patientId,");
+    expect(source).toContain("function cancelPendingRequests()");
+    expect(source).toContain("coverageRequestRef.current += 1");
+    expect(source).toContain("const requestPath = selectedPath");
+    expect(source).toContain("selectedPathRef.current !== requestPath");
+    expect(source).toContain("disabled={checkingRequirements || !option.enabled}");
+    expect(source).toContain("disabled={checkingRequirements || !requestType || requestType === \"inpatient_admission\" || Boolean(crdLoadError)}");
+    expect(source).toContain("LabsSelect");
+    expect(source).toContain("patientOptions");
+    expect(source).toContain("planOptions");
+    expect(source).toContain("serviceOptions");
+    expect(source).not.toContain("<select");
+    expect(source).not.toContain("<option");
+    expect(source).toContain("Close assessment");
+    expect(source).toContain("onClose={() => setAssessmentModalOpen(false)}");
+  });
+
+  it("uses shared badges for coverage, assessment, and submission states", () => {
+    const source = readRepoFile("src/apps/web/components/provider-documentation/ProviderDocumentationWizard.tsx");
+
+    expect(source).toContain("LabsBadge");
+    expect(source).toContain("assessmentBadgeVariant(assessmentStatus)");
+    expect(source).toContain('<LabsBadge variant="success">Coverage confirmed</LabsBadge>');
+    expect(source).toContain('<LabsBadge variant="warning">Not covered benefit</LabsBadge>');
+    expect(source).toContain('<LabsBadge variant="info">Pending review</LabsBadge>');
+    expect(source).not.toContain('className="status');
+    expect(source).not.toContain("assessment-pill");
+  });
+
 });

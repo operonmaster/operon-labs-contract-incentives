@@ -1,35 +1,58 @@
 export type TokenSymbol = "HBAR" | "USDC" | "OPER" | "OPRN" | (string & {});
 export type Currency = TokenSymbol;
 
-export type PolicyDecision = "approved" | "blocked" | "manual_review";
+export type PolicyDecision = "approved" | "blocked" | "manual_review" | "not_applicable";
+export type PolicyStatus = "active" | "inactive";
+export type SettlementMode = "auto" | "manual";
 
 export interface EvaluationRequest {
   evaluationType: string;
   submitter: {
-    type: string;
     id: string;
   };
   requestObject: Record<string, unknown>;
 }
 
-export interface SubmitterRules {
-  allowedSubmitterTypes: string[];
-  allowedSubmitters: string[];
-  walletMap: Record<string, string>;
+export interface ServiceCodeSet {
+  cpt: string[];
+  ndc: string[];
 }
 
-export interface ApprovalRule {
-  field: string;
-  operator: "equals" | "in";
-  value: unknown;
-  reasonCode: string;
-}
-
-export interface PaymentFormula {
-  baseAmount: number;
-  maxPerRequest: number;
-  monthlyCap: number;
-  token: SettlementToken;
+export interface IncentivePolicy {
+  policyId: string;
+  version: string;
+  status: PolicyStatus;
+  evaluationType: string;
+  contractPair: {
+    planId: string;
+    planName: string;
+    providerId: string;
+    providerName: string;
+  };
+  effectivePeriod: {
+    startsOn: string;
+    endsOn: string | null;
+  };
+  incentiveScope: {
+    eligibleRequestTypes?: string[];
+    excludedRequestTypes?: string[];
+    includedServiceCodes?: ServiceCodeSet;
+    excludedServiceCodes?: ServiceCodeSet;
+  };
+  eligibilityCriteria: {
+    appliesOnlyToCoveredBenefits: boolean;
+    requiresDtrCompletionWhenRequested: boolean;
+  };
+  payout: {
+    token: TokenSymbol;
+    amountPerEligibleRequest: number;
+    monthlyCap: number;
+  };
+  settlement: {
+    mode: SettlementMode;
+    recipientWalletId: string;
+    requiresHumanApproval: boolean;
+  };
 }
 
 export interface SettlementToken {
@@ -37,21 +60,6 @@ export interface SettlementToken {
   hederaTokenId?: string;
   displayName?: string;
   decimals?: number;
-}
-
-export interface IncentivePolicy {
-  id: string;
-  evaluationType: string;
-  /**
-   * @deprecated Use paymentFormula.token.symbol. Kept as a compatibility field
-   * for older demo payloads and documents.
-   */
-  currency?: Currency;
-  submitterRules: SubmitterRules;
-  requiredEvidence: string[];
-  approvalRules: ApprovalRule[];
-  paymentFormula: PaymentFormula;
-  requiresHumanApproval: boolean;
 }
 
 export interface EvaluatePolicyInput {
@@ -75,71 +83,114 @@ export interface PolicyEvaluationResult {
 export function evaluatePolicy(input: EvaluatePolicyInput): PolicyEvaluationResult {
   const { policy, request, monthToDateAmount } = input;
   const reasonCodes: string[] = [];
-  const walletId = policy.submitterRules.walletMap[request.submitter.id] ?? null;
+  const token = policy.payout.token;
 
   if (request.evaluationType !== policy.evaluationType) {
     reasonCodes.push("EVALUATION_TYPE_MISMATCH");
   }
 
-  if (!policy.submitterRules.allowedSubmitterTypes.includes(request.submitter.type)) {
-    reasonCodes.push("SUBMITTER_TYPE_NOT_ALLOWED");
+  if (policy.status !== "active") {
+    reasonCodes.push("POLICY_INACTIVE");
   }
 
-  if (!policy.submitterRules.allowedSubmitters.includes(request.submitter.id)) {
-    reasonCodes.push("SUBMITTER_NOT_ALLOWED");
+  if (request.requestObject.planId !== policy.contractPair.planId) {
+    reasonCodes.push("PLAN_NOT_IN_CONTRACT");
   }
 
-  if (walletId === null) {
-    reasonCodes.push("WALLET_NOT_APPROVED");
+  const providerId = String(request.requestObject.providerId ?? request.submitter.id);
+  if (providerId !== policy.contractPair.providerId || request.submitter.id !== policy.contractPair.providerId) {
+    reasonCodes.push("PROVIDER_NOT_IN_CONTRACT");
   }
 
-  for (const field of policy.requiredEvidence) {
-    if (!(field in request.requestObject)) {
-      reasonCodes.push(`MISSING_FIELD_${toReasonToken(field)}`);
+  const requestType = String(request.requestObject.requestType ?? "");
+  const excludedRequestTypes = policy.incentiveScope.excludedRequestTypes ?? [];
+  const eligibleRequestTypes = policy.incentiveScope.eligibleRequestTypes ?? [];
+  if (excludedRequestTypes.includes(requestType)) {
+    reasonCodes.push("REQUEST_TYPE_EXCLUDED");
+  } else if (eligibleRequestTypes.length > 0 && !eligibleRequestTypes.includes(requestType)) {
+    reasonCodes.push("REQUEST_TYPE_NOT_ELIGIBLE");
+  }
+
+  const codeGroup = codingSystemToServiceCodeGroup(request.requestObject.codingSystem);
+  const billingCode = String(request.requestObject.billingCode ?? "");
+  const excludedCodes = policy.incentiveScope.excludedServiceCodes?.[codeGroup] ?? [];
+  const includedCodes = policy.incentiveScope.includedServiceCodes?.[codeGroup] ?? [];
+
+  if (excludedCodes.includes(billingCode)) {
+    reasonCodes.push("SERVICE_CODE_EXCLUDED");
+  } else if (includedCodes.length > 0 && !includedCodes.includes(billingCode)) {
+    reasonCodes.push("SERVICE_CODE_NOT_INCLUDED");
+  }
+
+  if (policy.eligibilityCriteria.appliesOnlyToCoveredBenefits && request.requestObject.coveredBenefit !== true) {
+    reasonCodes.push("BENEFIT_NOT_COVERED");
+  }
+
+  if (policy.eligibilityCriteria.requiresDtrCompletionWhenRequested) {
+    if (request.requestObject.coveredBenefit === true && request.requestObject.dtrRequested !== true) {
+      return result({
+        decision: "not_applicable",
+        policy,
+        reasonCodes: ["DTR_NOT_REQUESTED"],
+        token
+      });
+    }
+
+    if (request.requestObject.dtrRequested === true && request.requestObject.dtrTemplateCompleted !== true) {
+      reasonCodes.push("DTR_TEMPLATE_INCOMPLETE");
     }
   }
 
-  for (const rule of policy.approvalRules) {
-    const actual = request.requestObject[rule.field];
-    if (rule.operator === "equals" && actual !== rule.value) {
-      reasonCodes.push(rule.reasonCode);
-    }
-    if (rule.operator === "in" && (!Array.isArray(rule.value) || !rule.value.includes(actual))) {
-      reasonCodes.push(rule.reasonCode);
-    }
-  }
-
-  const proposedAmount = Math.min(policy.paymentFormula.baseAmount, policy.paymentFormula.maxPerRequest);
-  if (monthToDateAmount + proposedAmount > policy.paymentFormula.monthlyCap) {
+  if (monthToDateAmount + policy.payout.amountPerEligibleRequest > policy.payout.monthlyCap) {
     reasonCodes.push("MONTHLY_CAP_EXCEEDED");
   }
 
   const blocked = reasonCodes.length > 0;
-  const settlementToken = policy.paymentFormula.token ?? {
-    symbol: policy.currency ?? "HBAR"
-  };
+  if (!blocked && (policy.settlement.mode === "manual" || policy.settlement.requiresHumanApproval)) {
+    return result({
+      decision: "manual_review",
+      policy,
+      reasonCodes: ["MANUAL_REVIEW_REQUIRED"],
+      token
+    });
+  }
+
+  return result({
+    decision: blocked ? "blocked" : "approved",
+    policy,
+    reasonCodes,
+    token
+  });
+}
+
+function result({
+  decision,
+  policy,
+  reasonCodes,
+  token
+}: {
+  decision: PolicyDecision;
+  policy: IncentivePolicy;
+  reasonCodes: string[];
+  token: TokenSymbol;
+}): PolicyEvaluationResult {
+  const approved = decision === "approved";
 
   return {
-    decision: blocked ? "blocked" : "approved",
-    policyId: policy.id,
-    policyVersion: extractPolicyVersion(policy.id),
-    amount: blocked ? 0 : proposedAmount,
-    currency: settlementToken.symbol,
-    settlementToken,
-    walletId: blocked ? null : walletId,
-    requiresHumanApproval: policy.requiresHumanApproval,
+    decision,
+    policyId: policy.policyId,
+    policyVersion: policy.version,
+    amount: approved ? policy.payout.amountPerEligibleRequest : 0,
+    currency: token,
+    settlementToken: {
+      symbol: token
+    },
+    walletId: approved ? policy.settlement.recipientWalletId : null,
+    requiresHumanApproval: policy.settlement.requiresHumanApproval,
     reasonCodes
   };
 }
 
-function extractPolicyVersion(policyId: string): string {
-  const match = policyId.match(/-(v\d+)$/);
-  return match?.[1] ?? "v1";
-}
-
-function toReasonToken(value: string): string {
-  return value
-    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
-    .replace(/[^a-zA-Z0-9]+/g, "_")
-    .toUpperCase();
+function codingSystemToServiceCodeGroup(value: unknown): keyof ServiceCodeSet {
+  return String(value).toUpperCase() === "NDC" ? "ndc" : "cpt";
 }

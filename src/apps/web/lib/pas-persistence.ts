@@ -55,11 +55,13 @@ export interface FirestoreDocumentSnapshot {
 export interface FirestoreDocumentReference {
   create?(value: unknown): Promise<unknown>;
   set(value: unknown): Promise<unknown>;
+  delete?(): Promise<unknown>;
   get(): Promise<FirestoreDocumentSnapshot>;
 }
 
 export interface FirestoreQuerySnapshot {
   docs: Array<{
+    id?: string;
     data(): unknown;
   }>;
 }
@@ -72,8 +74,14 @@ export interface FirestoreCollectionReference {
   };
 }
 
+export interface FirestoreWriteBatch {
+  set(ref: FirestoreDocumentReference, value: unknown): FirestoreWriteBatch;
+  commit(): Promise<unknown>;
+}
+
 export interface FirestoreDatabase {
   collection(name: string): FirestoreCollectionReference;
+  batch?(): FirestoreWriteBatch;
 }
 /* eslint-enable no-unused-vars */
 
@@ -124,17 +132,24 @@ class FirestorePasPersistenceStore implements PasPersistenceStore {
     };
 
     const firestore = await this.getFirestore();
-    await Promise.all([
-      firestore.collection(PAS_CLAIMS_COLLECTION).doc(request.record.caseId).set({
-        ...request,
-        storedAt
-      }),
-      firestore.collection(AUDIT_EVENTS_COLLECTION).doc(`${request.record.caseId}-${event.eventType}`).set({
-        ...event,
-        submittedAt: request.record.submittedAt,
-        storedAt
-      })
-    ]);
+    const claimRef = firestore.collection(PAS_CLAIMS_COLLECTION).doc(request.record.caseId);
+    const eventRef = firestore.collection(AUDIT_EVENTS_COLLECTION).doc(`${request.record.caseId}-${event.eventType}`);
+    const claimValue = {
+      ...request,
+      storedAt
+    };
+    const eventValue = {
+      ...event,
+      submittedAt: request.record.submittedAt,
+      storedAt
+    };
+
+    if (firestore.batch) {
+      await firestore.batch().set(claimRef, claimValue).set(eventRef, eventValue).commit();
+      return;
+    }
+
+    await Promise.all([claimRef.set(claimValue), eventRef.set(eventValue)]);
   }
 
   async listPriorAuthRecords(): Promise<PriorAuthRecord[]> {

@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   createFirestorePasPersistenceStore,
   createPasPersistenceStoreFromEnv,
-  type FirestoreDatabase
+  type FirestoreDatabase,
+  type FirestoreDocumentReference
 } from "./pas-persistence";
 import { createInMemoryUmPlatform, buildPasFhirBundle } from "@operon-labs/um-platform";
 
@@ -107,12 +108,54 @@ describe("PAS persistence store selection", () => {
     );
     expect(firestore.collectionNames()).not.toEqual(expect.arrayContaining(["pasRequests", "pasEvents"]));
   });
+
+  it("saves the PAS Claim and submitted event in one Firestore batch", async () => {
+    const firestore = createFakeFirestore();
+    const store = createFirestorePasPersistenceStore(
+      {
+        projectId: "operon-labs-nonprod",
+        databaseId: "(default)"
+      },
+      firestore
+    );
+    const platform = createInMemoryUmPlatform();
+    const record = platform.submitPriorAuth({
+      requestType: "outpatient_service",
+      serviceCode: "knee_mri"
+    });
+    const evidence = platform.getEvidence(record.caseId)!;
+
+    await store.savePriorAuth({
+      record,
+      evidence,
+      fhirBundle: buildPasFhirBundle(record, evidence)
+    });
+
+    expect(firestore.batchCommits()).toBe(1);
+    await expect(store.getPriorAuthRecord(record.caseId)).resolves.toMatchObject({ caseId: record.caseId });
+    await expect(store.listPasEvents()).resolves.toEqual([{ eventType: "PAS_SUBMITTED", caseId: record.caseId }]);
+  });
 });
 
-function createFakeFirestore(): FirestoreDatabase & { collectionNames(): string[] } {
+function createFakeFirestore(): FirestoreDatabase & { collectionNames(): string[]; batchCommits(): number } {
   const collections = new Map<string, Map<string, unknown>>();
+  let batchCommitCount = 0;
 
   return {
+    batch() {
+      const writes: Array<{ ref: FirestoreDocumentReference; payload: unknown }> = [];
+
+      return {
+        set(ref, value) {
+          writes.push({ ref, payload: value });
+          return this;
+        },
+        async commit() {
+          batchCommitCount += 1;
+          await Promise.all(writes.map((write) => write.ref.set(write.payload)));
+        }
+      };
+    },
     collection(name) {
       let collection = collections.get(name);
       if (!collection) {
@@ -169,6 +212,9 @@ function createFakeFirestore(): FirestoreDatabase & { collectionNames(): string[
     },
     collectionNames() {
       return [...collections.keys()];
+    },
+    batchCommits() {
+      return batchCommitCount;
     }
   };
 }

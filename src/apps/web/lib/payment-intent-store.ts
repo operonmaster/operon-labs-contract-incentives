@@ -124,7 +124,7 @@ class FirestorePaymentIntentStore implements PaymentIntentPersistenceStore {
 
   async markIntentFailed(intentId: string): Promise<void> {
     const existing = await this.getIntent(intentId);
-    if (!existing) {
+    if (!existing || existing.status === "submitted") {
       return;
     }
 

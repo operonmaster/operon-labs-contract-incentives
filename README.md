@@ -44,14 +44,15 @@ Demo sequence:
 6. In the plan console, review the `0 HBAR` policy-blocked row with missing documentation reasons.
 7. Return to the provider portal and submit `Full-body wellness MRI screening` after acknowledging the not-covered warning.
 8. In the plan console, review the `0 HBAR` policy-blocked row with `BENEFIT_NOT_COVERED`.
+9. Select `Andre Williams`, `Summit Health HMO`, and `Knee MRI after injury` to see an approved `20 HBAR` business policy blocked by the plan-level Hedera Agent Kit `5 HBAR` request maximum.
 
 ## API Routes
 
 - `POST /api/evaluations` - evaluates a demo request against a versioned policy
-- `POST /api/payments/approve` - deprecated generic demo route for policy-gated payment approval
+- `POST /api/payments/approve` - disabled deprecated generic payment route; provider-documentation settlement must use the PAS-triggered policy path
 - `GET /api/audit/[id]` - returns a deterministic demo audit record
 - `GET /api/um/prior-auths` - lists synthetic prior-auth submissions
-- `POST /api/um/prior-auths` - submits a synthetic prior-auth request
+- `POST /api/um/prior-auths` - submits a synthetic prior-auth request for a valid patient/plan coverage selection
 - `GET /api/um/prior-auths/[caseId]/evidence` - returns policy-safe UM evidence
 - `GET /api/um/patients` - returns seeded patient and coverage context for the provider portal
 - `GET /api/provider-documentation/incentives` - lists plan-side incentive audit rows
@@ -61,7 +62,7 @@ Provider-documentation incentives are triggered asynchronously after `PAS_SUBMIT
 
 ## Hedera Settlement
 
-Provider-documentation incentives are policy-defined: the plan policy owns the amount, cap, recipient wallet mapping, and token symbol. The bootstrapped demo policy computes a `5 HBAR` incentive for eligible provider-documentation requests and the current real executor submits a Hedera Agent Kit `transfer_hbar_tool` transaction when real settlement is configured.
+Provider-documentation incentives are policy-defined: the business policy owns the amount, cap, recipient wallet mapping, and token symbol. Most bootstrapped demo policies compute a `5 HBAR` incentive for eligible provider-documentation requests. The Summit outpatient policy intentionally computes `20 HBAR` so the plan-level Hedera Agent Kit controls can block settlement at the `5 HBAR` per-request maximum.
 
 The policy model can represent `HBAR`, `USDC`, `OPER`, `OPRN`, or another token symbol. Real settlement for non-HBAR tokens requires a future HTS token-transfer executor; those policy evaluations should not be treated as settled until that adapter exists.
 
@@ -72,12 +73,10 @@ HEDERA_SETTLEMENT_MODE=real
 HEDERA_NETWORK=testnet
 HEDERA_OPERATOR_ACCOUNT_ID=<Secret Manager value>
 HEDERA_OPERATOR_PRIVATE_KEY=<Secret Manager value>
-HEDERA_ALLOWED_RECIPIENT_ACCOUNT_IDS=0.0.9049549
 HEDERA_BLOCKED_RECIPIENT_ACCOUNT_IDS=
-HEDERA_MAX_PAYMENT_HBAR=5
 ```
 
-The Hedera Agent Kit execution policy is intentionally narrower than the healthcare business policy. CRD/DTR/PAS eligibility is evaluated before settlement. Agent Kit controls enforce duplicate-payment prevention, recipient wallet trust, payment envelope integrity, and the max HBAR amount per request at the transfer-tool boundary.
+The Hedera Agent Kit execution policy is intentionally narrower than the healthcare business policy. CRD/DTR/PAS eligibility is evaluated before settlement and recorded in Firestore. Plan-level payment policies in `paymentPolicies/{planId}` enforce business-evaluation attestation, duplicate-payment prevention, payment-token scope, payment-envelope integrity, and max payment amount at the transfer-tool boundary. The execution result is recorded in `paymentPolicyEvidences/{incentiveEvaluationId}`.
 
 For tests or offline demos only:
 
@@ -95,6 +94,8 @@ Local development and deployed Cloud Run default to Firestore-backed PAS persist
 PAS_STORE_BACKEND=firestore
 UM_REFERENCE_STORE_BACKEND=firestore
 POLICY_STORE_BACKEND=firestore
+PAYMENT_POLICY_STORE_BACKEND=firestore
+PAYMENT_POLICY_EVIDENCE_STORE_BACKEND=firestore
 PAYMENT_INTENT_STORE_BACKEND=firestore
 GCP_PROJECT_ID=operon-labs-nonprod
 FIRESTORE_DATABASE_ID=(default)
@@ -102,15 +103,17 @@ FIRESTORE_DATABASE_ID=(default)
 
 For isolated test runs or offline demos, explicitly opt out with `PAS_STORE_BACKEND=memory`.
 
-UM reference data, incentive policies, and payment-intent settlement controls also default to Firestore. Use `UM_REFERENCE_STORE_BACKEND=memory`, `POLICY_STORE_BACKEND=memory`, and `PAYMENT_INTENT_STORE_BACKEND=memory` only for isolated tests or offline demos.
+UM reference data, incentive policies, payment policies, payment-policy evidence, and payment-intent settlement controls also default to Firestore. Use `UM_REFERENCE_STORE_BACKEND=memory`, `POLICY_STORE_BACKEND=memory`, `PAYMENT_POLICY_STORE_BACKEND=memory`, `PAYMENT_POLICY_EVIDENCE_STORE_BACKEND=memory`, and `PAYMENT_INTENT_STORE_BACKEND=memory` only for isolated tests or offline demos.
 
 The Firestore adapter writes:
 
-- `incentivePolicies/{evaluationType}` with the active policy object used by runtime evaluation and payment controls.
+- `incentivePolicies/{policyId}` with pair-scoped business policy objects used by runtime evaluation and payment controls.
+- `paymentPolicies/{planId}` with flat plan-level Agent Kit settlement-control switches and limits.
+- `paymentPolicyEvidences/{incentiveEvaluationId}` with the runtime output of the Hedera Agent Kit payment policy checks.
 - `pasClaims/{caseId}` with the prior-auth record, policy-safe evidence, and PAS-style FHIR `Bundle` containing the `Claim`.
 - `auditEvents/{caseId}-PAS_SUBMITTED` for auditable async incentive processing.
 - `incentiveEvaluations/{caseId}` so policy payment outcomes are idempotent across Cloud Run restarts.
-- `paymentIntents/{paymentIntentId}` so Hedera Agent Kit execution can reserve and block duplicate settlement for the same PA/policy/event/token.
+- `paymentIntents/{paymentIntentId}` so Hedera Agent Kit execution can reserve and block duplicate settlement for the same plan/evaluation/policy/token.
 
 The UM reference adapter auto-seeds these demo reference collections when they are missing:
 

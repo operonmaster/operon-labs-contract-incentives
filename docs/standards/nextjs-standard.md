@@ -189,6 +189,8 @@ NODE_ENV=production
 PAS_STORE_BACKEND=firestore
 UM_REFERENCE_STORE_BACKEND=firestore
 POLICY_STORE_BACKEND=firestore
+PAYMENT_POLICY_STORE_BACKEND=firestore
+PAYMENT_POLICY_EVIDENCE_STORE_BACKEND=firestore
 PAYMENT_INTENT_STORE_BACKEND=firestore
 GCP_PROJECT_ID=operon-labs-nonprod
 FIRESTORE_DATABASE_ID=(default)
@@ -196,18 +198,16 @@ HEDERA_SETTLEMENT_MODE=real
 HEDERA_NETWORK=testnet
 HEDERA_OPERATOR_ACCOUNT_ID=<Secret Manager value>
 HEDERA_OPERATOR_PRIVATE_KEY=<Secret Manager value>
-HEDERA_ALLOWED_RECIPIENT_ACCOUNT_IDS=0.0.9049549
 HEDERA_BLOCKED_RECIPIENT_ACCOUNT_IDS=
-HEDERA_MAX_PAYMENT_HBAR=5
 ```
 
-Local development and deployed Cloud Run default to Firestore. Use `PAS_STORE_BACKEND=memory`, `UM_REFERENCE_STORE_BACKEND=memory`, `POLICY_STORE_BACKEND=memory`, and `PAYMENT_INTENT_STORE_BACKEND=memory` only for isolated tests or offline demos.
+Local development and deployed Cloud Run default to Firestore. Use `PAS_STORE_BACKEND=memory`, `UM_REFERENCE_STORE_BACKEND=memory`, `POLICY_STORE_BACKEND=memory`, `PAYMENT_POLICY_STORE_BACKEND=memory`, `PAYMENT_POLICY_EVIDENCE_STORE_BACKEND=memory`, and `PAYMENT_INTENT_STORE_BACKEND=memory` only for isolated tests or offline demos.
 
 Hedera settlement defaults to real testnet execution. Use `HEDERA_SETTLEMENT_MODE=simulated` only for isolated tests or offline demos. The public repo must never contain Hedera private keys.
 
-Incentive amount, caps, recipient wallet mapping, and token symbol must come from the selected `incentivePolicies/{evaluationType}` Firestore document. Runtime code must not read YAML policy files or hardcoded policy constants for evaluation. The current real settlement adapter supports HBAR only; policies may model future `USDC`, `OPER`, or `OPRN` payouts, but those require a token-transfer adapter before they can be marked settled.
+Incentive amount, caps, recipient wallet mapping, request-type scope, and service-code scope must come from pair/request-type-scoped `incentivePolicies/{policyId}` Firestore documents. Runtime selection must support multiple policy matches by using `evaluationType`, `contractPair.planId`, `contractPair.providerId`, optional `requestType`, and the effective period. Store `contractPair.planName` and `contractPair.providerName` with the ids so policy views do not need reference-data joins. Configure either include or exclude lists for request types, and either include or exclude lists for service codes; do not configure both sides of a scope in the same policy object. Runtime code must not read YAML policy files or collapse the business policy catalog into a single hardcoded object per pair. The current real settlement adapter supports HBAR only; policies may model future `USDC`, `OPER`, or `OPRN` payouts, but those require a token-transfer adapter before they can be marked settled.
 
-Hedera Agent Kit hooks are the settlement-control boundary, not a duplicate CRD/DTR/PAS eligibility engine. Agent Kit execution policy must enforce duplicate-payment prevention through `paymentIntents/{paymentIntentId}`, recipient allow/deny lists, exact transfer-envelope integrity, and max HBAR per request before the HBAR transfer tool can run.
+Hedera Agent Kit hooks are the settlement-control boundary, not a duplicate CRD/DTR/PAS eligibility engine. Agent Kit execution policy must use flat plan-level `paymentPolicies/{planId}` documents to enforce business-evaluation attestation, duplicate-payment prevention through `paymentIntents/{paymentIntentId}`, payment-token scope, exact transfer-envelope integrity, and max payment amount before the HBAR transfer tool can run. Runtime check results must be persisted to `paymentPolicyEvidences/{incentiveEvaluationId}`.
 
 ## Security Boundary
 

@@ -4,6 +4,7 @@ import type { StoredPasRequest } from "./pas-persistence";
 import { createInMemoryPolicyStore, defaultIncentivePolicies } from "./policy-store";
 import { executePolicyBoundPayment } from "@operon-labs/hedera-executor";
 import { buildPasFhirBundle, createInMemoryUmPlatform, getDtrQuestionnaire } from "@operon-labs/um-platform";
+import type { PaymentPolicyEvidence, PaymentPolicyEvidenceStore } from "./payment-policy-evidence-store";
 
 vi.mock("@operon-labs/hedera-executor", () => ({
   executePolicyBoundPayment: vi.fn(async (request: { auditId: string; currency: string }) => {
@@ -50,7 +51,7 @@ describe("provider documentation workflow", () => {
       paymentStatus: "auto_executed",
       incentiveValue: 5,
       currency: "HBAR",
-      reason: "Complete DTR + PAS before cutoff"
+      reason: "Completed requested DTR"
     });
     expect(rows[0]!.transactionId).toContain("testnet-");
     expect(executePolicyBoundPaymentMock.mock.calls[0]?.[1]).toMatchObject({
@@ -61,17 +62,18 @@ describe("provider documentation workflow", () => {
     expect(rows[0]!.policyControls).toEqual(
       expect.arrayContaining([
         "Allowed submitter and recipient wallet",
-        "Request type limited to outpatient service or pharmacy benefit",
-        "5 HBAR max per PA request",
-        "500 HBAR monthly cap",
-        "No PHI or prohibited outcome metrics"
+        "Request type limited to Outpatient Service",
+        "Service code limited to policy scope",
+        "DTR requested and completed",
+        "5 HBAR per eligible request",
+        "500 HBAR monthly cap"
       ])
     );
     expect(rows[0]!.policyCriteria).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           label: "Request type is eligible",
-          expected: "Outpatient Service or Pharmacy Benefit",
+          expected: "Outpatient Service",
           actual: "Outpatient Service",
           passed: true,
           reasonCode: "REQUEST_TYPE_NOT_ELIGIBLE"
@@ -84,14 +86,14 @@ describe("provider documentation workflow", () => {
           reasonCode: "WALLET_NOT_APPROVED"
         }),
         expect.objectContaining({
-          label: "Service is covered benefit",
+          label: "Request is a covered benefit",
           expected: "true",
           actual: "true",
           passed: true,
-          reasonCode: "SERVICE_NOT_COVERED"
+          reasonCode: "BENEFIT_NOT_COVERED"
         }),
         expect.objectContaining({
-          label: "DTR assessment completed",
+          label: "Requested DTR is complete",
           expected: "true",
           actual: "true",
           passed: true,
@@ -100,6 +102,23 @@ describe("provider documentation workflow", () => {
       ])
     );
     expect(executePolicyBoundPaymentMock).toHaveBeenCalledTimes(1);
+    expect(executePolicyBoundPaymentMock.mock.calls[0]?.[0]).toMatchObject({
+      caseId: submitted.caseId,
+      incentiveEvaluationId: submitted.caseId,
+      planId: "acme-health-ppo",
+      amount: 5,
+      currency: "HBAR",
+      walletId: "0.0.9049549"
+    });
+    expect(executePolicyBoundPaymentMock.mock.calls[0]?.[1]).toMatchObject({
+      planPolicy: expect.objectContaining({
+        planId: "acme-health-ppo",
+        businessEvaluationAttestation: true,
+        duplicatePaymentPrevention: true,
+        paymentToken: "HBAR",
+        maxPaymentAmount: 5
+      })
+    });
   });
 
   it("settles the policy payment from a completed DTR questionnaire response with yes and no answers", async () => {
@@ -131,7 +150,7 @@ describe("provider documentation workflow", () => {
       caseId: submitted.caseId,
       incentiveStatus: "paid",
       paymentStatus: "auto_executed",
-      reason: "Complete DTR + PAS before cutoff"
+      reason: "Completed requested DTR"
     });
     expect(executePolicyBoundPaymentMock).toHaveBeenCalledTimes(1);
   });
@@ -151,11 +170,10 @@ describe("provider documentation workflow", () => {
       }
     });
     await policyStore.savePolicy({
-      ...defaultIncentivePolicies.provider_documentation_completeness,
-      paymentFormula: {
-        ...defaultIncentivePolicies.provider_documentation_completeness.paymentFormula,
-        baseAmount: 2,
-        maxPerRequest: 2
+      ...defaultIncentivePolicies.provider_documentation_acme_outpatient,
+      payout: {
+        ...defaultIncentivePolicies.provider_documentation_acme_outpatient.payout,
+        amountPerEligibleRequest: 2
       }
     });
     const second = await workflow.submitPriorAuth({
@@ -177,6 +195,143 @@ describe("provider documentation workflow", () => {
       incentiveValue: 2,
       currency: "HBAR"
     });
+  });
+
+  it("blocks auto-settlement when multiple active policies approve the same PA", async () => {
+    const duplicatePolicy = {
+      ...defaultIncentivePolicies.provider_documentation_acme_outpatient,
+      policyId: "plcy_duplicate_approved_policy",
+      payout: {
+        ...defaultIncentivePolicies.provider_documentation_acme_outpatient.payout,
+        amountPerEligibleRequest: 3
+      }
+    };
+    const policyStore = createInMemoryPolicyStore({
+      provider_documentation_acme_outpatient: defaultIncentivePolicies.provider_documentation_acme_outpatient,
+      duplicatePolicy
+    });
+    const workflow = createProviderDocumentationWorkflow(undefined, undefined, policyStore);
+
+    const submitted = await workflow.submitPriorAuth({
+      requestType: "outpatient_service",
+      serviceCode: "knee_mri",
+      dtr: {
+        symptomDurationConfirmed: true,
+        conservativeTherapyConfirmed: true,
+        examFindingsConfirmed: true,
+        clinicalNoteAttached: true
+      }
+    });
+    const row = await workflow.getIncentiveRow(submitted.caseId);
+
+    expect(row).toMatchObject({
+      incentiveStatus: "not_eligible",
+      paymentStatus: "blocked_by_policy",
+      incentiveValue: 0,
+      reasonCodes: ["MULTIPLE_POLICY_MATCHES"]
+    });
+    expect(executePolicyBoundPaymentMock).not.toHaveBeenCalled();
+  });
+
+  it("marks the incentive as payment failed when Hedera plan controls reject an approved payout above the request max", async () => {
+    executePolicyBoundPaymentMock.mockRejectedValueOnce(new Error("HEDERA_PAYMENT_AMOUNT_EXCEEDS_PLAN_MAX"));
+    const paymentPolicyEvidenceStore = createCapturingPaymentPolicyEvidenceStore();
+
+    const workflow = createProviderDocumentationWorkflow(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      paymentPolicyEvidenceStore
+    );
+    const submitted = await workflow.submitPriorAuth({
+      patientId: "patient-andre-williams",
+      patientDisplay: "Andre Williams",
+      planId: "summit-health-hmo",
+      planDisplay: "Summit Health HMO",
+      requestType: "outpatient_service",
+      serviceCode: "knee_mri",
+      dtr: {
+        symptomDurationConfirmed: true,
+        conservativeTherapyConfirmed: true,
+        examFindingsConfirmed: true,
+        clinicalNoteAttached: true
+      }
+    });
+    const row = await workflow.getIncentiveRow(submitted.caseId);
+
+    expect(row).toMatchObject({
+      policyId: "plcy_9Q3S6V1X8Z2B5D7F0H4K",
+      incentiveStatus: "payment_failed",
+      paymentStatus: "execution_failed",
+      incentiveValue: 20,
+      currency: "HBAR",
+      transactionId: null,
+      reason: "Policy approved, but Hedera transaction execution failed"
+    });
+    expect(executePolicyBoundPaymentMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        planId: "summit-health-hmo",
+        amount: 20,
+        currency: "HBAR",
+        policyId: "plcy_9Q3S6V1X8Z2B5D7F0H4K"
+      }),
+      expect.objectContaining({
+        planPolicy: expect.objectContaining({
+          planId: "summit-health-hmo",
+          maxPaymentAmount: 5
+        })
+      })
+    );
+    expect(paymentPolicyEvidenceStore.saved).toHaveLength(1);
+    expect(paymentPolicyEvidenceStore.saved[0]).toMatchObject({
+      incentiveEvaluationId: submitted.caseId,
+      caseId: submitted.caseId,
+      planId: "summit-health-hmo",
+      paymentPolicyId: "summit-health-hmo",
+      businessPolicyId: "plcy_9Q3S6V1X8Z2B5D7F0H4K",
+      runtime: "hedera-agent-kit-policy",
+      outcome: "blocked",
+      failureCode: "HEDERA_PAYMENT_AMOUNT_EXCEEDS_PLAN_MAX",
+      requestedPayment: {
+        amount: 20,
+        token: "HBAR",
+        recipientWalletId: "0.0.9049549"
+      },
+      controls: expect.arrayContaining([
+        expect.objectContaining({
+          id: "businessEvaluationAttestation",
+          status: "passed"
+        }),
+        expect.objectContaining({
+          id: "paymentToken",
+          status: "passed",
+          expected: "HBAR",
+          actual: "HBAR"
+        }),
+        expect.objectContaining({
+          id: "maxPaymentPerRequest",
+          status: "failed",
+          expected: "<= 5 HBAR",
+          actual: "20 HBAR",
+          failureCode: "HEDERA_PAYMENT_AMOUNT_EXCEEDS_PLAN_MAX"
+        }),
+        expect.objectContaining({
+          id: "duplicatePaymentPrevention",
+          status: "not_run"
+        }),
+        expect.objectContaining({
+          id: "paymentEnvelopeIntegrity",
+          status: "not_run"
+        })
+      ]),
+      paymentIntentId: null,
+      transactionId: null
+    });
+    expect(paymentPolicyEvidenceStore.saved[0]!.controls.map((control) => control.id)).not.toEqual(
+      expect.arrayContaining(["safeTransactionMemo", "testnetOnly"])
+    );
   });
 
   it("persists submitted prior authorizations as PAS FHIR bundles", async () => {
@@ -438,18 +593,11 @@ describe("provider documentation workflow", () => {
     expect(rows[0]!.policyCriteria).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          label: "Service is covered benefit",
+          label: "Request is a covered benefit",
           expected: "true",
           actual: "false",
           passed: false,
-          reasonCode: "SERVICE_NOT_COVERED"
-        }),
-        expect.objectContaining({
-          label: "DTR assessment completed",
-          expected: "true",
-          actual: "false",
-          passed: false,
-          reasonCode: "DTR_TEMPLATE_INCOMPLETE"
+          reasonCode: "BENEFIT_NOT_COVERED"
         })
       ])
     );
@@ -482,10 +630,53 @@ describe("provider documentation workflow", () => {
       expect.arrayContaining([
         expect.objectContaining({
           label: "Request type is eligible",
-          expected: "Outpatient Service or Pharmacy Benefit",
+          expected: "Pharmacy Benefit",
           actual: "Pharmacy Benefit",
           passed: true,
           reasonCode: "REQUEST_TYPE_NOT_ELIGIBLE"
+        })
+      ])
+    );
+    expect(executePolicyBoundPaymentMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("settles Summit Health HMO pharmacy requests through the matching plan and request-type policy", async () => {
+    const workflow = createProviderDocumentationWorkflow();
+
+    await workflow.submitPriorAuth({
+      planId: "summit-health-hmo",
+      requestType: "pharmacy_benefit",
+      serviceCode: "wegovy_semaglutide",
+      dtr: {
+        symptomDurationConfirmed: true,
+        conservativeTherapyConfirmed: true,
+        examFindingsConfirmed: true,
+        clinicalNoteAttached: true
+      }
+    });
+    const rows = await workflow.listIncentiveRows();
+
+    expect(rows[0]).toMatchObject({
+      requestType: "pharmacy_benefit",
+      serviceLabel: "Wegovy (semaglutide) injection",
+      incentiveStatus: "paid",
+      paymentStatus: "auto_executed",
+      policyId: "plcy_5R1T8W3Y6B0D9F2H4K7M",
+      incentiveValue: 5
+    });
+    expect(rows[0]!.policyCriteria).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: "Plan is in the contract pair",
+          expected: "summit-health-hmo",
+          actual: "summit-health-hmo",
+          passed: true
+        }),
+        expect.objectContaining({
+          label: "Request type is eligible",
+          expected: "Pharmacy Benefit",
+          actual: "Pharmacy Benefit",
+          passed: true
         })
       ])
     );
@@ -512,11 +703,9 @@ describe("provider documentation workflow", () => {
       incentiveStatus: "not_eligible",
       paymentStatus: "blocked_by_policy",
       incentiveValue: 0,
-      reason: "Missing required documentation"
+      reason: "Requested DTR incomplete"
     });
-    expect(rows[0]!.reasonCodes).toEqual(
-      expect.arrayContaining(["DTR_TEMPLATE_INCOMPLETE", "ATTACHMENT_CHECKLIST_INCOMPLETE", "FHIR_FIELDS_MISSING"])
-    );
+    expect(rows[0]!.reasonCodes).toEqual(["DTR_TEMPLATE_INCOMPLETE"]);
   });
 
   it("preserves audit metadata across repeated list and get reads", async () => {
@@ -563,6 +752,21 @@ describe("provider documentation workflow", () => {
     expect(executePolicyBoundPaymentMock).toHaveBeenCalledTimes(1);
   });
 });
+
+function createCapturingPaymentPolicyEvidenceStore(): PaymentPolicyEvidenceStore & { saved: PaymentPolicyEvidence[] } {
+  const saved: PaymentPolicyEvidence[] = [];
+
+  return {
+    backend: "firestore",
+    saved,
+    async saveEvidence(evidence) {
+      saved.push(evidence);
+    },
+    async getEvidence(incentiveEvaluationId) {
+      return saved.find((evidence) => evidence.incentiveEvaluationId === incentiveEvaluationId) ?? null;
+    }
+  };
+}
 
 function createCaseIdGenerator(caseIds: string[]): () => string {
   let nextIndex = 0;

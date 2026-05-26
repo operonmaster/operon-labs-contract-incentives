@@ -3,16 +3,8 @@
 import type { IncentiveWorklistRow } from "../../lib/provider-documentation-workflow";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { LabsHero, LabsPageShell } from "../labs-ui";
-import {
-  formatCurrency,
-  formatPaResult,
-  formatPaymentStatus,
-  formatRequestType,
-  formatStatus,
-  PlanAuditDetailsModal,
-  statusClass
-} from "./PlanAuditDetailsModal";
+import { LabsBadge, LabsHero, LabsPageShell } from "../labs-ui";
+import { formatCurrency, formatRequestType, PlanAuditDetailsModal } from "./PlanAuditDetailsModal";
 import { UseCaseNavigation } from "./UseCaseNavigation";
 
 interface IncentiveRowsResponse {
@@ -135,8 +127,6 @@ export function PlanIncentivesConsole({ initialCaseId = null }: { initialCaseId?
           </button>
         </div>
 
-        {initialLoading ? <p className="empty-state">Loading incentive events...</p> : null}
-
         {error ? (
           <p className="error-text" role="alert">
             {error}
@@ -148,48 +138,64 @@ export function PlanIncentivesConsole({ initialCaseId = null }: { initialCaseId?
             <thead>
               <tr>
                 <th>PA ID</th>
+                <th>Health Plan</th>
                 <th>Provider group</th>
                 <th>Request type</th>
-                <th>Service</th>
-                <th>PA result</th>
-                <th>Policy outcome</th>
-                <th>Value</th>
+                <th className="badge-cell">Business Policy</th>
+                <th className="badge-cell">Payment Policy</th>
                 <th>Payment</th>
                 <th>Action</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
-                <tr key={row.caseId} className={row.caseId === selectedCaseId ? "selected" : ""}>
-                  <td className="mono-cell">{row.caseId}</td>
-                  <td>{row.providerGroupDisplay}</td>
-                  <td>{formatRequestType(row.requestType)}</td>
-                  <td>{row.serviceLabel}</td>
-                  <td>{formatPaResult(row.paResult)}</td>
-                  <td>
-                    <span className={`status ${statusClass(row.incentiveStatus)}`}>
-                      {formatStatus(row.incentiveStatus)}
-                    </span>
-                  </td>
-                  <td>{formatCurrency(row)}</td>
-                  <td>{formatPaymentStatus(row)}</td>
-                  <td>
-                    <button
-                      className="row-action"
-                      type="button"
-                      onClick={() => {
-                        setSelectedCaseId(row.caseId);
-                        setDetailsCaseId(row.caseId);
-                      }}
-                    >
-                      View details
-                    </button>
+              {initialLoading ? (
+                <tr className="loading-row">
+                  <td colSpan={8}>
+                    <div className="loading-indicator" role="status" aria-live="polite">
+                      <span className="loading-dot" aria-hidden="true" />
+                      <span>Loading submitted PA events</span>
+                    </div>
                   </td>
                 </tr>
-              ))}
+              ) : null}
+              {rows.map((row) => {
+                const paymentPolicyOutcome = formatPaymentPolicyOutcome(row) || null;
+
+                return (
+                  <tr key={row.caseId} className={row.caseId === selectedCaseId ? "selected" : ""}>
+                    <td className="mono-cell">{row.caseId}</td>
+                    <td>{row.planDisplay ?? row.planId ?? "Unknown plan"}</td>
+                    <td>{row.providerGroupDisplay}</td>
+                    <td>{formatRequestType(row.requestType)}</td>
+                    <td className="badge-cell">
+                      <LabsBadge variant={businessPolicyBadgeVariant(row.incentiveStatus)}>
+                        {formatBusinessPolicyOutcome(row)}
+                      </LabsBadge>
+                    </td>
+                    <td className="badge-cell">
+                      {paymentPolicyOutcome ? (
+                        <LabsBadge variant={paymentPolicyBadgeVariant(row)}>{paymentPolicyOutcome}</LabsBadge>
+                      ) : null}
+                    </td>
+                    <td>{formatPaymentAmount(row)}</td>
+                    <td>
+                      <button
+                        className="row-action"
+                        type="button"
+                        onClick={() => {
+                          setSelectedCaseId(row.caseId);
+                          setDetailsCaseId(row.caseId);
+                        }}
+                      >
+                        View details
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
               {!initialLoading && rows.length === 0 ? (
                 <tr>
-                  <td className="empty-state" colSpan={9}>
+                  <td className="empty-state" colSpan={8}>
                     No submitted PA incentive events yet. Submit a prior authorization from the provider portal.
                   </td>
                 </tr>
@@ -202,4 +208,60 @@ export function PlanIncentivesConsole({ initialCaseId = null }: { initialCaseId?
       {detailsRow ? <PlanAuditDetailsModal row={detailsRow} onClose={() => setDetailsCaseId(null)} /> : null}
     </LabsPageShell>
   );
+}
+
+export function formatBusinessPolicyOutcome(row: IncentiveWorklistRow) {
+  switch (row.incentiveStatus) {
+    case "not_eligible":
+      return "Rejected";
+    case "paid":
+      return "Approved";
+    case "payment_failed":
+      return "Rejected";
+  }
+}
+
+export function formatPaymentPolicyOutcome(row: IncentiveWorklistRow) {
+  if (row.incentiveStatus === "not_eligible") {
+    return "";
+  }
+
+  if (row.paymentStatus === "auto_executed" && row.transactionId) {
+    return "Paid";
+  }
+
+  return "Blocked";
+}
+
+export function formatPaymentAmount(row: IncentiveWorklistRow) {
+  if (row.paymentStatus !== "auto_executed" || !row.transactionId) {
+    return "";
+  }
+
+  return formatCurrency(row);
+}
+
+function businessPolicyBadgeVariant(status: IncentiveWorklistRow["incentiveStatus"]): "success" | "warning" {
+  switch (status) {
+    case "not_eligible":
+      return "warning";
+    case "paid":
+      return "success";
+    case "payment_failed":
+      return "warning";
+  }
+}
+
+function paymentPolicyBadgeVariant(row: IncentiveWorklistRow): "success" | "warning" | "neutral" {
+  const outcome = formatPaymentPolicyOutcome(row);
+
+  if (outcome === "Paid") {
+    return "success";
+  }
+
+  if (outcome === "Blocked") {
+    return "warning";
+  }
+
+  return "neutral";
 }

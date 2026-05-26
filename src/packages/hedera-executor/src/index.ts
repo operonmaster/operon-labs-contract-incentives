@@ -7,6 +7,8 @@ import type { Currency } from "@operon-labs/policy-engine";
 export interface PaymentApprovalRequest {
   auditId: string;
   caseId?: string;
+  incentiveEvaluationId?: string;
+  planId?: string;
   amount: number;
   currency: Currency;
   walletId: string;
@@ -27,6 +29,19 @@ export interface HederaSettlementConfig {
   allowedRecipientAccountIds: string[];
   blockedRecipientAccountIds: string[];
   maxPaymentHbar: number;
+}
+
+export interface HederaAgentPlanPolicy {
+  planId: string;
+  planName: string;
+  status: "active" | "inactive";
+  version: string;
+  businessEvaluationAttestation: boolean;
+  duplicatePaymentPrevention: boolean;
+  maxPaymentPerRequest: boolean;
+  paymentToken: Currency;
+  maxPaymentAmount: number;
+  paymentEnvelopeIntegrity: boolean;
 }
 
 export interface HederaHbarTransferInput {
@@ -51,8 +66,10 @@ export interface HederaAgentKitTransferRunner {
 
 export interface ExecutePolicyBoundPaymentOptions {
   config?: HederaSettlementConfig;
+  planPolicy?: HederaAgentPlanPolicy;
   runner?: HederaAgentKitTransferRunner;
   paymentIntentStore?: PaymentIntentStore;
+  businessEvaluationStore?: BusinessEvaluationAttestationStore;
 }
 
 export interface PaymentExecutionResult {
@@ -71,6 +88,8 @@ export interface PaymentIntent {
   id: string;
   auditId: string;
   caseId?: string;
+  incentiveEvaluationId?: string;
+  planId?: string;
   policyId?: string;
   policyVersion?: string;
   triggerEvent?: string;
@@ -102,7 +121,34 @@ export interface PaymentIntentStore {
 export interface HederaExecutionPolicyContext {
   paymentIntent: PaymentIntent;
   paymentIntentStore?: PaymentIntentStore;
+  planPolicy?: HederaAgentPlanPolicy;
+  businessEvaluationAttestation?: BusinessEvaluationAttestation;
 }
+
+export interface BusinessEvaluationAttestationLookup {
+  incentiveEvaluationId: string;
+  caseId?: string;
+  planId: string;
+  policyId?: string;
+}
+
+export interface BusinessEvaluationAttestation {
+  incentiveEvaluationId: string;
+  caseId: string;
+  planId: string;
+  businessPolicyId: string;
+  businessPolicyVersion?: string;
+  businessPolicyStatus: "active" | "inactive" | "missing";
+  amount: number;
+  currency: Currency;
+  walletId: string;
+}
+
+/* eslint-disable no-unused-vars -- TypeScript interface method signatures require parameter names. */
+export interface BusinessEvaluationAttestationStore {
+  getAttestation(lookup: BusinessEvaluationAttestationLookup): Promise<BusinessEvaluationAttestation | null>;
+}
+/* eslint-enable no-unused-vars */
 
 export const hederaAgentKitPolicyRuntime = {
   packageName: "@hashgraph/hedera-agent-kit",
@@ -143,9 +189,6 @@ export function createHederaSettlementConfigFromEnv(
     if (!operatorPrivateKey) {
       throw new Error("HEDERA_OPERATOR_PRIVATE_KEY_REQUIRED");
     }
-    if (allowedRecipientAccountIds.length === 0) {
-      throw new Error("HEDERA_ALLOWED_RECIPIENT_ACCOUNT_IDS_REQUIRED");
-    }
   }
 
   return {
@@ -164,7 +207,8 @@ export async function executePolicyBoundPayment(
   options: ExecutePolicyBoundPaymentOptions = {}
 ): Promise<PaymentExecutionResult> {
   const config = options.config ?? createHederaSettlementConfigFromEnv();
-  validatePolicyBoundPayment(request, config);
+  validatePolicyBoundPayment(request, config, options.planPolicy);
+  const businessEvaluationAttestation = await loadBusinessEvaluationAttestation(request, options);
 
   if (config.mode === "simulated") {
     const transactionId = `testnet-${request.auditId}-${request.currency.toLowerCase()}-${Date.now()}`;
@@ -193,18 +237,26 @@ export async function executePolicyBoundPayment(
     transactionMemo
   };
 
-  try {
-    transfer = options.paymentIntentStore
-      ? await runner.runHbarTransfer(transferInput, config, {
+  const executionPolicyContext =
+    options.paymentIntentStore || options.planPolicy || businessEvaluationAttestation
+      ? {
           paymentIntent,
-          paymentIntentStore: options.paymentIntentStore
-        })
+          paymentIntentStore: options.paymentIntentStore,
+          planPolicy: options.planPolicy,
+          businessEvaluationAttestation
+        }
+      : undefined;
+
+  try {
+    transfer = executionPolicyContext
+      ? await runner.runHbarTransfer(transferInput, config, executionPolicyContext)
       : await runner.runHbarTransfer(transferInput, config);
-    await options.paymentIntentStore?.markIntentSubmitted(paymentIntent.id, transfer.transactionId);
   } catch (error) {
     await options.paymentIntentStore?.markIntentFailed(paymentIntent.id, toErrorCode(error));
     throw error;
   }
+
+  await options.paymentIntentStore?.markIntentSubmitted(paymentIntent.id, transfer.transactionId).catch(() => undefined);
 
   return {
     status: "submitted",
@@ -220,12 +272,20 @@ export async function executePolicyBoundPayment(
 export const executeApprovedPayment = executePolicyBoundPayment;
 
 export function buildHederaTransactionMemo(request: PaymentApprovalRequest): string {
-  const caseOrAudit = sanitizeMemoPart(request.caseId ?? request.auditId);
-  const policyId = sanitizeMemoPart(request.policyId ?? "policy");
-  const event = sanitizeMemoPart(request.triggerEvent ?? "event");
-  const memo = `olabs|case:${caseOrAudit}|policy:${policyId}|event:${event}`;
+  const memo = request.incentiveEvaluationId?.trim();
+  if (!memo) {
+    throw new Error("INCENTIVE_EVALUATION_ID_REQUIRED");
+  }
 
-  return memo.length > HEDERA_TRANSACTION_MEMO_LIMIT ? memo.slice(0, HEDERA_TRANSACTION_MEMO_LIMIT) : memo;
+  if (memo.length > HEDERA_TRANSACTION_MEMO_LIMIT) {
+    throw new Error("HEDERA_TRANSACTION_MEMO_TOO_LONG");
+  }
+
+  if (sanitizeMemoPart(memo) !== memo) {
+    throw new Error("HEDERA_TRANSACTION_MEMO_INVALID");
+  }
+
+  return memo;
 }
 
 export function buildPaymentIntent(
@@ -239,6 +299,8 @@ export function buildPaymentIntent(
     id: buildPaymentIntentId(request),
     auditId: request.auditId,
     caseId: request.caseId,
+    incentiveEvaluationId: request.incentiveEvaluationId,
+    planId: request.planId,
     policyId: request.policyId,
     policyVersion: request.policyVersion,
     triggerEvent: request.triggerEvent,
@@ -256,9 +318,9 @@ export function buildPaymentIntent(
 
 export function buildPaymentIntentId(request: PaymentApprovalRequest): string {
   const raw = [
-    request.caseId ?? request.auditId,
+    request.planId ?? "plan",
+    request.incentiveEvaluationId ?? request.caseId ?? request.auditId,
     request.policyId ?? "policy",
-    request.triggerEvent ?? "event",
     request.currency
   ].join("|");
 
@@ -306,7 +368,7 @@ export function createInMemoryPaymentIntentStore(): PaymentIntentStore {
     },
     async markIntentFailed(intentId) {
       const existing = intents.get(intentId);
-      if (!existing) {
+      if (!existing || existing.status === "submitted") {
         return;
       }
 
@@ -320,7 +382,11 @@ export function createInMemoryPaymentIntentStore(): PaymentIntentStore {
   };
 }
 
-function validatePolicyBoundPayment(request: PaymentApprovalRequest, config: HederaSettlementConfig): void {
+function validatePolicyBoundPayment(
+  request: PaymentApprovalRequest,
+  config: HederaSettlementConfig,
+  planPolicy?: HederaAgentPlanPolicy
+): void {
   if (request.currency !== "HBAR") {
     throw new Error("HEDERA_TOKEN_TRANSFER_NOT_IMPLEMENTED");
   }
@@ -329,7 +395,23 @@ function validatePolicyBoundPayment(request: PaymentApprovalRequest, config: Hed
     throw new Error("INVALID_HEDERA_PAYMENT_AMOUNT");
   }
 
-  if (request.amount > config.maxPaymentHbar) {
+  if (planPolicy) {
+    if (planPolicy.status !== "active") {
+      throw new Error("HEDERA_PLAN_POLICY_INACTIVE");
+    }
+
+    if (request.planId && request.planId !== planPolicy.planId) {
+      throw new Error("HEDERA_PLAN_POLICY_MISMATCH");
+    }
+
+    if (request.currency !== planPolicy.paymentToken) {
+      throw new Error("HEDERA_PAYMENT_TOKEN_NOT_ALLOWED");
+    }
+
+    if (planPolicy.maxPaymentPerRequest && request.amount > planPolicy.maxPaymentAmount) {
+      throw new Error("HEDERA_PAYMENT_AMOUNT_EXCEEDS_PLAN_MAX");
+    }
+  } else if (request.amount > config.maxPaymentHbar) {
     throw new Error("HEDERA_PAYMENT_AMOUNT_EXCEEDS_MAX");
   }
 
@@ -338,6 +420,72 @@ function validatePolicyBoundPayment(request: PaymentApprovalRequest, config: Hed
   }
 
   validateRecipientTrust(request.walletId, config);
+}
+
+async function loadBusinessEvaluationAttestation(
+  request: PaymentApprovalRequest,
+  options: ExecutePolicyBoundPaymentOptions
+): Promise<BusinessEvaluationAttestation | undefined> {
+  const planPolicy = options.planPolicy;
+  if (!planPolicy?.businessEvaluationAttestation) {
+    return undefined;
+  }
+
+  const incentiveEvaluationId = request.incentiveEvaluationId ?? request.caseId;
+  if (!incentiveEvaluationId) {
+    throw new Error("INCENTIVE_EVALUATION_ID_REQUIRED");
+  }
+
+  if (!options.businessEvaluationStore) {
+    throw new Error("BUSINESS_EVALUATION_ATTESTATION_STORE_REQUIRED");
+  }
+
+  const attestation = await options.businessEvaluationStore.getAttestation({
+    incentiveEvaluationId,
+    caseId: request.caseId,
+    planId: planPolicy.planId,
+    policyId: request.policyId
+  });
+  if (!attestation) {
+    throw new Error("BUSINESS_EVALUATION_ATTESTATION_NOT_FOUND");
+  }
+
+  validateBusinessEvaluationAttestation(request, planPolicy, attestation);
+  return attestation;
+}
+
+function validateBusinessEvaluationAttestation(
+  request: PaymentApprovalRequest,
+  planPolicy: HederaAgentPlanPolicy,
+  attestation: BusinessEvaluationAttestation
+): void {
+  if (attestation.planId !== planPolicy.planId) {
+    throw new Error("BUSINESS_EVALUATION_PLAN_MISMATCH");
+  }
+
+  if (request.caseId && attestation.caseId !== request.caseId) {
+    throw new Error("BUSINESS_EVALUATION_CASE_MISMATCH");
+  }
+
+  if (request.policyId && attestation.businessPolicyId !== request.policyId) {
+    throw new Error("BUSINESS_EVALUATION_POLICY_MISMATCH");
+  }
+
+  if (attestation.businessPolicyStatus !== "active") {
+    throw new Error("BUSINESS_POLICY_NOT_ACTIVE");
+  }
+
+  if (attestation.amount !== request.amount) {
+    throw new Error("BUSINESS_EVALUATION_AMOUNT_MISMATCH");
+  }
+
+  if (attestation.currency !== request.currency) {
+    throw new Error("BUSINESS_EVALUATION_TOKEN_MISMATCH");
+  }
+
+  if (attestation.walletId !== request.walletId) {
+    throw new Error("BUSINESS_EVALUATION_WALLET_MISMATCH");
+  }
 }
 
 class DefaultHederaAgentKitTransferRunner implements HederaAgentKitTransferRunner {
@@ -352,7 +500,16 @@ class DefaultHederaAgentKitTransferRunner implements HederaAgentKitTransferRunne
     const context: Context = {
       accountId: operatorAccountId,
       mode: AgentMode.AUTONOMOUS,
-      hooks: [new PolicyBoundHbarTransferHook(input, config, policyContext?.paymentIntent, policyContext?.paymentIntentStore)]
+      hooks: [
+        new PolicyBoundHbarTransferHook(
+          input,
+          config,
+          policyContext?.paymentIntent,
+          policyContext?.paymentIntentStore,
+          policyContext?.planPolicy,
+          policyContext?.businessEvaluationAttestation
+        )
+      ]
     };
     const transferTool = coreAccountPlugin.tools(context).find((tool) => tool.method === TRANSFER_HBAR_TOOL);
     if (!transferTool) {
@@ -383,7 +540,9 @@ export class PolicyBoundHbarTransferHook extends AbstractHook {
     private readonly expected: HederaHbarTransferInput,
     private readonly config: HederaSettlementConfig,
     private readonly paymentIntent?: PaymentIntent,
-    private readonly paymentIntentStore?: PaymentIntentStore
+    private readonly paymentIntentStore?: PaymentIntentStore,
+    private readonly planPolicy?: HederaAgentPlanPolicy,
+    private readonly businessEvaluationAttestation?: BusinessEvaluationAttestation
   ) {
     super();
   }
@@ -418,7 +577,11 @@ export class PolicyBoundHbarTransferHook extends AbstractHook {
       throw new Error("HEDERA_POLICY_RECIPIENT_MISMATCH");
     }
 
-    if (Number(transfer.amount) > this.config.maxPaymentHbar) {
+    if (this.planPolicy?.maxPaymentPerRequest && Number(transfer.amount) > this.planPolicy.maxPaymentAmount) {
+      throw new Error("HEDERA_PAYMENT_AMOUNT_EXCEEDS_PLAN_MAX");
+    }
+
+    if (!this.planPolicy && Number(transfer.amount) > this.config.maxPaymentHbar) {
       throw new Error("HEDERA_PAYMENT_AMOUNT_EXCEEDS_MAX");
     }
 
@@ -430,7 +593,22 @@ export class PolicyBoundHbarTransferHook extends AbstractHook {
       throw new Error("HEDERA_POLICY_MEMO_MISMATCH");
     }
 
-    if (this.paymentIntent && this.paymentIntentStore && !this.reservationAttempted) {
+    if (this.businessEvaluationAttestation) {
+      if (transfer?.accountId !== this.businessEvaluationAttestation.walletId) {
+        throw new Error("BUSINESS_EVALUATION_WALLET_MISMATCH");
+      }
+
+      if (Number(transfer.amount) !== this.businessEvaluationAttestation.amount) {
+        throw new Error("BUSINESS_EVALUATION_AMOUNT_MISMATCH");
+      }
+    }
+
+    if (
+      this.paymentIntent &&
+      this.paymentIntentStore &&
+      this.planPolicy?.duplicatePaymentPrevention !== false &&
+      !this.reservationAttempted
+    ) {
       this.reservationAttempted = true;
       const reservation = await this.paymentIntentStore.reserveIntent(this.paymentIntent);
       if (!reservation.allowed) {

@@ -97,6 +97,8 @@ describe("provider documentation API routes", () => {
       new Request("http://localhost/api/um/prior-auths", {
         method: "POST",
         body: JSON.stringify({
+          patientId: "patient-maya-chen",
+          planId: "acme-health-ppo",
           requestType: "outpatient_service",
           serviceCode: "knee_mri",
           dtr: {
@@ -126,23 +128,52 @@ describe("provider documentation API routes", () => {
     const submittedResponse = await submitPriorAuth(
       new Request("http://localhost/api/um/prior-auths", {
         method: "POST",
-        body: JSON.stringify({ requestType: "outpatient_service", serviceCode: "knee_mri" })
+        body: JSON.stringify({
+          patientId: "patient-andre-williams",
+          planId: "summit-health-hmo",
+          requestType: "outpatient_service",
+          serviceCode: "knee_mri"
+        })
       })
     );
-    const submitted = (await submittedResponse.json()) as { dtr: unknown; paResult: string };
+    const submitted = (await submittedResponse.json()) as { dtr: unknown; paResult: string; patientId: string; planId: string };
 
     expect(submittedResponse.status).toBe(200);
     expect(submitted).toMatchObject({
+      patientId: "patient-andre-williams",
+      planId: "summit-health-hmo",
       paResult: "submitted_pending",
       dtr: null
     });
+  });
+
+  it("rejects a prior auth submission when the selected plan is not tied to the selected patient", async () => {
+    const response = await submitPriorAuth(
+      new Request("http://localhost/api/um/prior-auths", {
+        method: "POST",
+        body: JSON.stringify({
+          patientId: "patient-maya-chen",
+          planId: "summit-health-hmo",
+          requestType: "outpatient_service",
+          serviceCode: "knee_mri"
+        })
+      })
+    );
+
+    await expect(response.json()).resolves.toEqual({ error: "INVALID_PATIENT_PLAN_SELECTION" });
+    expect(response.status).toBe(400);
   });
 
   it("lists submitted prior authorizations through the async API read path", async () => {
     const submittedResponse = await submitPriorAuth(
       new Request("http://localhost/api/um/prior-auths", {
         method: "POST",
-        body: JSON.stringify({ requestType: "outpatient_service", serviceCode: "knee_mri" })
+        body: JSON.stringify({
+          patientId: "patient-maya-chen",
+          planId: "acme-health-ppo",
+          requestType: "outpatient_service",
+          serviceCode: "knee_mri"
+        })
       })
     );
     const submitted = (await submittedResponse.json()) as { caseId: string };
@@ -166,6 +197,8 @@ describe("provider documentation API routes", () => {
       new Request("http://localhost/api/um/prior-auths", {
         method: "POST",
         body: JSON.stringify({
+          patientId: "patient-maya-chen",
+          planId: "acme-health-ppo",
           requestType: "outpatient_service",
           serviceCode: "knee_mri",
           dtr: {

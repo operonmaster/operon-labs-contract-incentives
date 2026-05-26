@@ -1,5 +1,8 @@
 import type { ReactNode } from "react";
 
+export { LabsSelect } from "./LabsSelect";
+export type { LabsSelectOption } from "./LabsSelect";
+
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
@@ -46,6 +49,18 @@ export function LabsPanel({
   className?: string;
 }>) {
   return <section className={cx("panel", "op-panel", className)}>{children}</section>;
+}
+
+export function LabsBadge({
+  children,
+  className,
+  variant = "neutral"
+}: Readonly<{
+  children: ReactNode;
+  className?: string;
+  variant?: "success" | "warning" | "info" | "neutral";
+}>) {
+  return <span className={cx("op-badge", `op-badge-${variant}`, className)}>{children}</span>;
 }
 
 export function LabsProductFrame({

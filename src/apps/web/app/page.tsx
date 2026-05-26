@@ -19,6 +19,7 @@ export default function HomePage() {
               <span className="eyebrow">{scenario.submitter}</span>
               <h2>{scenario.title}</h2>
               <p>{scenario.purpose}</p>
+              {scenario.status === "dormant" ? <em>Dormant</em> : null}
             </Link>
           ))}
         </section>

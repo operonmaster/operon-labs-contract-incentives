@@ -2,15 +2,18 @@ import type { IncentivePolicy } from "@operon-labs/policy-engine";
 import type { FirestoreDatabase } from "./pas-persistence";
 
 export type PolicyStoreBackend = "firestore" | "memory";
-export type PolicyStatus = "active" | "inactive";
 
-export interface StoredIncentivePolicy {
+export interface StoredIncentivePolicy extends IncentivePolicy {
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+export interface PolicyLookup {
   evaluationType: string;
-  policyId: string;
-  status: PolicyStatus;
-  policy: IncentivePolicy;
-  updatedAt: string;
-  updatedBy: string;
+  planId: string;
+  providerId: string;
+  requestType?: string;
+  submittedAt?: string;
 }
 
 /* eslint-disable no-unused-vars -- TypeScript interface method signatures require parameter names. */
@@ -18,7 +21,11 @@ export interface PolicyStore {
   backend: PolicyStoreBackend;
   seedDefaults(): Promise<void>;
   getPolicy(evaluationType: string): Promise<IncentivePolicy | null>;
-  savePolicy(policy: IncentivePolicy, metadata?: Partial<Omit<StoredIncentivePolicy, "policy">>): Promise<void>;
+  getPolicyById(policyId: string): Promise<IncentivePolicy | null>;
+  findPolicy(lookup: PolicyLookup): Promise<IncentivePolicy | null>;
+  findPolicies(lookup: PolicyLookup): Promise<IncentivePolicy[]>;
+  listPolicies(evaluationType?: string): Promise<IncentivePolicy[]>;
+  savePolicy(policy: IncentivePolicy, metadata?: Partial<Pick<StoredIncentivePolicy, "updatedAt" | "updatedBy">>): Promise<void>;
 }
 /* eslint-enable no-unused-vars */
 
@@ -35,151 +42,81 @@ interface FirestoreConfig {
   databaseId: string;
 }
 
+interface LoadedFirestoreDocument {
+  id: string;
+  value: unknown;
+}
+
+type LegacyWrappedPolicy = {
+  evaluationType?: string;
+  policyId?: string;
+  status?: string;
+  policy?: {
+    evaluationType?: string;
+    paymentFormula?: {
+      baseAmount?: number;
+      monthlyCap?: number;
+      token?: {
+        symbol?: string;
+      };
+    };
+    submitterRules?: {
+      walletMap?: Record<string, string>;
+    };
+    requiresHumanApproval?: boolean;
+  };
+};
+
 const DEFAULT_POLICY_STORE_BACKEND = "firestore";
 const DEFAULT_GCP_PROJECT_ID = "operon-labs-nonprod";
 const DEFAULT_FIRESTORE_DATABASE_ID = "(default)";
 const INCENTIVE_POLICIES_COLLECTION = "incentivePolicies";
 const POLICY_SEED_ACTOR = "operon-labs-contract-incentives";
+const PROVIDER_ID = "lakeside-provider-admin";
+const PROVIDER_WALLET_ID = "0.0.9049549";
 
 export const defaultIncentivePolicies: Record<string, IncentivePolicy> = {
-  delegate_um_sla_bonus: {
-    id: "delegate-um-sla-bonus-v1",
-    evaluationType: "delegate_um_sla_bonus",
-    submitterRules: {
-      allowedSubmitterTypes: ["delegate_vendor"],
-      allowedSubmitters: ["northstar-um"],
-      walletMap: {
-        "northstar-um": "0.0.12345"
-      }
+  provider_documentation_acme_outpatient: providerDocumentationPolicy({
+    policyId: "plcy_8K2M4Q6R9T1V3X5Z7B0C",
+    planId: "acme-health-ppo",
+    planDisplay: "Acme Health PPO",
+    requestType: "outpatient_service",
+    includedServiceCodes: {
+      cpt: ["73721"],
+      ndc: []
+    }
+  }),
+  provider_documentation_acme_pharmacy: providerDocumentationPolicy({
+    policyId: "plcy_2N7P5R8T0V4X6Z1B3D9F",
+    planId: "acme-health-ppo",
+    planDisplay: "Acme Health PPO",
+    requestType: "pharmacy_benefit",
+    includedServiceCodes: {
+      cpt: [],
+      ndc: ["0169-4525-14", "0074-0554-02"]
+    }
+  }),
+  provider_documentation_summit_outpatient: providerDocumentationPolicy({
+    policyId: "plcy_9Q3S6V1X8Z2B5D7F0H4K",
+    planId: "summit-health-hmo",
+    planDisplay: "Summit Health HMO",
+    requestType: "outpatient_service",
+    includedServiceCodes: {
+      cpt: ["73721"],
+      ndc: []
     },
-    requiredEvidence: ["caseId", "completedWithinSla", "documentationComplete", "qualityAuditPassed", "denialOutcomeUsed", "containsPhi"],
-    approvalRules: [
-      { field: "completedWithinSla", operator: "equals", value: true, reasonCode: "SLA_NOT_MET" },
-      { field: "documentationComplete", operator: "equals", value: true, reasonCode: "DOCUMENTATION_INCOMPLETE" },
-      { field: "qualityAuditPassed", operator: "equals", value: true, reasonCode: "QUALITY_AUDIT_FAILED" },
-      { field: "denialOutcomeUsed", operator: "equals", value: false, reasonCode: "PROHIBITED_DENIAL_METRIC" },
-      { field: "containsPhi", operator: "equals", value: false, reasonCode: "PHI_BLOCKED" }
-    ],
-    paymentFormula: { baseAmount: 5, maxPerRequest: 5, monthlyCap: 500, token: { symbol: "HBAR" } },
-    requiresHumanApproval: false
-  },
-  provider_documentation_completeness: {
-    id: "provider-documentation-completeness-v1",
-    evaluationType: "provider_documentation_completeness",
-    submitterRules: {
-      allowedSubmitterTypes: ["provider_admin_team"],
-      allowedSubmitters: ["lakeside-provider-admin"],
-      walletMap: {
-        "lakeside-provider-admin": "0.0.9049549"
-      }
-    },
-    requiredEvidence: [
-      "caseId",
-      "requestType",
-      "crdCoverageChecked",
-      "crdCoveredBenefit",
-      "dtrTemplateCompleted",
-      "attachmentChecklistComplete",
-      "fhirFieldsPresent",
-      "pasSubmitted",
-      "submittedBeforeInitialDecision",
-      "paResultUsedForPositivePayment",
-      "approvalOutcomeUsed",
-      "referralVolumeMetricUsed",
-      "containsPhi"
-    ],
-    approvalRules: [
-      {
-        field: "requestType",
-        operator: "in",
-        value: ["outpatient_service", "pharmacy_benefit"],
-        reasonCode: "REQUEST_TYPE_NOT_ELIGIBLE"
-      },
-      { field: "crdCoverageChecked", operator: "equals", value: true, reasonCode: "CRD_COVERAGE_NOT_CHECKED" },
-      { field: "crdCoveredBenefit", operator: "equals", value: true, reasonCode: "SERVICE_NOT_COVERED" },
-      { field: "dtrTemplateCompleted", operator: "equals", value: true, reasonCode: "DTR_TEMPLATE_INCOMPLETE" },
-      { field: "attachmentChecklistComplete", operator: "equals", value: true, reasonCode: "ATTACHMENT_CHECKLIST_INCOMPLETE" },
-      { field: "fhirFieldsPresent", operator: "equals", value: true, reasonCode: "FHIR_FIELDS_MISSING" },
-      { field: "pasSubmitted", operator: "equals", value: true, reasonCode: "PAS_NOT_SUBMITTED" },
-      { field: "submittedBeforeInitialDecision", operator: "equals", value: true, reasonCode: "SUBMITTED_AFTER_INITIAL_DECISION" },
-      { field: "paResultUsedForPositivePayment", operator: "equals", value: false, reasonCode: "PROHIBITED_PA_RESULT_METRIC" },
-      { field: "approvalOutcomeUsed", operator: "equals", value: false, reasonCode: "PROHIBITED_OUTCOME_METRIC" },
-      { field: "referralVolumeMetricUsed", operator: "equals", value: false, reasonCode: "PROHIBITED_REFERRAL_VOLUME_METRIC" },
-      { field: "containsPhi", operator: "equals", value: false, reasonCode: "PHI_BLOCKED" }
-    ],
-    paymentFormula: { baseAmount: 5, maxPerRequest: 5, monthlyCap: 500, token: { symbol: "HBAR" } },
-    requiresHumanApproval: false
-  },
-  appeals_packet_quality: {
-    id: "appeals-packet-quality-v1",
-    evaluationType: "appeals_packet_quality",
-    submitterRules: {
-      allowedSubmitterTypes: ["appeals_delegate"],
-      allowedSubmitters: ["summit-appeals-ops"],
-      walletMap: {
-        "summit-appeals-ops": "0.0.54321"
-      }
-    },
-    requiredEvidence: [
-      "appealId",
-      "packetSubmittedWithinSla",
-      "requiredDocumentsPresent",
-      "clinicalRationaleIncluded",
-      "policyCitationIncluded",
-      "evidenceIndexComplete",
-      "qualityAuditPassed",
-      "appealOutcomeUsed",
-      "costSavingsMetricUsed",
-      "containsPhi"
-    ],
-    approvalRules: [
-      { field: "packetSubmittedWithinSla", operator: "equals", value: true, reasonCode: "SLA_NOT_MET" },
-      { field: "requiredDocumentsPresent", operator: "equals", value: true, reasonCode: "REQUIRED_DOCUMENTS_MISSING" },
-      { field: "clinicalRationaleIncluded", operator: "equals", value: true, reasonCode: "CLINICAL_RATIONALE_MISSING" },
-      { field: "policyCitationIncluded", operator: "equals", value: true, reasonCode: "POLICY_CITATION_MISSING" },
-      { field: "evidenceIndexComplete", operator: "equals", value: true, reasonCode: "EVIDENCE_INDEX_INCOMPLETE" },
-      { field: "qualityAuditPassed", operator: "equals", value: true, reasonCode: "QUALITY_AUDIT_FAILED" },
-      { field: "appealOutcomeUsed", operator: "equals", value: false, reasonCode: "PROHIBITED_APPEAL_OUTCOME_METRIC" },
-      { field: "costSavingsMetricUsed", operator: "equals", value: false, reasonCode: "PROHIBITED_COST_SAVINGS_METRIC" },
-      { field: "containsPhi", operator: "equals", value: false, reasonCode: "PHI_BLOCKED" }
-    ],
-    paymentFormula: { baseAmount: 5, maxPerRequest: 5, monthlyCap: 500, token: { symbol: "HBAR" } },
-    requiresHumanApproval: true
-  },
-  provider_directory_quality: {
-    id: "provider-directory-quality-v1",
-    evaluationType: "provider_directory_quality",
-    submitterRules: {
-      allowedSubmitterTypes: ["roster_vendor"],
-      allowedSubmitters: ["clearpath-rosters"],
-      walletMap: {
-        "clearpath-rosters": "0.0.34567"
-      }
-    },
-    requiredEvidence: [
-      "rosterBatchId",
-      "submittedBeforeDeadline",
-      "npiValidationPassed",
-      "tinValidationPassed",
-      "addressValidationPassed",
-      "specialtyValidationPassed",
-      "referralVolumeMetricUsed",
-      "networkSteeringMetricUsed",
-      "containsPhi"
-    ],
-    approvalRules: [
-      { field: "submittedBeforeDeadline", operator: "equals", value: true, reasonCode: "MONTHLY_DEADLINE_MISSED" },
-      { field: "npiValidationPassed", operator: "equals", value: true, reasonCode: "NPI_VALIDATION_FAILED" },
-      { field: "tinValidationPassed", operator: "equals", value: true, reasonCode: "TIN_VALIDATION_FAILED" },
-      { field: "addressValidationPassed", operator: "equals", value: true, reasonCode: "ADDRESS_VALIDATION_FAILED" },
-      { field: "specialtyValidationPassed", operator: "equals", value: true, reasonCode: "SPECIALTY_VALIDATION_FAILED" },
-      { field: "referralVolumeMetricUsed", operator: "equals", value: false, reasonCode: "PROHIBITED_REFERRAL_VOLUME_METRIC" },
-      { field: "networkSteeringMetricUsed", operator: "equals", value: false, reasonCode: "PROHIBITED_STEERING_METRIC" },
-      { field: "containsPhi", operator: "equals", value: false, reasonCode: "PHI_BLOCKED" }
-    ],
-    paymentFormula: { baseAmount: 5, maxPerRequest: 5, monthlyCap: 500, token: { symbol: "HBAR" } },
-    requiresHumanApproval: true
-  }
+    amountPerEligibleRequest: 20
+  }),
+  provider_documentation_summit_pharmacy: providerDocumentationPolicy({
+    policyId: "plcy_5R1T8W3Y6B0D9F2H4K7M",
+    planId: "summit-health-hmo",
+    planDisplay: "Summit Health HMO",
+    requestType: "pharmacy_benefit",
+    includedServiceCodes: {
+      cpt: [],
+      ndc: ["0169-4525-14", "0074-0554-02"]
+    }
+  })
 };
 
 export function createPolicyStoreFromEnv(env: PolicyStoreEnv = process.env): PolicyStore {
@@ -213,25 +150,48 @@ class InMemoryPolicyStore implements PolicyStore {
 
   constructor(policies: Record<string, IncentivePolicy>) {
     for (const policy of Object.values(policies)) {
-      this.policies.set(policy.evaluationType, copyPolicy(policy));
+      this.policies.set(policy.policyId, copyPolicy(policy));
     }
   }
 
   async seedDefaults(): Promise<void> {
     for (const policy of Object.values(defaultIncentivePolicies)) {
-      if (!this.policies.has(policy.evaluationType)) {
-        this.policies.set(policy.evaluationType, copyPolicy(policy));
+      if (!this.policies.has(policy.policyId)) {
+        this.policies.set(policy.policyId, copyPolicy(policy));
       }
     }
   }
 
   async getPolicy(evaluationType: string): Promise<IncentivePolicy | null> {
-    const policy = this.policies.get(evaluationType);
+    return (await this.listPolicies(evaluationType))[0] ?? null;
+  }
+
+  async getPolicyById(policyId: string): Promise<IncentivePolicy | null> {
+    await this.seedDefaults();
+    const policy = this.policies.get(policyId);
     return policy ? copyPolicy(policy) : null;
   }
 
+  async findPolicy(lookup: PolicyLookup): Promise<IncentivePolicy | null> {
+    return (await this.findPolicies(lookup))[0] ?? null;
+  }
+
+  async findPolicies(lookup: PolicyLookup): Promise<IncentivePolicy[]> {
+    const policies = await this.listPolicies(lookup.evaluationType);
+    return policies.filter((policy) => matchesLookup(policy, lookup)).sort(comparePolicies).map(copyPolicy);
+  }
+
+  async listPolicies(evaluationType?: string): Promise<IncentivePolicy[]> {
+    await this.seedDefaults();
+    return [...this.policies.values()]
+      .filter((policy) => policy.status === "active")
+      .filter((policy) => !evaluationType || policy.evaluationType === evaluationType)
+      .sort(comparePolicies)
+      .map(copyPolicy);
+  }
+
   async savePolicy(policy: IncentivePolicy): Promise<void> {
-    this.policies.set(policy.evaluationType, copyPolicy(policy));
+    this.policies.set(policy.policyId, copyPolicy(policy));
   }
 }
 
@@ -253,46 +213,76 @@ class FirestorePolicyStore implements PolicyStore {
     const firestore = await this.getFirestore();
     const updatedAt = new Date().toISOString();
     await Promise.all(
-      Object.values(defaultIncentivePolicies).map((policy) =>
-        firestore.collection(INCENTIVE_POLICIES_COLLECTION).doc(policy.evaluationType).set({
-          evaluationType: policy.evaluationType,
-          policyId: policy.id,
-          status: "active",
-          policy: copyPolicy(policy),
+      Object.values(defaultIncentivePolicies).map(async (policy) => {
+        const ref = firestore.collection(INCENTIVE_POLICIES_COLLECTION).doc(policy.policyId);
+        const existing = await ref.get();
+        if (existing.exists) {
+          return;
+        }
+
+        await ref.set({
+          ...copyPolicy(policy),
           updatedAt,
           updatedBy: POLICY_SEED_ACTOR
-        } satisfies StoredIncentivePolicy)
-      )
+        } satisfies StoredIncentivePolicy);
+      })
     );
     this.seeded = true;
   }
 
   async getPolicy(evaluationType: string): Promise<IncentivePolicy | null> {
-    await this.ensureSeeded();
-    const snapshot = await (await this.getFirestore()).collection(INCENTIVE_POLICIES_COLLECTION).doc(evaluationType).get();
+    return (await this.listPolicies(evaluationType))[0] ?? null;
+  }
 
+  async getPolicyById(policyId: string): Promise<IncentivePolicy | null> {
+    await this.ensureSeeded();
+    const snapshot = await (await this.getFirestore()).collection(INCENTIVE_POLICIES_COLLECTION).doc(policyId).get();
     if (!snapshot.exists) {
       return null;
     }
 
-    const stored = snapshot.data() as StoredIncentivePolicy;
-    if (stored.status !== "active" || !stored.policy) {
+    const normalized = normalizeStoredPolicy(snapshot.data());
+    if (!normalized.policy) {
       return null;
     }
 
-    return copyPolicy(stored.policy);
+    if (normalized.rewrite) {
+      await this.savePolicy(normalized.policy, {
+        updatedBy: `${POLICY_SEED_ACTOR}-migration`
+      });
+    }
+
+    return copyPolicy(normalized.policy);
   }
 
-  async savePolicy(policy: IncentivePolicy, metadata: Partial<Omit<StoredIncentivePolicy, "policy">> = {}): Promise<void> {
+  async findPolicy(lookup: PolicyLookup): Promise<IncentivePolicy | null> {
+    return (await this.findPolicies(lookup))[0] ?? null;
+  }
+
+  async findPolicies(lookup: PolicyLookup): Promise<IncentivePolicy[]> {
+    const policies = await this.listPolicies(lookup.evaluationType);
+    return policies.filter((policy) => matchesLookup(policy, lookup)).sort(comparePolicies).map(copyPolicy);
+  }
+
+  async listPolicies(evaluationType?: string): Promise<IncentivePolicy[]> {
+    await this.ensureSeeded();
+    const docs = await this.loadDocuments();
+    const policies = await this.normalizeDocuments(docs);
+
+    return policies
+      .filter((policy) => policy.status === "active")
+      .filter((policy) => !evaluationType || policy.evaluationType === evaluationType)
+      .sort(comparePolicies)
+      .map(copyPolicy);
+  }
+
+  async savePolicy(policy: IncentivePolicy, metadata: Partial<Pick<StoredIncentivePolicy, "updatedAt" | "updatedBy">> = {}): Promise<void> {
     const stored: StoredIncentivePolicy = {
-      evaluationType: policy.evaluationType,
-      policyId: policy.id,
-      status: metadata.status ?? "active",
-      policy: copyPolicy(policy),
+      ...copyPolicy(policy),
       updatedAt: metadata.updatedAt ?? new Date().toISOString(),
       updatedBy: metadata.updatedBy ?? POLICY_SEED_ACTOR
     };
-    await (await this.getFirestore()).collection(INCENTIVE_POLICIES_COLLECTION).doc(policy.evaluationType).set(stored);
+    await (await this.getFirestore()).collection(INCENTIVE_POLICIES_COLLECTION).doc(policy.policyId).set(stored);
     this.seeded = true;
   }
 
@@ -301,42 +291,57 @@ class FirestorePolicyStore implements PolicyStore {
       return;
     }
 
-    const firestore = await this.getFirestore();
-    const expectedPolicyIds = Object.keys(defaultIncentivePolicies);
-    const expectedDocs = await Promise.all(
-      expectedPolicyIds.map((id) => firestore.collection(INCENTIVE_POLICIES_COLLECTION).doc(id).get())
-    );
+    const docs = await this.loadDocuments();
+    const policies = await this.normalizeDocuments(docs);
+    const storedPolicyIds = new Set(policies.map((policy) => policy.policyId));
+    const missingDefaults = Object.values(defaultIncentivePolicies).filter((policy) => !storedPolicyIds.has(policy.policyId));
 
-    if (expectedDocs.some((doc) => !doc.exists)) {
-      await this.seedMissingDefaults();
-      return;
+    for (const policy of missingDefaults) {
+      await this.savePolicy(policy);
     }
 
     this.seeded = true;
   }
 
-  private async seedMissingDefaults(): Promise<void> {
-    const firestore = await this.getFirestore();
-    const updatedAt = new Date().toISOString();
-    await Promise.all(
-      Object.values(defaultIncentivePolicies).map(async (policy) => {
-        const ref = firestore.collection(INCENTIVE_POLICIES_COLLECTION).doc(policy.evaluationType);
-        const snapshot = await ref.get();
-        if (snapshot.exists) {
-          return;
-        }
+  private async normalizeDocuments(docs: LoadedFirestoreDocument[]): Promise<IncentivePolicy[]> {
+    const policies: IncentivePolicy[] = [];
 
-        await ref.set({
-          evaluationType: policy.evaluationType,
-          policyId: policy.id,
-          status: "active",
-          policy: copyPolicy(policy),
-          updatedAt,
-          updatedBy: POLICY_SEED_ACTOR
-        } satisfies StoredIncentivePolicy);
-      })
-    );
-    this.seeded = true;
+    for (const doc of docs) {
+      const normalized = normalizeStoredPolicy(doc.value);
+      if (!normalized.policy) {
+        await this.deletePolicyDocument(doc.id);
+        continue;
+      }
+
+      policies.push(normalized.policy);
+      if (normalized.rewrite || doc.id !== normalized.policy.policyId) {
+        await this.savePolicy(normalized.policy, {
+          updatedBy: `${POLICY_SEED_ACTOR}-migration`
+        });
+        if (doc.id !== normalized.policy.policyId) {
+          await this.deletePolicyDocument(doc.id);
+        }
+      }
+    }
+
+    return policies;
+  }
+
+  private async loadDocuments(): Promise<LoadedFirestoreDocument[]> {
+    const snapshot = await (await this.getFirestore()).collection(INCENTIVE_POLICIES_COLLECTION).get();
+    return snapshot.docs.map((doc) => ({
+      id: doc.id ?? "",
+      value: doc.data()
+    }));
+  }
+
+  private async deletePolicyDocument(id: string): Promise<void> {
+    if (!id) {
+      return;
+    }
+
+    const ref = (await this.getFirestore()).collection(INCENTIVE_POLICIES_COLLECTION).doc(id);
+    await ref.delete?.();
   }
 
   private async getFirestore(): Promise<FirestoreDatabase> {
@@ -354,6 +359,276 @@ class FirestorePolicyStore implements PolicyStore {
 
 export const policyStore = createPolicyStoreFromEnv();
 
+function normalizeStoredPolicy(value: unknown): { policy: IncentivePolicy | null; rewrite: boolean } {
+  if (isDeprecatedCombinedProviderDocumentationPolicy(value)) {
+    return { policy: null, rewrite: true };
+  }
+
+  const rootPolicy = normalizeRootIncentivePolicy(value);
+  if (rootPolicy) {
+    return rootPolicy;
+  }
+
+  const legacy = value as LegacyWrappedPolicy;
+  if (legacy?.policy?.evaluationType === "provider_documentation_completeness") {
+    const policy = {
+      ...copyPolicy(defaultIncentivePolicies.provider_documentation_acme_outpatient),
+      payout: {
+        token: legacy.policy.paymentFormula?.token?.symbol ?? "HBAR",
+        amountPerEligibleRequest:
+          legacy.policy.paymentFormula?.baseAmount ??
+          defaultIncentivePolicies.provider_documentation_acme_outpatient.payout.amountPerEligibleRequest,
+        monthlyCap:
+          legacy.policy.paymentFormula?.monthlyCap ??
+          defaultIncentivePolicies.provider_documentation_acme_outpatient.payout.monthlyCap
+      },
+      settlement: {
+        ...defaultIncentivePolicies.provider_documentation_acme_outpatient.settlement,
+        recipientWalletId:
+          legacy.policy.submitterRules?.walletMap?.[PROVIDER_ID] ??
+          defaultIncentivePolicies.provider_documentation_acme_outpatient.settlement.recipientWalletId,
+        requiresHumanApproval:
+          legacy.policy.requiresHumanApproval ??
+          defaultIncentivePolicies.provider_documentation_acme_outpatient.settlement.requiresHumanApproval
+      }
+    };
+
+    return { policy, rewrite: true };
+  }
+
+  return { policy: null, rewrite: true };
+}
+
+function normalizeRootIncentivePolicy(value: unknown): { policy: IncentivePolicy; rewrite: boolean } | null {
+  if (!isIncentivePolicyShape(value)) {
+    return null;
+  }
+
+  const candidate = copyPolicy(value);
+  return {
+    policy: normalizePolicyScope(candidate),
+    rewrite: needsPolicyRewrite(candidate)
+  };
+}
+
+function normalizePolicyScope(policy: IncentivePolicy): IncentivePolicy {
+  return {
+    ...policy,
+    contractPair: {
+      ...policy.contractPair,
+      planName: policy.contractPair.planName ?? planNameForId(policy.contractPair.planId),
+      providerName: policy.contractPair.providerName ?? providerNameForId(policy.contractPair.providerId)
+    },
+    incentiveScope: {
+      ...requestTypeScope(policy.incentiveScope),
+      ...serviceCodeScope(policy.incentiveScope)
+    }
+  };
+}
+
+function needsPolicyRewrite(policy: IncentivePolicy): boolean {
+  const normalized = normalizePolicyScope(policy);
+  return JSON.stringify(policy) !== JSON.stringify(normalized);
+}
+
+function isIncentivePolicyShape(value: unknown): value is IncentivePolicy {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Partial<IncentivePolicy>;
+  return (
+    typeof candidate.policyId === "string" &&
+    typeof candidate.version === "string" &&
+    (candidate.status === "active" || candidate.status === "inactive") &&
+    typeof candidate.evaluationType === "string" &&
+    typeof candidate.contractPair?.planId === "string" &&
+    typeof candidate.contractPair.providerId === "string" &&
+    typeof candidate.payout?.amountPerEligibleRequest === "number" &&
+    typeof candidate.payout.monthlyCap === "number" &&
+    typeof candidate.payout.token === "string" &&
+    typeof candidate.settlement?.recipientWalletId === "string"
+  );
+}
+
+function isDeprecatedCombinedProviderDocumentationPolicy(value: unknown): boolean {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Partial<IncentivePolicy>;
+  const eligibleRequestTypes = candidate.incentiveScope?.eligibleRequestTypes ?? [];
+
+  return (
+    candidate.policyId === "plcy_7M4K9Q2X8N1R5T6W3B0C" &&
+    candidate.evaluationType === "provider_documentation_completeness" &&
+    candidate.contractPair?.planId === "acme-health-ppo" &&
+    candidate.contractPair.providerId === PROVIDER_ID &&
+    eligibleRequestTypes.includes("outpatient_service") &&
+    eligibleRequestTypes.includes("pharmacy_benefit")
+  );
+}
+
+function matchesLookup(policy: IncentivePolicy, lookup: PolicyLookup): boolean {
+  return (
+    policy.evaluationType === lookup.evaluationType &&
+    policy.contractPair.planId === lookup.planId &&
+    policy.contractPair.providerId === lookup.providerId &&
+    matchesRequestType(policy, lookup.requestType) &&
+    isPolicyEffective(policy, lookup.submittedAt)
+  );
+}
+
+function matchesRequestType(policy: IncentivePolicy, requestType: string | undefined): boolean {
+  if (!requestType) {
+    return true;
+  }
+
+  const excludedRequestTypes = policy.incentiveScope.excludedRequestTypes ?? [];
+  const eligibleRequestTypes = policy.incentiveScope.eligibleRequestTypes ?? [];
+
+  return !excludedRequestTypes.includes(requestType) && (eligibleRequestTypes.length === 0 || eligibleRequestTypes.includes(requestType));
+}
+
+function isPolicyEffective(policy: IncentivePolicy, submittedAt?: string): boolean {
+  if (!submittedAt) {
+    return true;
+  }
+
+  const submitted = new Date(submittedAt).getTime();
+  const starts = new Date(policy.effectivePeriod.startsOn).getTime();
+  const ends = policy.effectivePeriod.endsOn ? new Date(policy.effectivePeriod.endsOn).getTime() : Number.POSITIVE_INFINITY;
+
+  return submitted >= starts && submitted <= ends;
+}
+
 function copyPolicy(policy: IncentivePolicy): IncentivePolicy {
-  return structuredClone(policy);
+  const copy = structuredClone(policy) as IncentivePolicy & { displayName?: string };
+  delete copy.displayName;
+  return copy;
+}
+
+function comparePolicies(left: IncentivePolicy, right: IncentivePolicy): number {
+  return (
+    left.contractPair.planId.localeCompare(right.contractPair.planId) ||
+    left.contractPair.providerId.localeCompare(right.contractPair.providerId) ||
+    (left.incentiveScope.eligibleRequestTypes ?? []).join(",").localeCompare((right.incentiveScope.eligibleRequestTypes ?? []).join(",")) ||
+    left.policyId.localeCompare(right.policyId)
+  );
+}
+
+function providerDocumentationPolicy({
+  includedServiceCodes,
+  amountPerEligibleRequest = 5,
+  planDisplay,
+  planId,
+  policyId,
+  requestType
+}: {
+  policyId: string;
+  planId: string;
+  planDisplay: string;
+  requestType: "outpatient_service" | "pharmacy_benefit";
+  includedServiceCodes: IncentivePolicy["incentiveScope"]["includedServiceCodes"];
+  amountPerEligibleRequest?: number;
+}): IncentivePolicy {
+  return {
+    policyId,
+    version: "v1",
+    status: "active",
+    evaluationType: "provider_documentation_completeness",
+    contractPair: {
+      planId,
+      planName: planDisplay,
+      providerId: PROVIDER_ID,
+      providerName: providerNameForId(PROVIDER_ID)
+    },
+    effectivePeriod: {
+      startsOn: "2026-05-01",
+      endsOn: null
+    },
+    incentiveScope: {
+      eligibleRequestTypes: [requestType],
+      includedServiceCodes
+    },
+    eligibilityCriteria: {
+      appliesOnlyToCoveredBenefits: true,
+      requiresDtrCompletionWhenRequested: true
+    },
+    payout: {
+      token: "HBAR",
+      amountPerEligibleRequest,
+      monthlyCap: 500
+    },
+    settlement: {
+      mode: "auto",
+      recipientWalletId: PROVIDER_WALLET_ID,
+      requiresHumanApproval: false
+    }
+  };
+}
+
+function requestTypeScope(scope: IncentivePolicy["incentiveScope"]): IncentivePolicy["incentiveScope"] {
+  if (scope.eligibleRequestTypes?.length) {
+    return {
+      eligibleRequestTypes: [...scope.eligibleRequestTypes]
+    };
+  }
+
+  if (scope.excludedRequestTypes?.length) {
+    return {
+      excludedRequestTypes: [...scope.excludedRequestTypes]
+    };
+  }
+
+  return {};
+}
+
+function serviceCodeScope(scope: IncentivePolicy["incentiveScope"]): IncentivePolicy["incentiveScope"] {
+  if (hasConfiguredServiceCodes(scope.includedServiceCodes)) {
+    return {
+      includedServiceCodes: copyServiceCodeSet(scope.includedServiceCodes)
+    };
+  }
+
+  if (hasConfiguredServiceCodes(scope.excludedServiceCodes)) {
+    return {
+      excludedServiceCodes: copyServiceCodeSet(scope.excludedServiceCodes)
+    };
+  }
+
+  return {};
+}
+
+function hasConfiguredServiceCodes(
+  value: IncentivePolicy["incentiveScope"]["includedServiceCodes"] | undefined
+): value is NonNullable<IncentivePolicy["incentiveScope"]["includedServiceCodes"]> {
+  return Boolean(value?.cpt.length || value?.ndc.length);
+}
+
+function copyServiceCodeSet(value: NonNullable<IncentivePolicy["incentiveScope"]["includedServiceCodes"]>) {
+  return {
+    cpt: [...value.cpt],
+    ndc: [...value.ndc]
+  };
+}
+
+function planNameForId(planId: string): string {
+  switch (planId) {
+    case "acme-health-ppo":
+      return "Acme Health PPO";
+    case "summit-health-hmo":
+      return "Summit Health HMO";
+    default:
+      return planId;
+  }
+}
+
+function providerNameForId(providerId: string): string {
+  switch (providerId) {
+    case PROVIDER_ID:
+      return "Lakeside Provider Admin";
+    default:
+      return providerId;
+  }
 }

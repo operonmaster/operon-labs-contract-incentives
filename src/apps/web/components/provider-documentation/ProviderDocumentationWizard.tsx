@@ -13,7 +13,7 @@ import type {
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PatientCoverageContext } from "../../lib/um-reference-data";
-import { LabsHero, LabsPageShell } from "../labs-ui";
+import { LabsBadge, LabsHero, LabsPageShell, LabsSelect } from "../labs-ui";
 import { UseCaseNavigation } from "./UseCaseNavigation";
 import {
   canContinueFromSetup,
@@ -81,6 +81,10 @@ export function ProviderDocumentationWizard() {
         bullets: ["The provider portal workflow is complete.", "Plan-side incentives are evaluated outside this provider flow."]
       }
     : stepContextByStep[step];
+
+  useEffect(() => {
+    selectedPathRef.current = selectedPath;
+  }, [selectedPath]);
 
   useEffect(() => {
     let cancelled = false;
@@ -164,6 +168,7 @@ export function ProviderDocumentationWizard() {
   }
 
   function resetAfterService() {
+    cancelPendingRequests();
     setRequirementsChecked(false);
     setCoverageRequirements(null);
     setDtrQuestionnaire(null);
@@ -174,6 +179,11 @@ export function ProviderDocumentationWizard() {
     setCheckingRequirements(false);
     setError(null);
     setAssessmentModalOpen(false);
+  }
+
+  function cancelPendingRequests() {
+    coverageRequestRef.current += 1;
+    submitRequestRef.current += 1;
   }
 
   function selectPatient(nextPatientId: string) {
@@ -222,7 +232,7 @@ export function ProviderDocumentationWizard() {
 
     const requestId = coverageRequestRef.current + 1;
     coverageRequestRef.current = requestId;
-    selectedPathRef.current = selectedPath;
+    const requestPath = selectedPath;
     setCheckingRequirements(true);
     setRequirementsChecked(false);
     setCoverageRequirements(null);
@@ -239,7 +249,7 @@ export function ProviderDocumentationWizard() {
       );
       const coveragePayload = (await coverageResponse.json()) as { requirements?: CoverageRequirements; error?: string };
 
-      if (coverageRequestRef.current !== requestId || selectedPathRef.current !== selectedPath) {
+      if (coverageRequestRef.current !== requestId || selectedPathRef.current !== requestPath) {
         return;
       }
 
@@ -257,7 +267,7 @@ export function ProviderDocumentationWizard() {
         );
         const questionnairePayload = (await questionnaireResponse.json()) as { questionnaire?: DtrQuestionnaire; error?: string };
 
-        if (coverageRequestRef.current !== requestId || selectedPathRef.current !== selectedPath) {
+        if (coverageRequestRef.current !== requestId || selectedPathRef.current !== requestPath) {
           return;
         }
 
@@ -275,7 +285,7 @@ export function ProviderDocumentationWizard() {
       setRequirementsChecked(true);
       setStep("coverage");
     } catch {
-      if (coverageRequestRef.current === requestId && selectedPathRef.current === selectedPath) {
+      if (coverageRequestRef.current === requestId && selectedPathRef.current === requestPath) {
         setError("Unable to check coverage requirements");
       }
     } finally {
@@ -334,6 +344,7 @@ export function ProviderDocumentationWizard() {
   }
 
   function submitAnotherRequest() {
+    cancelPendingRequests();
     setStep("setup");
     setPatientId(null);
     setPlanId(null);
@@ -352,13 +363,13 @@ export function ProviderDocumentationWizard() {
   }
 
   async function submitPriorAuth() {
-    if (!requestType || !serviceCode || !requirementsChecked) {
+    if (!patientId || !planId || !requestType || !serviceCode || !requirementsChecked) {
       return;
     }
 
     const requestId = submitRequestRef.current + 1;
     submitRequestRef.current = requestId;
-    selectedPathRef.current = selectedPath;
+    const requestPath = selectedPath;
     setSubmitting(true);
     setError(null);
 
@@ -376,11 +387,13 @@ export function ProviderDocumentationWizard() {
     const body =
       requiresAssessment
         ? {
+            planId,
+            patientId,
             requestType,
             serviceCode,
             dtrQuestionnaireResponse
           }
-        : { requestType, serviceCode, acknowledgedNotCovered };
+        : { patientId, planId, requestType, serviceCode, acknowledgedNotCovered };
 
     try {
       const response = await fetch("/api/um/prior-auths", {
@@ -390,7 +403,7 @@ export function ProviderDocumentationWizard() {
       });
       const payload = (await response.json()) as PriorAuthRecord | { error?: string };
 
-      if (submitRequestRef.current !== requestId || selectedPathRef.current !== selectedPath) {
+      if (submitRequestRef.current !== requestId || selectedPathRef.current !== requestPath) {
         return;
       }
 
@@ -401,7 +414,7 @@ export function ProviderDocumentationWizard() {
 
       setSubmitted(payload as PriorAuthRecord);
     } catch {
-      if (submitRequestRef.current !== requestId || selectedPathRef.current !== selectedPath) {
+      if (submitRequestRef.current !== requestId || selectedPathRef.current !== requestPath) {
         return;
       }
 
@@ -529,6 +542,7 @@ export function ProviderDocumentationWizard() {
           service={service}
           summary={assessmentSummary}
           onAnswerChange={answerAssessmentQuestion}
+          onClose={() => setAssessmentModalOpen(false)}
           onSave={saveAssessment}
           onSkip={skipAssessment}
         />
@@ -543,6 +557,7 @@ function AssessmentModal({
   service,
   summary,
   onAnswerChange,
+  onClose,
   onSave,
   onSkip
 }: {
@@ -551,6 +566,7 @@ function AssessmentModal({
   service: CrdServiceOption | null;
   summary: ReturnType<typeof summarizeAssessmentAnswers>;
   onAnswerChange: (questionId: string, value: AssessmentAnswerValue) => void;
+  onClose: () => void;
   onSave: () => void;
   onSkip: () => void;
 }) {
@@ -561,10 +577,23 @@ function AssessmentModal({
     : `Answer ${unansweredCount} more ${unansweredCount === 1 ? "question" : "questions"} to save the assessment.`;
 
   return (
-    <div className="modal-backdrop" role="presentation">
-      <section aria-modal="true" className="modal assessment-modal" role="dialog" aria-labelledby="assessment-title">
-        <h2 id="assessment-title">{service?.assessmentTitle ?? "Documentation assessment"}</h2>
-        <p>{service?.assessmentIntro ?? "Answer each payer-requested documentation question before submitting the prior authorization."}</p>
+    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+      <section
+        aria-modal="true"
+        className="modal assessment-modal"
+        role="dialog"
+        aria-labelledby="assessment-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="modal-toolbar">
+          <div>
+            <h2 id="assessment-title">{service?.assessmentTitle ?? "Documentation assessment"}</h2>
+            <p>{service?.assessmentIntro ?? "Answer each payer-requested documentation question before submitting the prior authorization."}</p>
+          </div>
+          <button className="row-action" type="button" onClick={onClose}>
+            Close assessment
+          </button>
+        </div>
         <ol className="assessment-list">
           {questions.map((question, index) => (
             <li key={question.id} className="assessment-question">
@@ -632,39 +661,36 @@ function SetupStep({
   onPlanChange: (value: string) => void;
   onContinue: () => void;
 }) {
+  const patientOptions = patientCoverageContexts.map((patientCoverage) => ({
+    value: patientCoverage.patientId,
+    label: patientCoverage.patientDisplay
+  }));
+  const planOptions =
+    selectedPatientCoverage?.plans.map((plan) => ({
+      value: plan.planId,
+      label: plan.planDisplay
+    })) ?? [];
+
   return (
     <>
       <h2>Patient and coverage</h2>
       <p className="stage-copy">Start by selecting the patient and the plan tied to this request.</p>
       <div className="stage-form two-field-grid">
-        <label className="form-row">
+        <div className="form-row">
           <span>Patient</span>
-          <select className="select-control" disabled={submitting} value={patientId ?? ""} onChange={(event) => onPatientChange(event.target.value)}>
-            <option value="">Select patient</option>
-            {patientCoverageContexts.map((patientCoverage) => (
-              <option key={patientCoverage.patientId} value={patientCoverage.patientId}>
-                {patientCoverage.patientDisplay}
-              </option>
-            ))}
-          </select>
-        </label>
+          <LabsSelect disabled={submitting} options={patientOptions} placeholder="Select patient" value={patientId ?? ""} onChange={onPatientChange} />
+        </div>
 
-        <label className="form-row">
+        <div className="form-row">
           <span>Health plan</span>
-          <select
-            className="select-control"
+          <LabsSelect
             disabled={!canEditHealthPlan({ patientId, submitting })}
+            options={planOptions}
+            placeholder="Select health plan"
             value={planId ?? ""}
-            onChange={(event) => onPlanChange(event.target.value)}
-          >
-            <option value="">Select health plan</option>
-            {selectedPatientCoverage?.plans.map((plan) => (
-              <option key={plan.planId} value={plan.planId}>
-                {plan.planDisplay}
-              </option>
-            ))}
-          </select>
-        </label>
+            onChange={onPlanChange}
+          />
+        </div>
       </div>
       {patientLoadError ? (
         <p className="error-text" role="alert">
@@ -710,6 +736,12 @@ function ServiceStep({
       ? services.filter((candidate) => candidate.requestType === requestType)
       : [];
   const servicePlaceholder = requestType === "pharmacy_benefit" ? "Search medication or NDC code" : "Search service or CPT code";
+  const serviceOptions = selectableServices.map((option) => ({
+    value: option.serviceCode,
+    label: `${option.procedureCode} - ${option.serviceLabel}`,
+    description: option.procedureSummary,
+    eyebrow: option.procedureCode
+  }));
 
   return (
     <>
@@ -723,7 +755,7 @@ function ServiceStep({
               key={option.id}
               aria-checked={requestType === option.id}
               className={`request-type-card ${requestType === option.id ? "selected" : ""}`}
-              disabled={!option.enabled}
+              disabled={checkingRequirements || !option.enabled}
               role="radio"
               type="button"
               onClick={() => onRequestTypeChange(option.id)}
@@ -735,24 +767,16 @@ function ServiceStep({
           ))}
         </div>
       </fieldset>
-      <label className="form-row">
+      <div className="form-row">
         <span>{requestType === "pharmacy_benefit" ? "Search medication" : "Search service"}</span>
-        <select
-          className="select-control"
-          disabled={!requestType || requestType === "inpatient_admission" || Boolean(crdLoadError)}
+        <LabsSelect
+          disabled={checkingRequirements || !requestType || requestType === "inpatient_admission" || Boolean(crdLoadError)}
+          options={serviceOptions}
+          placeholder={servicePlaceholder}
           value={serviceCode ?? ""}
-          onChange={(event) => onServiceChange(event.target.value)}
-        >
-          <option value="">{servicePlaceholder}</option>
-          {selectableServices.map((option) => {
-            return (
-              <option key={option.serviceCode} value={option.serviceCode}>
-                {option.procedureCode} - {option.serviceLabel}
-              </option>
-            );
-          })}
-        </select>
-      </label>
+          onChange={onServiceChange}
+        />
+      </div>
       {service ? <ServiceCard service={service} /> : null}
       {crdLoadError ? (
         <p className="error-text" role="alert">
@@ -811,19 +835,19 @@ function CoverageStep({
       />
       {requiresAssessment ? (
         <div className="coverage-card approved-result">
-          <span className="status approved">Coverage confirmed</span>
+          <LabsBadge variant="success">Coverage confirmed</LabsBadge>
           <h3>Prior authorization required</h3>
           <p>{requestType === "pharmacy_benefit" ? "Medication documentation is required before this request is submitted." : "Medical necessity documentation is required before this request is submitted."}</p>
           <div className="button-row">
             <button className="primary-button" type="button" onClick={onOpenAssessment}>
               Open documentation assessment
             </button>
-            <span className={`assessment-pill ${assessmentStatus}`}>Assessment: {formatAssessmentStatus(assessmentStatus)}</span>
+            <LabsBadge variant={assessmentBadgeVariant(assessmentStatus)}>Assessment: {formatAssessmentStatus(assessmentStatus)}</LabsBadge>
           </div>
         </div>
       ) : isNotCovered ? (
         <div className="coverage-card warning-panel">
-          <span className="status blocked">Not covered benefit</span>
+          <LabsBadge variant="warning">Not covered benefit</LabsBadge>
           <h3>{service?.serviceLabel ?? "Requested item"} is not covered</h3>
           <p>The request can still be submitted, but it will include the not-covered benefit reason.</p>
           <label className="checkbox-row warning-copy">
@@ -833,7 +857,7 @@ function CoverageStep({
         </div>
       ) : (
         <div className="coverage-card approved-result">
-          <span className="status approved">Coverage confirmed</span>
+          <LabsBadge variant="success">Coverage confirmed</LabsBadge>
           <h3>No additional assessment required</h3>
           <p>The request can move to review with the coverage response returned by the plan.</p>
         </div>
@@ -926,7 +950,7 @@ function ReviewStep({
 function SubmissionConfirmation({ submitted, onSubmitAnother }: { submitted: PriorAuthRecord; onSubmitAnother: () => void }) {
   return (
     <div className="confirmation-panel" aria-live="polite" role="status">
-      <span className="status pending">Pending review</span>
+      <LabsBadge variant="info">Pending review</LabsBadge>
       <h2>Prior authorization submitted</h2>
       <p>The request was received by the plan and is pending review.</p>
       <dl className="review-list review-main">
@@ -1000,6 +1024,19 @@ function formatAssessmentStatus(status: AssessmentStatus) {
       return "Not required";
     case "not_started":
       return "Not started";
+  }
+}
+
+function assessmentBadgeVariant(status: AssessmentStatus): "success" | "warning" | "info" | "neutral" {
+  switch (status) {
+    case "complete":
+      return "success";
+    case "skipped":
+      return "warning";
+    case "not_started":
+      return "info";
+    case "not_required":
+      return "neutral";
   }
 }
 
