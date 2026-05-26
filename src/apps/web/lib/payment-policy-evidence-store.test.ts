@@ -53,7 +53,7 @@ describe("payment policy evidence store", () => {
           failureCode: "HEDERA_PAYMENT_AMOUNT_EXCEEDS_PLAN_MAX"
         }
       ],
-      paymentIntentId: null,
+      paymentIntentId: "PA-260525-1949-ML6LAWFP",
       transactionId: null,
       createdAt: "2026-05-26T00:00:00.000Z",
       updatedAt: "2026-05-26T00:00:00.000Z"
@@ -111,7 +111,70 @@ describe("payment policy evidence store", () => {
       status: "passed"
     });
   });
+
+  it("rejects noncanonical payment-policy evidence ids", async () => {
+    const store = createFirestorePaymentPolicyEvidenceStore(
+      {
+        projectId: "operon-labs-nonprod",
+        databaseId: "(default)"
+      },
+      createFakeFirestore()
+    );
+    const evidence = buildPaymentPolicyEvidence();
+
+    await expect(
+      store.saveEvidence({
+        ...evidence,
+        incentiveEvaluationId: "UMR-260525-1949-ML6LAWFP",
+        caseId: "UMR-260525-1949-ML6LAWFP",
+        paymentIntentId: "UMR-260525-1949-ML6LAWFP"
+      })
+    ).rejects.toThrow("PAYMENT_POLICY_EVIDENCE_ID_NOT_CANONICAL:evidence.incentiveEvaluationId");
+
+    await expect(
+      store.saveEvidence({
+        ...evidence,
+        caseId: "PA-260525-1949-OTHER01"
+      })
+    ).rejects.toThrow("PAYMENT_POLICY_EVIDENCE_ID_MISMATCH:evidence.caseId");
+
+    await expect(
+      store.saveEvidence({
+        ...evidence,
+        paymentIntentId: "pi_test"
+      })
+    ).rejects.toThrow("PAYMENT_POLICY_EVIDENCE_ID_MISMATCH:evidence.paymentIntentId");
+  });
 });
+
+function buildPaymentPolicyEvidence(): PaymentPolicyEvidence {
+  return {
+    incentiveEvaluationId: "PA-260525-1949-ML6LAWFP",
+    caseId: "PA-260525-1949-ML6LAWFP",
+    planId: "summit-health-hmo",
+    paymentPolicyId: "summit-health-hmo",
+    businessPolicyId: "plcy_9Q3S6V1X8Z2B5D7F0H4K",
+    runtime: "hedera-agent-kit-policy",
+    outcome: "paid",
+    failureCode: null,
+    requestedPayment: {
+      amount: 5,
+      token: "HBAR",
+      recipientWalletId: "0.0.9049549"
+    },
+    controls: [
+      {
+        id: "businessEvaluationAttestation",
+        label: "Business evaluation attestation",
+        status: "passed"
+      }
+    ],
+    paymentIntentId: "PA-260525-1949-ML6LAWFP",
+    transactionId: "0.0.6870566@1779686274.765050870",
+    createdAt: "2026-05-26T00:00:00.000Z",
+    updatedAt: "2026-05-26T00:00:00.000Z"
+  };
+}
 
 function createFakeFirestore(): FirestoreDatabase {
   const collections = new Map<string, Map<string, unknown>>();

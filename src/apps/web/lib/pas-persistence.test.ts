@@ -96,7 +96,7 @@ describe("PAS persistence store selection", () => {
         createdAt: umRequest.submittedAt
       },
       walletId: "0.0.9049549",
-      paymentIntentId: "pi_test",
+      paymentIntentId: umRequest.id,
       transactionId: "testnet-1"
     });
 
@@ -523,7 +523,7 @@ describe("PAS persistence store selection", () => {
           createdAt: umRequest.submittedAt
         },
         walletId: "0.0.9049549",
-        paymentIntentId: "pi_test",
+        paymentIntentId: umRequest.id,
         transactionId: "testnet-1"
       } as unknown as Parameters<typeof store.saveIncentiveRow>[0])
     ).rejects.toThrow("UM_REQUEST_ID_REQUIRED");
@@ -562,6 +562,12 @@ describe("PAS persistence store selection", () => {
       }))
     ).rejects.toThrow("PAS_SUBMISSION_ID_MISMATCH:row.caseId");
 
+    await expect(
+      store.saveIncentiveRow(buildPersistedIncentiveRow(umRequest, {
+        paymentIntentId: "pi_test"
+      }))
+    ).rejects.toThrow("PAS_SUBMISSION_ID_MISMATCH:row.paymentIntentId");
+
     await expect(firestore.collection("incentiveEvaluations").doc(umRequest.id).get()).resolves.toMatchObject({
       exists: false
     });
@@ -585,7 +591,8 @@ describe("PAS persistence store selection", () => {
     });
     const legacyRow = buildPersistedIncentiveRow(umRequest, {
       umRequestId: "UMR-260526-0900-ROWLEG1",
-      caseId: "UMR-260526-0900-ROWLEG1"
+      caseId: "UMR-260526-0900-ROWLEG1",
+      paymentIntentId: "UMR-260526-0900-ROWLEG1"
     });
 
     await firestore.collection("incentiveEvaluations").doc(umRequest.id).set({
@@ -596,7 +603,7 @@ describe("PAS persistence store selection", () => {
     await expect(store.getIncentiveRow(umRequest.id)).resolves.toMatchObject({
       umRequestId: umRequest.id,
       caseId: umRequest.id,
-      paymentIntentId: "pi_test"
+      paymentIntentId: umRequest.id
     });
     await expect(store.listIncentiveRows()).resolves.toEqual([
       expect.objectContaining({
@@ -644,7 +651,7 @@ function buildPersistedIncentiveRow(
       createdAt: umRequest.submittedAt
     },
     walletId: "0.0.9049549",
-    paymentIntentId: "pi_test",
+    paymentIntentId: umRequest.id,
     transactionId: "testnet-1",
     ...overrides
   };

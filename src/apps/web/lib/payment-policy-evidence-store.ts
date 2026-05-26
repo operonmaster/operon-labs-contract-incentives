@@ -104,6 +104,8 @@ class FirestorePaymentPolicyEvidenceStore implements PaymentPolicyEvidenceStore 
   }
 
   async saveEvidence(evidence: PaymentPolicyEvidence): Promise<void> {
+    validatePaymentPolicyEvidenceIds(evidence);
+
     await (await this.getFirestore())
       .collection(PAYMENT_POLICY_EVIDENCES_COLLECTION)
       .doc(evidence.incentiveEvaluationId)
@@ -142,6 +144,26 @@ function copyEvidence(evidence: PaymentPolicyEvidence): PaymentPolicyEvidence {
 
 function toFirestoreEvidence(evidence: PaymentPolicyEvidence): PaymentPolicyEvidence {
   return removeUndefinedFields(copyEvidence(evidence)) as PaymentPolicyEvidence;
+}
+
+function validatePaymentPolicyEvidenceIds(evidence: PaymentPolicyEvidence): void {
+  assertCanonicalPaId(evidence.incentiveEvaluationId, "evidence.incentiveEvaluationId");
+  assertMatchingCanonicalId(evidence.caseId, evidence.incentiveEvaluationId, "evidence.caseId");
+  if (evidence.paymentIntentId !== null) {
+    assertMatchingCanonicalId(evidence.paymentIntentId, evidence.incentiveEvaluationId, "evidence.paymentIntentId");
+  }
+}
+
+function assertCanonicalPaId(value: string, fieldName: string): void {
+  if (!value.startsWith("PA-")) {
+    throw new Error(`PAYMENT_POLICY_EVIDENCE_ID_NOT_CANONICAL:${fieldName}`);
+  }
+}
+
+function assertMatchingCanonicalId(value: string, expected: string, fieldName: string): void {
+  if (value !== expected) {
+    throw new Error(`PAYMENT_POLICY_EVIDENCE_ID_MISMATCH:${fieldName}`);
+  }
 }
 
 function removeUndefinedFields(value: unknown): unknown {

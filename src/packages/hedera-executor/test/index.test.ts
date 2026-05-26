@@ -397,6 +397,22 @@ describe("Hedera policy-bound payment executor", () => {
     expect(intent.id).toMatch(/^pi_[a-f0-9]{32}$/);
   });
 
+  it("rejects non-PA ids as payment intent canonical ids", () => {
+    expect(() =>
+      buildPaymentIntent({
+        auditId: "audit-1",
+        incentiveEvaluationId: "UMR-260524-2102-AAAA1111",
+        amount: 5,
+        currency: "HBAR",
+        walletId: "0.0.23456",
+        policyId: "provider-documentation-completeness-v1"
+      }, {
+        sourceAccountId: "0.0.1001",
+        transactionMemo: caseId
+      })
+    ).toThrow("PAYMENT_ID_NOT_CANONICAL");
+  });
+
   it("rejects payment envelopes with mismatched case and incentive evaluation ids", () => {
     expect(() =>
       buildPaymentIntent({

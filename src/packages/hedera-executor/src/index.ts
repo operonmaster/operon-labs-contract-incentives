@@ -340,7 +340,16 @@ function getCanonicalPaymentId(request: PaymentApprovalRequest): string | null {
     throw new Error("PAYMENT_ID_MISMATCH");
   }
 
-  return incentiveEvaluationId || caseId || null;
+  const canonicalPaymentId = incentiveEvaluationId || caseId;
+  if (!canonicalPaymentId) {
+    return null;
+  }
+
+  if (!canonicalPaymentId.startsWith("PA-")) {
+    throw new Error("PAYMENT_ID_NOT_CANONICAL");
+  }
+
+  return canonicalPaymentId;
 }
 
 export function createInMemoryPaymentIntentStore(): PaymentIntentStore {

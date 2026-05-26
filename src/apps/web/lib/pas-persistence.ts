@@ -389,6 +389,9 @@ function validateIncentiveRowIds(row: PersistedIncentiveWorklistRow): void {
   if (rowIds.id !== undefined) {
     assertMatchingCanonicalId(rowIds.id, row.umRequestId, "row.id");
   }
+  if (row.paymentIntentId !== null) {
+    assertMatchingCanonicalId(row.paymentIntentId, row.umRequestId, "row.paymentIntentId");
+  }
 }
 
 function assertCanonicalPaId(value: string, fieldName: string): void {
@@ -538,7 +541,12 @@ function canonicalizeStoredIncentiveRow(
     id?: string;
     storedAt?: string;
   };
-  const canonicalId = getStoredCanonicalPaId(incentiveRow.umRequestId, incentiveRow.caseId, incentiveRow.id);
+  const canonicalId = getStoredCanonicalPaId(
+    incentiveRow.umRequestId,
+    incentiveRow.caseId,
+    incentiveRow.id,
+    incentiveRow.paymentIntentId
+  );
 
   delete (incentiveRow as PersistedIncentiveWorklistRow & { storedAt?: string }).storedAt;
   return {
@@ -546,7 +554,7 @@ function canonicalizeStoredIncentiveRow(
     ...(incentiveRow.id !== undefined ? { id: canonicalId } : {}),
     ...(incentiveRow.caseId !== undefined ? { caseId: canonicalId } : {}),
     umRequestId: canonicalId,
-    paymentIntentId: incentiveRow.paymentIntentId ?? null,
+    paymentIntentId: incentiveRow.paymentIntentId ? canonicalId : null,
     settlementToken: incentiveRow.settlementToken ?? {
       symbol: incentiveRow.currency
     }
