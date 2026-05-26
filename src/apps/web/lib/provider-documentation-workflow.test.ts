@@ -1154,8 +1154,11 @@ describe("provider documentation workflow", () => {
     const rows = await workflow.listIncentiveRows();
 
     expect(submitted).toMatchObject({
-      paResult: "submitted_pending"
+      state: "pend",
+      outcomeStatus: null
     });
+    expect(submitted).not.toHaveProperty("paResult");
+    expect(submitted).not.toHaveProperty("denialReason");
     expect(submitted.caseId).toMatch(PA_CASE_ID_PATTERN);
     expect(rows[0]).toMatchObject({
       caseId: submitted.caseId,

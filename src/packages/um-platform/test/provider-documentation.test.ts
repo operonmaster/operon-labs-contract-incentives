@@ -134,10 +134,12 @@ describe("provider documentation UM Platform", () => {
       planDisplay: "Summit Health HMO",
       requestType: "outpatient_service",
       serviceCode: "knee_mri",
-      paResult: "submitted_pending",
-      denialReason: null,
+      state: "pend",
+      outcomeStatus: null,
       dtr: null
     });
+    expect(submitted).not.toHaveProperty("paResult");
+    expect(submitted).not.toHaveProperty("denialReason");
     expect(submitted.caseId).toMatch(PA_CASE_ID_PATTERN);
     expect(platform.getEvidence(submitted.id)).toMatchObject({
       id: submitted.id,
@@ -193,8 +195,11 @@ describe("provider documentation UM Platform", () => {
     expect(submitted).toMatchObject({
       requestType: "outpatient_service",
       serviceCode: "knee_mri",
-      paResult: "submitted_pending"
+      state: "pend",
+      outcomeStatus: null
     });
+    expect(submitted).not.toHaveProperty("paResult");
+    expect(submitted).not.toHaveProperty("denialReason");
     expect(submitted.caseId).toMatch(PA_CASE_ID_PATTERN);
     expect(submitted.id).toBe(submitted.caseId);
     expect(submitted.sourceCaseId).toBe(submitted.id);
@@ -283,8 +288,11 @@ describe("provider documentation UM Platform", () => {
       requestType: "pharmacy_benefit",
       serviceCode: "wegovy_semaglutide",
       serviceLabel: "Wegovy (semaglutide) injection",
-      paResult: "submitted_pending"
+      state: "pend",
+      outcomeStatus: null
     });
+    expect(submitted).not.toHaveProperty("paResult");
+    expect(submitted).not.toHaveProperty("denialReason");
     expect(submitted.caseId).toMatch(PA_CASE_ID_PATTERN);
     expect(platform.getEvidence(submitted.id)).toMatchObject({
       requestType: "pharmacy_benefit",
@@ -348,9 +356,11 @@ describe("provider documentation UM Platform", () => {
     expect(submitted).toMatchObject({
       requestType: "outpatient_service",
       serviceCode: "full_body_wellness_mri",
-      paResult: "denied_not_covered",
-      denialReason: "BENEFIT_NOT_COVERED"
+      state: "pend",
+      outcomeStatus: null
     });
+    expect(submitted).not.toHaveProperty("paResult");
+    expect(submitted).not.toHaveProperty("denialReason");
     expect(submitted.caseId).toMatch(PA_CASE_ID_PATTERN);
     expect(platform.getEvidence(submitted.id)).toMatchObject({
       serviceCode: "full_body_wellness_mri",

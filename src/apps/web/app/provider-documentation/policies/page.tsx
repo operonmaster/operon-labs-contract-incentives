@@ -28,7 +28,7 @@ export default async function ProviderDocumentationPoliciesPage({
     <PolicyConsole
       businessPolicies={businessPolicies.flatMap(buildProviderDocumentationBusinessPolicyCards)}
       paymentPolicies={paymentPolicies.map(buildHederaAgentKitPlanPolicyCards)}
-      initialCaseId={params?.umRequestId ?? null}
+      initialUmRequestId={params?.umRequestId ?? null}
     />
   );
 }

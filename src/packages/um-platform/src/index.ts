@@ -53,8 +53,6 @@ export interface PriorAuthCompatibilityFields {
   providerGroupDisplay: "Lakeside Provider Admin";
   pasSubmitted: true;
   submittedBeforeInitialDecision: boolean;
-  paResult: PaResult;
-  denialReason: "BENEFIT_NOT_COVERED" | null;
 }
 
 export interface UMRequest extends PriorAuthCompatibilityFields {
@@ -362,9 +360,7 @@ export function createInMemoryUmPlatform(options: UmPlatformOptions = {}): UmPla
           pasClaimResponseBundleId: null
         },
         pasSubmitted: true,
-        submittedBeforeInitialDecision: true,
-        paResult: coverage.coveredBenefit ? "submitted_pending" : "denied_not_covered",
-        denialReason: coverage.reasonCode
+        submittedBeforeInitialDecision: true
       };
 
       requests.set(umRequestId, request);

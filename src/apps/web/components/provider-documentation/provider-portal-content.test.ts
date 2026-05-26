@@ -131,6 +131,7 @@ describe("provider portal content", () => {
     expect(source).not.toContain("PriorAuthRecord");
     expect(source).not.toContain("submitted.caseId");
     expect(source).not.toContain("submitted.paResult");
+    expect(source).not.toContain("submitted.denialReason");
     expect(source).toContain("<dt>UM request ID</dt>");
     expect(source).toContain("<dt>Canonical PA/UM request ID</dt>");
     expect(source).toContain("{submitted.id}");

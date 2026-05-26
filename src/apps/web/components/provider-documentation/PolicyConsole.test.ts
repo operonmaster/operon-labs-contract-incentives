@@ -7,12 +7,20 @@ function readRepoFile(path: string) {
 }
 
 describe("provider documentation policy console", () => {
-  it("adds a policies view to the use-case navigation and preserves case context", () => {
+  it("adds a policies view to the use-case navigation and preserves UM request context", () => {
     const source = readRepoFile("src/apps/web/components/provider-documentation/UseCaseNavigation.tsx");
+    const consoleSource = readRepoFile("src/apps/web/components/provider-documentation/PolicyConsole.tsx");
 
     expect(source).toContain('type UseCaseView = "provider" | "plan" | "policies"');
     expect(source).toContain("policiesHref");
     expect(source).toContain("/provider-documentation/policies");
+    expect(source).toContain("umRequestId?: string | null");
+    expect(source).toContain("?umRequestId=");
+    expect(source).not.toContain("?caseId=");
+    expect(source).not.toContain("caseId?: string | null");
+    expect(source).not.toContain("?? caseId");
+    expect(consoleSource).toContain("<UseCaseNavigation activeView=\"policies\" umRequestId={initialUmRequestId} />");
+    expect(consoleSource).not.toContain("caseId={initialCaseId}");
     expect(source).toContain("Policies View");
     expect(source).toContain('activeView === "policies"');
   });

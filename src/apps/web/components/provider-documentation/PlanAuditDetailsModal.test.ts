@@ -136,9 +136,10 @@ describe("plan audit details modal", () => {
     const incentivesPageSource = readRepoFile("src/apps/web/app/provider-documentation/incentives/page.tsx");
 
     expect(navigationSource).toContain("umRequestId?: string | null");
-    expect(navigationSource).toContain("resolvedUmRequestId");
     expect(navigationSource).toContain("?umRequestId=");
     expect(navigationSource).not.toContain("?caseId=");
+    expect(navigationSource).not.toContain("caseId?: string | null");
+    expect(navigationSource).not.toContain("?? caseId");
     expect(incentivesPageSource).toContain("searchParams?: Promise<{ umRequestId?: string }>");
     expect(incentivesPageSource).toContain("initialUmRequestId={params?.umRequestId ?? null}");
     expect(incentivesPageSource).not.toContain("params?.caseId");

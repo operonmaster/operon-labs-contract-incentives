@@ -140,15 +140,24 @@ describe("provider documentation API routes", () => {
         })
       })
     );
-    const submitted = (await submittedResponse.json()) as { dtr: unknown; paResult: string; patientId: string; planId: string };
+    const submitted = (await submittedResponse.json()) as {
+      dtr: unknown;
+      patientId: string;
+      planId: string;
+      state: string;
+      outcomeStatus: string | null;
+    };
 
     expect(submittedResponse.status).toBe(200);
     expect(submitted).toMatchObject({
       patientId: "patient-andre-williams",
       planId: "summit-health-hmo",
-      paResult: "submitted_pending",
+      state: "pend",
+      outcomeStatus: null,
       dtr: null
     });
+    expect(submitted).not.toHaveProperty("paResult");
+    expect(submitted).not.toHaveProperty("denialReason");
   });
 
   it("rejects a prior auth submission when the selected plan is not tied to the selected patient", async () => {
@@ -195,6 +204,8 @@ describe("provider documentation API routes", () => {
         })
       ])
     );
+    expect(records.find((record) => record.id === submitted.id)).not.toHaveProperty("paResult");
+    expect(records.find((record) => record.id === submitted.id)).not.toHaveProperty("denialReason");
   });
 
   it("returns submitted evidence through the async API read path", async () => {

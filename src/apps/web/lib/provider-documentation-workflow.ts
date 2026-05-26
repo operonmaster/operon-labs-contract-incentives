@@ -71,12 +71,14 @@ export interface IncentiveWorklistRow {
   transactionId: string | null;
 }
 
+export type ProviderDocumentationUmRequest = Omit<UMRequest, "paResult" | "denialReason">;
+
 /* eslint-disable no-unused-vars -- TypeScript interface method signatures require parameter names. */
 export interface ProviderDocumentationWorkflow {
   getCoverageRequirements: typeof getCoverageRequirements;
-  submitPriorAuth(input: PriorAuthSubmissionInput): Promise<UMRequest>;
-  listUmRequests(): Promise<UMRequest[]>;
-  listPriorAuths(): Promise<PriorAuthRecord[]>;
+  submitPriorAuth(input: PriorAuthSubmissionInput): Promise<ProviderDocumentationUmRequest>;
+  listUmRequests(): Promise<ProviderDocumentationUmRequest[]>;
+  listPriorAuths(): Promise<ProviderDocumentationUmRequest[]>;
   getEvidence(umRequestId: string): Promise<ProviderDocumentationEvidence | null>;
   listIncentiveRows(): Promise<IncentiveWorklistRow[]>;
   getIncentiveRow(umRequestId: string): Promise<IncentiveWorklistRow | null>;
@@ -347,13 +349,15 @@ export function createProviderDocumentationWorkflow(
         });
       }
       await processPlatformEvents(record.id);
-      return record;
+      return stripLegacyPaOutcomeFields(record);
     },
     async listUmRequests() {
-      return persistence ? persistence.listUmRequests() : platform.listUmRequests();
+      const records = persistence ? await persistence.listUmRequests() : platform.listUmRequests();
+      return records.map(stripLegacyPaOutcomeFields);
     },
     async listPriorAuths() {
-      return persistence ? persistence.listUmRequests() : platform.listUmRequests();
+      const records = persistence ? await persistence.listUmRequests() : platform.listUmRequests();
+      return records.map(stripLegacyPaOutcomeFields);
     },
     async getEvidence(umRequestId) {
       const record = await getUmRequest(umRequestId);
@@ -459,6 +463,18 @@ function hasOnlyPaidLifecycleDisplayFieldChanges(left: IncentiveWorklistRow, rig
     left.serviceCode === right.serviceCode &&
     (left.state !== right.state || left.outcomeStatus !== right.outcomeStatus || left.umEvidenceSignature !== right.umEvidenceSignature)
   );
+}
+
+function stripLegacyPaOutcomeFields(record: UMRequest): ProviderDocumentationUmRequest {
+  const umRequest = { ...record } as ProviderDocumentationUmRequest & {
+    paResult?: unknown;
+    denialReason?: unknown;
+  };
+
+  delete umRequest.paResult;
+  delete umRequest.denialReason;
+
+  return umRequest;
 }
 
 function buildUmEvidenceSignature(record: UMRequest): string {

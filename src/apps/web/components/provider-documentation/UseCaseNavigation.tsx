@@ -4,19 +4,16 @@ type UseCaseView = "provider" | "plan" | "policies";
 
 export function UseCaseNavigation({
   activeView,
-  umRequestId,
-  caseId
+  umRequestId
 }: {
   activeView: UseCaseView;
   umRequestId?: string | null;
-  caseId?: string | null;
 }) {
-  const resolvedUmRequestId = umRequestId ?? caseId ?? null;
-  const planHref = resolvedUmRequestId
-    ? `/provider-documentation/incentives?umRequestId=${encodeURIComponent(resolvedUmRequestId)}`
+  const planHref = umRequestId
+    ? `/provider-documentation/incentives?umRequestId=${encodeURIComponent(umRequestId)}`
     : "/provider-documentation/incentives";
-  const policiesHref = resolvedUmRequestId
-    ? `/provider-documentation/policies?umRequestId=${encodeURIComponent(resolvedUmRequestId)}`
+  const policiesHref = umRequestId
+    ? `/provider-documentation/policies?umRequestId=${encodeURIComponent(umRequestId)}`
     : "/provider-documentation/policies";
 
   return (

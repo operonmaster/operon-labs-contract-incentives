@@ -10,10 +10,10 @@ import { UseCaseNavigation } from "./UseCaseNavigation";
 interface PolicyConsoleProps {
   businessPolicies: PolicySummary[];
   paymentPolicies: PolicySummary[];
-  initialCaseId?: string | null;
+  initialUmRequestId?: string | null;
 }
 
-export function PolicyConsole({ businessPolicies, paymentPolicies, initialCaseId = null }: PolicyConsoleProps) {
+export function PolicyConsole({ businessPolicies, paymentPolicies, initialUmRequestId = null }: PolicyConsoleProps) {
   const [selectedPolicy, setSelectedPolicy] = useState<PolicySummary | null>(null);
 
   return (
@@ -22,7 +22,7 @@ export function PolicyConsole({ businessPolicies, paymentPolicies, initialCaseId
         <Link className="back" href="/">
           Back to demos
         </Link>
-        <UseCaseNavigation activeView="policies" caseId={initialCaseId} />
+        <UseCaseNavigation activeView="policies" umRequestId={initialUmRequestId} />
       </div>
 
       <LabsHero compact eyebrow="Policy catalog" title="Provider Documentation Completeness Policies">
