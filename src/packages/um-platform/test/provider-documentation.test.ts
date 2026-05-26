@@ -140,9 +140,13 @@ describe("provider documentation UM Platform", () => {
     });
     expect(submitted.caseId).toMatch(PA_CASE_ID_PATTERN);
     expect(platform.getEvidence(submitted.id)).toMatchObject({
+      id: submitted.id,
+      umRequestId: submitted.id,
+      caseId: submitted.id,
       serviceCode: "knee_mri",
       requestType: "outpatient_service",
       crdCoveredBenefit: true,
+      dtrCompleted: false,
       dtrTemplateCompleted: false,
       attachmentChecklistComplete: false,
       fhirFieldsPresent: false,
@@ -207,11 +211,14 @@ describe("provider documentation UM Platform", () => {
       }
     ]);
     expect(platform.getEvidence(submitted.id)).toMatchObject({
-      caseId: submitted.caseId,
+      id: submitted.id,
+      umRequestId: submitted.id,
+      caseId: submitted.id,
       requestType: "outpatient_service",
       serviceCode: "knee_mri",
       crdCoverageChecked: true,
       crdCoveredBenefit: true,
+      dtrCompleted: true,
       dtrTemplateCompleted: true,
       attachmentChecklistComplete: true,
       fhirFieldsPresent: true,

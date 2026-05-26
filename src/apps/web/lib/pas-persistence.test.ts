@@ -64,6 +64,7 @@ describe("PAS persistence store selection", () => {
       fhirBundle: buildPasFhirBundle(umRequest, evidence)
     });
     await store.saveIncentiveRow({
+      id: umRequest.id,
       umRequestId: umRequest.id,
       caseId: umRequest.id,
       submittedAt: umRequest.submittedAt,
@@ -71,6 +72,8 @@ describe("PAS persistence store selection", () => {
       requestType: umRequest.requestType,
       serviceLabel: umRequest.serviceLabel,
       serviceCode: umRequest.serviceCode,
+      state: umRequest.state,
+      outcomeStatus: umRequest.outcomeStatus,
       paResult: umRequest.paResult,
       denialReason: umRequest.denialReason,
       incentiveStatus: "paid",
@@ -619,6 +622,7 @@ function buildPersistedIncentiveRow(
   overrides: Partial<PersistedIncentiveWorklistRow> = {}
 ): PersistedIncentiveWorklistRow {
   return {
+    id: umRequest.id,
     umRequestId: umRequest.id,
     caseId: umRequest.id,
     submittedAt: umRequest.submittedAt,
@@ -626,6 +630,8 @@ function buildPersistedIncentiveRow(
     requestType: umRequest.requestType,
     serviceLabel: umRequest.serviceLabel,
     serviceCode: umRequest.serviceCode,
+    state: umRequest.state,
+    outcomeStatus: umRequest.outcomeStatus,
     paResult: umRequest.paResult,
     denialReason: umRequest.denialReason,
     incentiveStatus: "paid",

@@ -110,14 +110,16 @@ describe("provider documentation API routes", () => {
         })
       })
     );
-    const submitted = (await submittedResponse.json()) as { caseId: string };
+    const submitted = (await submittedResponse.json()) as { id: string; caseId: string };
 
     const response = await listIncentives();
-    const payload = (await response.json()) as { rows: Array<{ caseId: string; incentiveStatus: string; paymentStatus: string; transactionId: string | null }> };
-    const row = payload.rows.find((candidate) => candidate.caseId === submitted.caseId);
+    const payload = (await response.json()) as { rows: Array<{ id: string; umRequestId: string; incentiveStatus: string; paymentStatus: string; transactionId: string | null }> };
+    const row = payload.rows.find((candidate) => candidate.umRequestId === submitted.id);
 
     expect(response.status).toBe(200);
     expect(row).toMatchObject({
+      id: submitted.id,
+      umRequestId: submitted.id,
       incentiveStatus: "paid",
       paymentStatus: "auto_executed"
     });
@@ -176,16 +178,17 @@ describe("provider documentation API routes", () => {
         })
       })
     );
-    const submitted = (await submittedResponse.json()) as { caseId: string };
+    const submitted = (await submittedResponse.json()) as { id: string };
 
     const response = await listPriorAuths();
-    const records = (await response.json()) as Array<{ caseId: string; serviceCode: string }>;
+    const records = (await response.json()) as Array<{ id: string; caseId: string; serviceCode: string }>;
 
     expect(response.status).toBe(200);
     expect(records).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          caseId: submitted.caseId,
+          id: submitted.id,
+          caseId: submitted.id,
           serviceCode: "knee_mri"
         })
       ])
@@ -210,16 +213,18 @@ describe("provider documentation API routes", () => {
         })
       })
     );
-    const submitted = (await submittedResponse.json()) as { caseId: string };
+    const submitted = (await submittedResponse.json()) as { id: string };
 
-    const response = await getEvidence(new Request(`http://localhost/api/um/prior-auths/${submitted.caseId}/evidence`), {
-      params: Promise.resolve({ caseId: submitted.caseId })
+    const response = await getEvidence(new Request(`http://localhost/api/um/prior-auths/${submitted.id}/evidence`), {
+      params: Promise.resolve({ caseId: submitted.id })
     });
-    const evidence = (await response.json()) as { caseId: string; fhirFieldsPresent: boolean };
+    const evidence = (await response.json()) as { id: string; umRequestId: string; caseId: string; fhirFieldsPresent: boolean };
 
     expect(response.status).toBe(200);
     expect(evidence).toMatchObject({
-      caseId: submitted.caseId,
+      id: submitted.id,
+      umRequestId: submitted.id,
+      caseId: submitted.id,
       fhirFieldsPresent: true
     });
   });

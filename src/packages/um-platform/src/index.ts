@@ -130,6 +130,8 @@ export interface CompleteClinicalReviewInput {
 export type PriorAuthRecord = UMRequest;
 
 export interface ProviderDocumentationEvidence {
+  id: string;
+  umRequestId: string;
   caseId: string;
   planId: PlanId;
   submitter: {
@@ -143,6 +145,7 @@ export interface ProviderDocumentationEvidence {
   coverageStatusConfirmed: boolean;
   coveredBenefit: boolean;
   dtrRequested: boolean;
+  dtrCompleted: boolean;
   crdCoverageChecked: boolean;
   crdCoveredBenefit: boolean;
   dtrTemplateCompleted: boolean;
@@ -436,6 +439,8 @@ export function buildProviderDocumentationEvidence(record: UMRequest): ProviderD
   const denialReason = record.coverage.reasonCode;
 
   return {
+    id: record.id,
+    umRequestId: record.id,
     caseId: record.id,
     planId: record.planId,
     submitter: {
@@ -449,6 +454,7 @@ export function buildProviderDocumentationEvidence(record: UMRequest): ProviderD
     coverageStatusConfirmed: documentation.coverageChecked,
     coveredBenefit: record.coverage.coveredBenefit,
     dtrRequested: documentation.dtrRequested,
+    dtrCompleted: documentation.dtrCompleted,
     crdCoverageChecked: documentation.coverageChecked,
     crdCoveredBenefit: record.coverage.coveredBenefit,
     dtrTemplateCompleted: documentation.dtrCompleted,

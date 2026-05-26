@@ -6,16 +6,16 @@ import {
   buildPasFhirBundle,
   createInMemoryUmPlatform,
   getCoverageRequirements,
-  type PasSubmittedEvent,
   type PriorAuthRecord,
   type PriorAuthSubmissionInput,
   type ProviderDocumentationEvidence,
   type RequestType,
   type ServiceCode,
+  type UMRequest,
   type UMPlatformEvent,
   type UmPlatform
 } from "@operon-labs/um-platform";
-import { createPasPersistenceStoreFromEnv, toPasSubmittedEvent, type PasPersistenceStore } from "./pas-persistence";
+import { createPasPersistenceStoreFromEnv, type UmPasPersistenceStore } from "./pas-persistence";
 import { createPaymentIntentStoreFromEnv } from "./payment-intent-store";
 import { createPolicyStoreFromEnv, type PolicyStore } from "./policy-store";
 import { createBusinessEvaluationAttestationStore } from "./business-evaluation-attestation-store";
@@ -41,6 +41,7 @@ export interface PolicyCriterionMatch {
 }
 
 export interface IncentiveWorklistRow {
+  id: string;
   umRequestId: string;
   caseId: string;
   planId?: string;
@@ -50,6 +51,8 @@ export interface IncentiveWorklistRow {
   requestType: RequestType;
   serviceLabel: string;
   serviceCode: ServiceCode;
+  state: UMRequest["state"];
+  outcomeStatus: UMRequest["outcomeStatus"];
   paResult: PriorAuthRecord["paResult"];
   denialReason: PriorAuthRecord["denialReason"];
   incentiveStatus: IncentiveStatus;
@@ -71,17 +74,18 @@ export interface IncentiveWorklistRow {
 /* eslint-disable no-unused-vars -- TypeScript interface method signatures require parameter names. */
 export interface ProviderDocumentationWorkflow {
   getCoverageRequirements: typeof getCoverageRequirements;
-  submitPriorAuth(input: PriorAuthSubmissionInput): Promise<PriorAuthRecord>;
+  submitPriorAuth(input: PriorAuthSubmissionInput): Promise<UMRequest>;
+  listUmRequests(): Promise<UMRequest[]>;
   listPriorAuths(): Promise<PriorAuthRecord[]>;
-  getEvidence(caseId: string): Promise<ProviderDocumentationEvidence | null>;
+  getEvidence(umRequestId: string): Promise<ProviderDocumentationEvidence | null>;
   listIncentiveRows(): Promise<IncentiveWorklistRow[]>;
-  getIncentiveRow(caseId: string): Promise<IncentiveWorklistRow | null>;
+  getIncentiveRow(umRequestId: string): Promise<IncentiveWorklistRow | null>;
 }
 /* eslint-enable no-unused-vars */
 
 export function createProviderDocumentationWorkflow(
   platform: UmPlatform = createInMemoryUmPlatform(),
-  persistence: PasPersistenceStore | undefined = createPasPersistenceStoreFromEnv(),
+  persistence: UmPasPersistenceStore | undefined = createPasPersistenceStoreFromEnv(),
   policyStore: PolicyStore = createPolicyStoreFromEnv(),
   paymentIntentStore: PaymentIntentStore | undefined = createPaymentIntentStoreFromEnv(),
   paymentPolicyStore: PaymentPolicyStore = createPaymentPolicyStoreFromEnv(),
@@ -90,43 +94,47 @@ export function createProviderDocumentationWorkflow(
   const rows = new Map<string, IncentiveWorklistRow>();
   const settlementsInFlight = new Map<string, Promise<IncentiveWorklistRow | null>>();
 
-  async function getPriorAuthRecord(caseId: string): Promise<PriorAuthRecord | null> {
+  async function getUmRequest(umRequestId: string): Promise<UMRequest | null> {
     return (
-      (await persistence?.getPriorAuthRecord(caseId)) ??
-      platform.listPriorAuths().find((candidate) => candidate.caseId === caseId) ??
+      (await persistence?.getUmRequest(umRequestId)) ??
+      platform.getUmRequest(umRequestId) ??
       null
     );
   }
 
-  async function processEvent(event: PasSubmittedEvent): Promise<IncentiveWorklistRow | null> {
-    const record = await getPriorAuthRecord(event.caseId);
+  async function processEvent(event: UMPlatformEvent): Promise<IncentiveWorklistRow | null> {
+    if (!isUmRequestCreatedEvent(event)) {
+      return null;
+    }
+
+    const record = await getUmRequest(event.umRequestId);
     if (!record) {
       return null;
     }
 
-    const existing = rows.get(event.caseId) ?? (await persistence?.getIncentiveRow(event.umRequestId)) ?? null;
+    const existing = rows.get(event.umRequestId) ?? (await persistence?.getIncentiveRow(event.umRequestId)) ?? null;
     if (existing && isCurrentIncentiveRow(existing, record)) {
-      rows.set(event.caseId, existing);
+      rows.set(event.umRequestId, existing);
       return existing;
     }
 
-    const existingSettlement = settlementsInFlight.get(event.caseId);
+    const existingSettlement = settlementsInFlight.get(event.umRequestId);
     if (existingSettlement) {
       return existingSettlement;
     }
 
     const settlement = settleEvent(event, record);
-    settlementsInFlight.set(event.caseId, settlement);
+    settlementsInFlight.set(event.umRequestId, settlement);
 
     try {
       return await settlement;
     } finally {
-      settlementsInFlight.delete(event.caseId);
+      settlementsInFlight.delete(event.umRequestId);
     }
   }
 
-  async function settleEvent(event: PasSubmittedEvent, record: PriorAuthRecord): Promise<IncentiveWorklistRow | null> {
-    const evidence = (await persistence?.getEvidence(event.umRequestId)) ?? platform.getEvidence(event.caseId);
+  async function settleEvent(event: UMPlatformEvent, record: UMRequest): Promise<IncentiveWorklistRow | null> {
+    const evidence = (await persistence?.getEvidence(event.umRequestId)) ?? platform.getEvidence(event.umRequestId);
     if (!evidence) {
       return null;
     }
@@ -145,7 +153,7 @@ export function createProviderDocumentationWorkflow(
     const evaluation = selectProviderDocumentationEvaluation(
       policies.map((policy) =>
         evaluateProviderDocumentationEvent(event, {
-          getEvidenceByCaseId: () => evidence,
+          getEvidenceByUmRequestId: () => evidence,
           policy,
           monthToDateAmount: 0
         })
@@ -158,8 +166,9 @@ export function createProviderDocumentationWorkflow(
       transactionId: null
     });
     const baseRow: IncentiveWorklistRow = {
+      id: record.id,
       umRequestId: record.id,
-      caseId: record.caseId,
+      caseId: record.id,
       planId: record.planId,
       planDisplay: record.planDisplay,
       submittedAt: record.submittedAt,
@@ -167,6 +176,8 @@ export function createProviderDocumentationWorkflow(
       requestType: record.requestType,
       serviceLabel: record.serviceLabel,
       serviceCode: record.serviceCode,
+      state: record.state,
+      outcomeStatus: record.outcomeStatus,
       paResult: record.paResult,
       denialReason: record.denialReason,
       incentiveStatus: evaluation.result.decision === "approved" ? "paid" : "not_eligible",
@@ -186,7 +197,7 @@ export function createProviderDocumentationWorkflow(
     };
 
     if (evaluation.result.decision !== "approved" || !evaluation.result.walletId) {
-      rows.set(event.caseId, baseRow);
+      rows.set(event.umRequestId, baseRow);
       await persistence?.saveIncentiveRow(baseRow);
       return baseRow;
     }
@@ -194,7 +205,7 @@ export function createProviderDocumentationWorkflow(
     let paymentPolicy: PaymentPlanPolicy | null = null;
 
     try {
-      rows.set(event.caseId, baseRow);
+      rows.set(event.umRequestId, baseRow);
       await persistence?.saveIncentiveRow(baseRow);
       paymentPolicy = await paymentPolicyStore.getPolicyForPlan(evidence.planId);
       if (!paymentPolicy) {
@@ -210,7 +221,7 @@ export function createProviderDocumentationWorkflow(
         walletId: evaluation.result.walletId,
         policyId: evaluation.result.policyId,
         policyVersion: evaluation.result.policyVersion,
-        caseId: event.caseId,
+        caseId: event.umRequestId,
         triggerEvent: event.eventType,
         policyControls
       }, {
@@ -239,7 +250,7 @@ export function createProviderDocumentationWorkflow(
         }
       };
 
-      rows.set(event.caseId, paid);
+      rows.set(event.umRequestId, paid);
       await persistence?.saveIncentiveRow(paid);
       await paymentPolicyEvidenceStore?.saveEvidence(
         buildPaymentPolicyEvidence({
@@ -253,9 +264,9 @@ export function createProviderDocumentationWorkflow(
       );
       return paid;
     } catch (error) {
-      const existing = rows.get(event.caseId) ?? (await persistence?.getIncentiveRow(event.umRequestId)) ?? null;
+      const existing = rows.get(event.umRequestId) ?? (await persistence?.getIncentiveRow(event.umRequestId)) ?? null;
       if (existing && isCurrentIncentiveRow(existing, record) && existing.incentiveStatus === "paid" && existing.transactionId) {
-        rows.set(event.caseId, existing);
+        rows.set(event.umRequestId, existing);
         return existing;
       }
 
@@ -267,7 +278,7 @@ export function createProviderDocumentationWorkflow(
         transactionId: null
       };
 
-      rows.set(event.caseId, failed);
+      rows.set(event.umRequestId, failed);
       await persistence?.saveIncentiveRow(failed);
       if (paymentPolicy) {
         await paymentPolicyEvidenceStore?.saveEvidence(
@@ -285,13 +296,13 @@ export function createProviderDocumentationWorkflow(
     }
   }
 
-  async function processPlatformEvents(caseId?: string): Promise<void> {
+  async function processPlatformEvents(umRequestId?: string): Promise<void> {
     const events = persistence
-      ? (await persistence.listPasEvents()).map(toPasSubmittedEvent)
-      : platform.listEvents().filter(isPasSubmittedEvent);
+      ? await persistence.listUmEvents()
+      : platform.listEvents();
 
     for (const event of events) {
-      if (!caseId || event.caseId === caseId) {
+      if (event.eventType === "UM_REQUEST_CREATED" && (!umRequestId || event.umRequestId === umRequestId)) {
         try {
           await processEvent(event);
         } catch {
@@ -301,9 +312,9 @@ export function createProviderDocumentationWorkflow(
     }
   }
 
-  async function getIncentiveRow(caseId: string): Promise<IncentiveWorklistRow | null> {
-    await processPlatformEvents(caseId);
-    return rows.get(caseId) ?? null;
+  async function getIncentiveRow(umRequestId: string): Promise<IncentiveWorklistRow | null> {
+    await processPlatformEvents(umRequestId);
+    return rows.get(umRequestId) ?? (await persistence?.getIncentiveRow(umRequestId)) ?? null;
   }
 
   return {
@@ -312,7 +323,7 @@ export function createProviderDocumentationWorkflow(
       let record = platform.submitPriorAuth(input);
       if (persistence) {
         let collisionCount = 0;
-        while (await persistence.getPriorAuthRecord(record.caseId)) {
+        while (await persistence.getUmRequest(record.id)) {
           collisionCount += 1;
           if (collisionCount > 100) {
             throw new Error("PAS_CASE_ID_COLLISION_LIMIT_EXCEEDED");
@@ -321,31 +332,34 @@ export function createProviderDocumentationWorkflow(
           record = platform.submitPriorAuth(input);
         }
 
-        const evidence = platform.getEvidence(record.caseId);
+        const evidence = platform.getEvidence(record.id);
         if (!evidence) {
           throw new Error("PAS_EVIDENCE_NOT_AVAILABLE");
         }
 
-        await persistence?.savePriorAuth({
-          record,
+        await persistence.savePasSubmission({
+          umRequest: record,
           evidence,
           fhirBundle: buildPasFhirBundle(record, evidence)
         });
       }
-      await processPlatformEvents(record.caseId);
+      await processPlatformEvents(record.id);
       return record;
     },
-    async listPriorAuths() {
-      return persistence ? persistence.listPriorAuthRecords() : platform.listPriorAuths();
+    async listUmRequests() {
+      return persistence ? persistence.listUmRequests() : platform.listUmRequests();
     },
-    async getEvidence(caseId) {
-      return (await persistence?.getEvidence(caseId)) ?? platform.getEvidence(caseId);
+    async listPriorAuths() {
+      return persistence ? persistence.listUmRequests() : platform.listUmRequests();
+    },
+    async getEvidence(umRequestId) {
+      return (await persistence?.getEvidence(umRequestId)) ?? platform.getEvidence(umRequestId);
     },
     async listIncentiveRows() {
       await processPlatformEvents();
       const persistedRows = (await persistence?.listIncentiveRows()) ?? [];
       for (const row of persistedRows) {
-        rows.set(row.caseId, row);
+        rows.set(row.umRequestId, row);
       }
 
       return Array.from(rows.values()).sort((left, right) => right.submittedAt.localeCompare(left.submittedAt));
@@ -354,8 +368,8 @@ export function createProviderDocumentationWorkflow(
   };
 }
 
-function isPasSubmittedEvent(event: UMPlatformEvent): event is PasSubmittedEvent {
-  return event.eventType === "PAS_SUBMITTED";
+function isUmRequestCreatedEvent(event: UMPlatformEvent): event is UMPlatformEvent & { eventType: "UM_REQUEST_CREATED" } {
+  return event.eventType === "UM_REQUEST_CREATED";
 }
 
 export const providerDocumentationWorkflow = createProviderDocumentationWorkflow();

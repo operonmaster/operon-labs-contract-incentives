@@ -4,7 +4,7 @@ import {
   type IncentivePolicy,
   type PolicyEvaluationResult
 } from "@operon-labs/policy-engine";
-import type { ProviderDocumentationEvidence, PasSubmittedEvent } from "@operon-labs/um-platform";
+import type { ProviderDocumentationEvidence } from "@operon-labs/um-platform";
 
 export interface DemoEvaluation {
   request: EvaluationRequest;
@@ -14,7 +14,7 @@ export interface DemoEvaluation {
 }
 
 export interface ProviderDocumentationEvaluationDependencies {
-  getEvidenceByCaseId: (caseId: string) => ProviderDocumentationEvidence | null;
+  getEvidenceByUmRequestId: (umRequestId: string) => ProviderDocumentationEvidence | null;
   policy: IncentivePolicy;
   monthToDateAmount?: number;
 }
@@ -54,16 +54,16 @@ export function explainDecision(result: PolicyEvaluationResult): string {
 }
 
 export function evaluateProviderDocumentationEvent(
-  event: PasSubmittedEvent | { eventType: string; caseId: string },
+  event: { eventType: string; umRequestId: string },
   dependencies: ProviderDocumentationEvaluationDependencies
 ): DemoEvaluation {
-  if (event.eventType !== "PAS_SUBMITTED") {
+  if (event.eventType !== "UM_REQUEST_CREATED") {
     throw new Error("UNSUPPORTED_PROVIDER_DOCUMENTATION_EVENT");
   }
 
-  const evidence = dependencies.getEvidenceByCaseId(event.caseId);
+  const evidence = dependencies.getEvidenceByUmRequestId(event.umRequestId);
   if (!evidence) {
-    throw new Error(`PROVIDER_DOCUMENTATION_EVIDENCE_NOT_FOUND:${event.caseId}`);
+    throw new Error(`PROVIDER_DOCUMENTATION_EVIDENCE_NOT_FOUND:${event.umRequestId}`);
   }
 
   const policy = dependencies.policy;
@@ -71,6 +71,8 @@ export function evaluateProviderDocumentationEvent(
     evaluationType: "provider_documentation_completeness",
     submitter: evidence.submitter,
     requestObject: {
+      id: evidence.id,
+      umRequestId: evidence.umRequestId,
       caseId: evidence.caseId,
       planId: evidence.planId,
       providerId: evidence.providerId,
@@ -80,7 +82,10 @@ export function evaluateProviderDocumentationEvent(
       billingCode: evidence.billingCode,
       coveredBenefit: evidence.coveredBenefit,
       dtrRequested: evidence.dtrRequested,
-      dtrTemplateCompleted: evidence.dtrTemplateCompleted
+      dtrCompleted: evidence.dtrCompleted,
+      dtrTemplateCompleted: evidence.dtrTemplateCompleted,
+      outcomeStatusUsedForPayment: false,
+      containsPhi: false
     }
   };
 

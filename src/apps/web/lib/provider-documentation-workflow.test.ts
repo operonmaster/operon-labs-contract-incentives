@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createProviderDocumentationWorkflow, type IncentiveWorklistRow } from "./provider-documentation-workflow";
-import type { StoredPasRequest } from "./pas-persistence";
+import type { StoredPasSubmission } from "./pas-persistence";
 import { createInMemoryPolicyStore, defaultIncentivePolicies } from "./policy-store";
 import { executePolicyBoundPayment } from "@operon-labs/hedera-executor";
 import { buildPasFhirBundle, createInMemoryUmPlatform, getDtrQuestionnaire } from "@operon-labs/um-platform";
@@ -44,9 +44,11 @@ describe("provider documentation workflow", () => {
     expect(submitted.caseId).toMatch(PA_CASE_ID_PATTERN);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
-      caseId: submitted.caseId,
+      id: submitted.id,
+      umRequestId: submitted.id,
+      caseId: submitted.id,
       serviceLabel: "Knee MRI after injury",
-      paResult: "submitted_pending",
+      outcomeStatus: null,
       incentiveStatus: "paid",
       paymentStatus: "auto_executed",
       incentiveValue: 5,
@@ -347,28 +349,53 @@ describe("provider documentation workflow", () => {
     );
   });
 
-  it("persists submitted prior authorizations as PAS FHIR bundles", async () => {
-    const storedRequests: StoredPasRequest[] = [];
+  it("persists submitted UM requests as PAS FHIR bundles", async () => {
+    const storedRequests: StoredPasSubmission[] = [];
     const storedRows: IncentiveWorklistRow[] = [];
+    const savePriorAuth = vi.fn();
     const workflow = createProviderDocumentationWorkflow(undefined, {
       backend: "firestore",
-      async savePriorAuth(request) {
+      async savePasSubmission(request) {
         storedRequests.push(request);
       },
+      savePriorAuth,
+      async saveUmRequest() {
+        return undefined;
+      },
+      async listUmRequests() {
+        return storedRequests.map((request) => request.umRequest);
+      },
+      async getUmRequest(umRequestId) {
+        return storedRequests.find((request) => request.umRequest.id === umRequestId)?.umRequest ?? null;
+      },
+      async listUmEvents() {
+        return storedRequests.flatMap((request) => [
+          {
+            eventType: "PAS_SUBMITTED" as const,
+            caseId: request.umRequest.id,
+            umRequestId: request.umRequest.id
+          },
+          {
+            eventType: "UM_REQUEST_CREATED" as const,
+            caseId: request.umRequest.id,
+            umRequestId: request.umRequest.id
+          }
+        ]);
+      },
       async listPriorAuthRecords() {
-        return storedRequests.map((request) => request.record);
+        return storedRequests.map((request) => request.umRequest);
       },
       async getPriorAuthRecord(caseId) {
-        return storedRequests.find((request) => request.record.caseId === caseId)?.record ?? null;
+        return storedRequests.find((request) => request.umRequest.id === caseId)?.umRequest ?? null;
       },
       async getEvidence(umRequestId) {
-        return storedRequests.find((request) => request.record.id === umRequestId)?.evidence ?? null;
+        return storedRequests.find((request) => request.umRequest.id === umRequestId)?.evidence ?? null;
       },
       async listPasEvents() {
         return storedRequests.map((request) => ({
           eventType: "PAS_SUBMITTED",
-          caseId: request.record.caseId,
-          umRequestId: request.record.id
+          caseId: request.umRequest.id,
+          umRequestId: request.umRequest.id
         }));
       },
       async saveIncentiveRow(row) {
@@ -393,21 +420,29 @@ describe("provider documentation workflow", () => {
       }
     });
 
-    await expect(workflow.listPriorAuths()).resolves.toEqual([expect.objectContaining({ caseId: submitted.caseId })]);
-    await expect(workflow.getEvidence(submitted.caseId)).resolves.toMatchObject({ caseId: submitted.caseId });
+    await expect(workflow.listUmRequests()).resolves.toEqual([expect.objectContaining({ id: submitted.id })]);
+    await expect(workflow.listPriorAuths()).resolves.toEqual([expect.objectContaining({ id: submitted.id })]);
+    await expect(workflow.getEvidence(submitted.id)).resolves.toMatchObject({
+      id: submitted.id,
+      umRequestId: submitted.id,
+      caseId: submitted.id
+    });
     expect(storedRows).toEqual(expect.arrayContaining([
       expect.objectContaining({
+        id: submitted.id,
         umRequestId: submitted.id,
-        caseId: submitted.caseId
+        caseId: submitted.id
       })
     ]));
+    expect(savePriorAuth).not.toHaveBeenCalled();
     expect(storedRequests[0]).toMatchObject({
-      record: { caseId: submitted.caseId },
-      evidence: { caseId: submitted.caseId },
+      umRequest: { id: submitted.id, caseId: submitted.id },
+      evidence: { id: submitted.id, umRequestId: submitted.id, caseId: submitted.id },
       fhirBundle: {
+        id: submitted.id,
         resourceType: "Bundle",
         entry: expect.arrayContaining([
-          expect.objectContaining({ resource: expect.objectContaining({ resourceType: "Claim" }) })
+          expect.objectContaining({ resource: expect.objectContaining({ resourceType: "Claim", id: submitted.id }) })
         ])
       }
     });
@@ -429,27 +464,53 @@ describe("provider documentation workflow", () => {
       serviceCode: "full_body_wellness_mri",
       acknowledgedNotCovered: true
     });
-    const storedRequests: StoredPasRequest[] = [existingKnee, existingFullBody].map((record) => ({
-      record,
-      evidence: previousPlatform.getEvidence(record.caseId)!,
-      fhirBundle: buildPasFhirBundle(record, previousPlatform.getEvidence(record.caseId)!)
+    const storedRequests: StoredPasSubmission[] = [existingKnee, existingFullBody].map((umRequest) => ({
+      umRequest,
+      evidence: previousPlatform.getEvidence(umRequest.id)!,
+      fhirBundle: buildPasFhirBundle(umRequest, previousPlatform.getEvidence(umRequest.id)!)
     }));
     const workflow = createProviderDocumentationWorkflow(createInMemoryUmPlatform({ generateCaseId: createCaseIdGenerator(collisionCaseIds) }), {
       backend: "firestore",
-      async savePriorAuth(request) {
+      async savePasSubmission(request) {
         storedRequests.push(request);
       },
+      async savePriorAuth(request) {
+        storedRequests.push({
+          umRequest: request.record,
+          evidence: request.evidence,
+          fhirBundle: request.fhirBundle
+        });
+      },
+      async saveUmRequest() {
+        return undefined;
+      },
+      async listUmRequests() {
+        return storedRequests.map((request) => request.umRequest);
+      },
+      async getUmRequest(umRequestId) {
+        return storedRequests.find((request) => request.umRequest.id === umRequestId)?.umRequest ?? null;
+      },
+      async listUmEvents() {
+        return storedRequests.flatMap((request) => [
+          { eventType: "PAS_SUBMITTED" as const, caseId: request.umRequest.id, umRequestId: request.umRequest.id },
+          { eventType: "UM_REQUEST_CREATED" as const, caseId: request.umRequest.id, umRequestId: request.umRequest.id }
+        ]);
+      },
       async listPriorAuthRecords() {
-        return storedRequests.map((request) => request.record);
+        return storedRequests.map((request) => request.umRequest);
       },
       async getPriorAuthRecord(caseId) {
-        return storedRequests.find((request) => request.record.caseId === caseId)?.record ?? null;
+        return storedRequests.find((request) => request.umRequest.id === caseId)?.umRequest ?? null;
       },
-      async getEvidence(caseId) {
-        return storedRequests.find((request) => request.evidence.caseId === caseId)?.evidence ?? null;
+      async getEvidence(umRequestId) {
+        return storedRequests.find((request) => request.evidence.umRequestId === umRequestId)?.evidence ?? null;
       },
       async listPasEvents() {
-        return storedRequests.map((request) => ({ eventType: "PAS_SUBMITTED", caseId: request.record.caseId }));
+        return storedRequests.map((request) => ({
+          eventType: "PAS_SUBMITTED",
+          caseId: request.umRequest.id,
+          umRequestId: request.umRequest.id
+        }));
       },
       async saveIncentiveRow() {
         return undefined;
@@ -474,10 +535,10 @@ describe("provider documentation workflow", () => {
     });
 
     expect(submitted.caseId).toBe("PA-260524-2102-CCCC3333");
-    expect(storedRequests.map((request) => request.record.caseId)).toEqual(collisionCaseIds);
+    expect(storedRequests.map((request) => request.umRequest.id)).toEqual(collisionCaseIds);
   });
 
-  it("reprocesses a stale incentive row when a newer PAS claim uses the same case ID", async () => {
+  it("reprocesses a stale incentive row when a newer UM request uses the same canonical ID", async () => {
     const platform = createInMemoryUmPlatform();
     const record = platform.submitPriorAuth({
       requestType: "outpatient_service",
@@ -489,20 +550,23 @@ describe("provider documentation workflow", () => {
         clinicalNoteAttached: true
       }
     });
-    const evidence = platform.getEvidence(record.caseId)!;
-    const storedRequest: StoredPasRequest = {
-      record,
+    const evidence = platform.getEvidence(record.id)!;
+    const storedRequest: StoredPasSubmission = {
+      umRequest: record,
       evidence,
       fhirBundle: buildPasFhirBundle(record, evidence)
     };
     let incentiveRow: IncentiveWorklistRow | null = {
+      id: record.id,
       umRequestId: record.id,
-      caseId: record.caseId,
+      caseId: record.id,
       submittedAt: "2026-05-24T00:00:00.000Z",
       providerGroupDisplay: record.providerGroupDisplay,
       requestType: record.requestType,
       serviceLabel: record.serviceLabel,
       serviceCode: record.serviceCode,
+      state: record.state,
+      outcomeStatus: null,
       paResult: "submitted_pending",
       denialReason: null,
       incentiveStatus: "not_eligible",
@@ -531,20 +595,38 @@ describe("provider documentation workflow", () => {
     };
     const workflow = createProviderDocumentationWorkflow(createInMemoryUmPlatform(), {
       backend: "firestore",
+      async savePasSubmission() {
+        return undefined;
+      },
       async savePriorAuth() {
         return undefined;
       },
+      async saveUmRequest() {
+        return undefined;
+      },
+      async listUmRequests() {
+        return [storedRequest.umRequest];
+      },
+      async getUmRequest(umRequestId) {
+        return umRequestId === record.id ? storedRequest.umRequest : null;
+      },
+      async listUmEvents() {
+        return [
+          { eventType: "PAS_SUBMITTED", caseId: record.id, umRequestId: record.id },
+          { eventType: "UM_REQUEST_CREATED", caseId: record.id, umRequestId: record.id }
+        ];
+      },
       async listPriorAuthRecords() {
-        return [storedRequest.record];
+        return [storedRequest.umRequest];
       },
       async getPriorAuthRecord(caseId) {
-        return caseId === record.caseId ? storedRequest.record : null;
+        return caseId === record.id ? storedRequest.umRequest : null;
       },
       async getEvidence(umRequestId) {
         return umRequestId === record.id ? storedRequest.evidence : null;
       },
       async listPasEvents() {
-        return [{ eventType: "PAS_SUBMITTED", caseId: record.caseId, umRequestId: record.id }];
+        return [{ eventType: "PAS_SUBMITTED", caseId: record.id, umRequestId: record.id }];
       },
       async saveIncentiveRow(row) {
         incentiveRow = row;
@@ -560,7 +642,9 @@ describe("provider documentation workflow", () => {
     const rows = await workflow.listIncentiveRows();
 
     expect(rows[0]).toMatchObject({
-      caseId: record.caseId,
+      id: record.id,
+      umRequestId: record.id,
+      caseId: record.id,
       submittedAt: record.submittedAt,
       incentiveStatus: "paid",
       paymentStatus: "auto_executed",

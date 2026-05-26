@@ -4,7 +4,7 @@ import { providerDocumentationWorkflow } from "../../../../lib/provider-document
 import { umReferenceDataStore } from "../../../../lib/um-reference-data";
 
 export async function GET() {
-  return NextResponse.json(await providerDocumentationWorkflow.listPriorAuths());
+  return NextResponse.json(await providerDocumentationWorkflow.listUmRequests());
 }
 
 export async function POST(request: Request) {

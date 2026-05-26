@@ -22,7 +22,7 @@ describe("evaluateProviderDocumentationEvent", () => {
 
   it("uses the caller supplied Firestore policy for provider documentation events", () => {
     const platform = createInMemoryUmPlatform();
-    const priorAuth = platform.submitPriorAuth({
+    const umRequest = platform.submitPriorAuth({
       planId: "acme-health-ppo",
       requestType: "outpatient_service",
       serviceCode: "knee_mri",
@@ -36,8 +36,8 @@ describe("evaluateProviderDocumentationEvent", () => {
     const policy = createProviderDocumentationPolicy(2);
 
     const evaluation = evaluateProviderDocumentationEvent(
-      { eventType: "PAS_SUBMITTED", caseId: priorAuth.caseId },
-      { getEvidenceByCaseId: platform.getEvidence, policy, monthToDateAmount: 0 }
+      { eventType: "UM_REQUEST_CREATED", umRequestId: umRequest.id },
+      { getEvidenceByUmRequestId: platform.getEvidence, policy, monthToDateAmount: 0 }
     );
 
     expect(evaluation.result).toMatchObject({
@@ -50,9 +50,9 @@ describe("evaluateProviderDocumentationEvent", () => {
     });
   });
 
-  it("pulls policy-safe evidence by caseId and approves complete knee MRI DTR documentation", () => {
+  it("pulls policy-safe evidence by umRequestId and approves complete knee MRI DTR documentation", () => {
     const platform = createInMemoryUmPlatform();
-    const priorAuth = platform.submitPriorAuth({
+    const umRequest = platform.submitPriorAuth({
       planId: "acme-health-ppo",
       requestType: "outpatient_service",
       serviceCode: "knee_mri",
@@ -66,13 +66,15 @@ describe("evaluateProviderDocumentationEvent", () => {
     const getEvidence = vi.fn(platform.getEvidence);
 
     const evaluation = evaluateProviderDocumentationEvent(
-      { eventType: "PAS_SUBMITTED", caseId: priorAuth.caseId },
-      { getEvidenceByCaseId: getEvidence, policy: createProviderDocumentationPolicy(5), monthToDateAmount: 0 }
+      { eventType: "UM_REQUEST_CREATED", umRequestId: umRequest.id },
+      { getEvidenceByUmRequestId: getEvidence, policy: createProviderDocumentationPolicy(5), monthToDateAmount: 0 }
     );
 
-    expect(getEvidence).toHaveBeenCalledWith(priorAuth.caseId);
+    expect(getEvidence).toHaveBeenCalledWith(umRequest.id);
     expect(evaluation.request.requestObject).toMatchObject({
-      caseId: priorAuth.caseId,
+      id: umRequest.id,
+      umRequestId: umRequest.id,
+      caseId: umRequest.id,
       planId: "acme-health-ppo",
       providerId: "lakeside-provider-admin",
       requestType: "outpatient_service",
@@ -80,8 +82,12 @@ describe("evaluateProviderDocumentationEvent", () => {
       billingCode: "73721",
       coveredBenefit: true,
       dtrRequested: true,
-      dtrTemplateCompleted: true
+      dtrCompleted: true,
+      dtrTemplateCompleted: true,
+      outcomeStatusUsedForPayment: false,
+      containsPhi: false
     });
+    expect(evaluation.request.requestObject).not.toHaveProperty("outcomeStatus");
     expect(evaluation.request.requestObject).not.toHaveProperty("pasSubmitted");
     expect(evaluation.request.requestObject).not.toHaveProperty("attachmentChecklistComplete");
     expect(evaluation.request.requestObject).not.toHaveProperty("fhirFieldsPresent");
@@ -99,7 +105,7 @@ describe("evaluateProviderDocumentationEvent", () => {
 
   it("blocks full-body wellness MRI with zero incentive", () => {
     const platform = createInMemoryUmPlatform();
-    const priorAuth = platform.submitPriorAuth({
+    const umRequest = platform.submitPriorAuth({
       planId: "acme-health-ppo",
       requestType: "outpatient_service",
       serviceCode: "full_body_wellness_mri",
@@ -107,9 +113,9 @@ describe("evaluateProviderDocumentationEvent", () => {
     });
 
     const evaluation = evaluateProviderDocumentationEvent(
-      { eventType: "PAS_SUBMITTED", caseId: priorAuth.caseId },
+      { eventType: "UM_REQUEST_CREATED", umRequestId: umRequest.id },
       {
-        getEvidenceByCaseId: platform.getEvidence,
+        getEvidenceByUmRequestId: platform.getEvidence,
         policy: createProviderDocumentationPolicy(5),
         monthToDateAmount: 0
       }
@@ -126,7 +132,7 @@ describe("evaluateProviderDocumentationEvent", () => {
 
   it("approves complete pharmacy benefit DTR documentation when the NDC is in scope", () => {
     const platform = createInMemoryUmPlatform();
-    const priorAuth = platform.submitPriorAuth({
+    const umRequest = platform.submitPriorAuth({
       planId: "acme-health-ppo",
       requestType: "pharmacy_benefit",
       serviceCode: "humira_adalimumab",
@@ -139,19 +145,22 @@ describe("evaluateProviderDocumentationEvent", () => {
     });
 
     const evaluation = evaluateProviderDocumentationEvent(
-      { eventType: "PAS_SUBMITTED", caseId: priorAuth.caseId },
+      { eventType: "UM_REQUEST_CREATED", umRequestId: umRequest.id },
       {
-        getEvidenceByCaseId: platform.getEvidence,
+        getEvidenceByUmRequestId: platform.getEvidence,
         policy: createProviderDocumentationPolicy(5, "pharmacy_benefit"),
         monthToDateAmount: 0
       }
     );
 
     expect(evaluation.request.requestObject).toMatchObject({
-      caseId: priorAuth.caseId,
+      id: umRequest.id,
+      umRequestId: umRequest.id,
+      caseId: umRequest.id,
       requestType: "pharmacy_benefit",
       billingCode: "0074-0554-02",
       dtrRequested: true,
+      dtrCompleted: true,
       dtrTemplateCompleted: true
     });
     expect(evaluation.result).toMatchObject({
@@ -166,29 +175,31 @@ describe("evaluateProviderDocumentationEvent", () => {
 
     expect(() =>
       evaluateProviderDocumentationEvent(
-        { eventType: "OTHER_EVENT", caseId: "PA-260524-2102-IGNORE99" },
-        { getEvidenceByCaseId: getEvidence, policy: createProviderDocumentationPolicy(5), monthToDateAmount: 0 }
+        { eventType: "PAS_SUBMITTED", umRequestId: "PA-260524-2102-IGNORE99" },
+        { getEvidenceByUmRequestId: getEvidence, policy: createProviderDocumentationPolicy(5), monthToDateAmount: 0 }
       )
     ).toThrow("UNSUPPORTED_PROVIDER_DOCUMENTATION_EVENT");
     expect(getEvidence).not.toHaveBeenCalled();
   });
 
-  it("throws when PAS evidence is missing for the caseId", () => {
+  it("throws when UM request evidence is missing for the umRequestId", () => {
     const getEvidence = vi.fn(() => null);
 
-    const missingCaseId = "PA-260524-2102-MISSING1";
+    const missingUmRequestId = "PA-260524-2102-MISSING1";
 
     expect(() =>
       evaluateProviderDocumentationEvent(
-        { eventType: "PAS_SUBMITTED", caseId: missingCaseId },
-        { getEvidenceByCaseId: getEvidence, policy: createProviderDocumentationPolicy(5), monthToDateAmount: 0 }
+        { eventType: "UM_REQUEST_CREATED", umRequestId: missingUmRequestId },
+        { getEvidenceByUmRequestId: getEvidence, policy: createProviderDocumentationPolicy(5), monthToDateAmount: 0 }
       )
-    ).toThrow(`PROVIDER_DOCUMENTATION_EVIDENCE_NOT_FOUND:${missingCaseId}`);
-    expect(getEvidence).toHaveBeenCalledWith(missingCaseId);
+    ).toThrow(`PROVIDER_DOCUMENTATION_EVIDENCE_NOT_FOUND:${missingUmRequestId}`);
+    expect(getEvidence).toHaveBeenCalledWith(missingUmRequestId);
   });
 
   it("treats covered services without requested DTR as not applicable to this policy", () => {
     const evidence = {
+      id: "PA-260524-2102-AAAA1111",
+      umRequestId: "PA-260524-2102-AAAA1111",
       caseId: "PA-260524-2102-AAAA1111",
       planId: "acme-health-ppo",
       submitter: { id: "lakeside-provider-admin" },
@@ -199,12 +210,13 @@ describe("evaluateProviderDocumentationEvent", () => {
       billingCode: "73721",
       coveredBenefit: true,
       dtrRequested: false,
+      dtrCompleted: false,
       dtrTemplateCompleted: false
     } as unknown as ProviderDocumentationEvidence;
 
     const evaluation = evaluateProviderDocumentationEvent(
-      { eventType: "PAS_SUBMITTED", caseId: evidence.caseId },
-      { getEvidenceByCaseId: () => evidence, policy: createProviderDocumentationPolicy(5), monthToDateAmount: 0 }
+      { eventType: "UM_REQUEST_CREATED", umRequestId: evidence.umRequestId },
+      { getEvidenceByUmRequestId: () => evidence, policy: createProviderDocumentationPolicy(5), monthToDateAmount: 0 }
     );
 
     expect(evaluation.result).toMatchObject({
