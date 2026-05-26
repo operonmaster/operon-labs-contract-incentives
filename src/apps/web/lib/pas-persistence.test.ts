@@ -291,6 +291,33 @@ describe("PAS persistence store selection", () => {
     });
   });
 
+  it("uses the audit event document id over stale embedded event ids on read", async () => {
+    const firestore = createFakeFirestore();
+    const store = createFirestorePasPersistenceStore(
+      {
+        projectId: "operon-labs-nonprod",
+        databaseId: "(default)"
+      },
+      firestore
+    );
+
+    await firestore.collection("auditEvents").doc("PA-260526-0900-EVENT02-UM_REQUEST_CREATED").set({
+      eventType: "UM_REQUEST_CREATED",
+      caseId: "PA-260526-0900-WRONG01",
+      umRequestId: "PA-260526-0900-WRONG01",
+      submittedAt: "2026-05-26T09:00:00.000Z",
+      storedAt: "2026-05-26T09:00:00.000Z"
+    });
+
+    await expect(store.listUmEvents()).resolves.toEqual([
+      {
+        eventType: "UM_REQUEST_CREATED",
+        caseId: "PA-260526-0900-EVENT02",
+        umRequestId: "PA-260526-0900-EVENT02"
+      }
+    ]);
+  });
+
   it("canonicalizes legacy UM requests from doc id instead of sourceCaseId", async () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(
@@ -446,6 +473,56 @@ describe("PAS persistence store selection", () => {
       sourceCaseId: umRequest.id,
       dtrCompleted: true,
       dtrTemplateCompleted: true
+    });
+  });
+
+  it("rebuilds provider documentation evidence from the canonical UM request when stored evidence is stale", async () => {
+    const firestore = createFakeFirestore();
+    const store = createFirestorePasPersistenceStore(
+      {
+        projectId: "operon-labs-nonprod",
+        databaseId: "(default)"
+      },
+      firestore
+    );
+    const platform = createInMemoryUmPlatform({
+      generateCaseId: () => "PA-260526-0900-EVID002"
+    });
+    const umRequest = platform.submitPriorAuth({
+      requestType: "outpatient_service",
+      serviceCode: "full_body_wellness_mri",
+      acknowledgedNotCovered: true
+    });
+    const staleApprovedEvidence = {
+      ...platform.getEvidence(umRequest.id)!,
+      serviceCode: "knee_mri",
+      billingCode: "73721",
+      coveredBenefit: true,
+      crdCoveredBenefit: true,
+      dtrRequested: true,
+      dtrCompleted: true,
+      dtrTemplateCompleted: true,
+      attachmentChecklistComplete: true,
+      fhirFieldsPresent: true
+    };
+
+    await firestore.collection("pasClaims").doc(umRequest.id).set({
+      umRequest,
+      evidence: staleApprovedEvidence,
+      fhirBundle: buildPasFhirBundle(umRequest, platform.getEvidence(umRequest.id)!),
+      storedAt: umRequest.submittedAt
+    });
+
+    await expect(store.getEvidence(umRequest.id)).resolves.toMatchObject({
+      id: umRequest.id,
+      umRequestId: umRequest.id,
+      caseId: umRequest.id,
+      serviceCode: "full_body_wellness_mri",
+      billingCode: "76498",
+      coveredBenefit: false,
+      dtrRequested: false,
+      dtrCompleted: false,
+      dtrTemplateCompleted: false
     });
   });
 

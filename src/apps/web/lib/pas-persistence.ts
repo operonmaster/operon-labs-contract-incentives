@@ -1,9 +1,10 @@
-import type {
-  PasFhirBundle,
-  PasSubmittedEvent,
-  UMPlatformEvent,
-  UMRequest,
-  ProviderDocumentationEvidence
+import {
+  buildProviderDocumentationEvidence,
+  type ProviderDocumentationEvidence,
+  type PasFhirBundle,
+  type PasSubmittedEvent,
+  type UMPlatformEvent,
+  type UMRequest
 } from "@operon-labs/um-platform";
 import type { IncentiveWorklistRow } from "./provider-documentation-workflow";
 
@@ -249,13 +250,18 @@ class FirestorePasPersistenceStore implements UmPasPersistenceStore {
       return null;
     }
 
-    return canonicalizeStoredEvidence(data.evidence, extractStoredUmRequest(data, umRequestId)?.id ?? umRequestId);
+    const umRequest = extractStoredUmRequest(data, umRequestId);
+    if (umRequest) {
+      return canonicalizeStoredEvidence(buildProviderDocumentationEvidence(umRequest), umRequest.id);
+    }
+
+    return canonicalizeStoredEvidence(data.evidence, umRequestId);
   }
 
   async listUmEvents(): Promise<UMPlatformEvent[]> {
     const firestore = await this.getFirestore();
     const snapshot = await firestore.collection(AUDIT_EVENTS_COLLECTION).orderBy("submittedAt", "asc").get();
-    return snapshot.docs.map((doc) => normalizeStoredUmEvent(doc.data() as UMPlatformEvent));
+    return snapshot.docs.map((doc) => normalizeStoredUmEvent(doc.data() as UMPlatformEvent, doc.id));
   }
 
   async savePriorAuth(request: StoredPasRequest): Promise<void> {
@@ -507,14 +513,34 @@ function canonicalizeStoredEvidence(
   };
 }
 
-function normalizeStoredUmEvent(event: UMPlatformEvent): UMPlatformEvent {
-  const canonicalId = getStoredCanonicalPaId(event.umRequestId, event.caseId);
+function normalizeStoredUmEvent(event: UMPlatformEvent, fallbackCanonicalId?: string): UMPlatformEvent {
+  const canonicalId = getStoredCanonicalPaId(
+    getAuditEventCanonicalIdFromDocumentId(fallbackCanonicalId),
+    event.umRequestId,
+    event.caseId
+  );
 
   return {
     eventType: event.eventType,
     caseId: canonicalId,
     umRequestId: canonicalId
   };
+}
+
+function getAuditEventCanonicalIdFromDocumentId(documentId: string | undefined): string | undefined {
+  if (!documentId) {
+    return undefined;
+  }
+
+  const eventSuffixes = [
+    "-PAS_SUBMITTED",
+    "-UM_REQUEST_CREATED",
+    "-UM_REQUEST_REVIEW_STARTED",
+    "-UM_REQUEST_DETERMINED"
+  ];
+  const eventSuffix = eventSuffixes.find((suffix) => documentId.endsWith(suffix));
+
+  return eventSuffix ? documentId.slice(0, -eventSuffix.length) : documentId;
 }
 
 function getStoredCanonicalPaId(...ids: Array<string | null | undefined>): string {

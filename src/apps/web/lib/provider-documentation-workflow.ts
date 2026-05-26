@@ -3,6 +3,7 @@ import { executePolicyBoundPayment, type PaymentIntentStore } from "@operon-labs
 import { evaluateProviderDocumentationEvent } from "@operon-labs/incentive-agent";
 import type { Currency, SettlementToken } from "@operon-labs/policy-engine";
 import {
+  buildProviderDocumentationEvidence,
   buildPasFhirBundle,
   createInMemoryUmPlatform,
   getCoverageRequirements,
@@ -132,10 +133,7 @@ export function createProviderDocumentationWorkflow(
   }
 
   async function settleEvent(event: UMPlatformEvent, record: UMRequest): Promise<IncentiveWorklistRow | null> {
-    const evidence = (await persistence?.getEvidence(event.umRequestId)) ?? platform.getEvidence(event.umRequestId);
-    if (!evidence) {
-      return null;
-    }
+    const evidence = buildProviderDocumentationEvidence(record);
 
     const policies = await policyStore.findPolicies({
       evaluationType: "provider_documentation_completeness",
@@ -349,6 +347,11 @@ export function createProviderDocumentationWorkflow(
       return persistence ? persistence.listUmRequests() : platform.listUmRequests();
     },
     async getEvidence(umRequestId) {
+      const record = await getUmRequest(umRequestId);
+      if (record) {
+        return buildProviderDocumentationEvidence(record);
+      }
+
       return (await persistence?.getEvidence(umRequestId)) ?? platform.getEvidence(umRequestId);
     },
     async listIncentiveRows() {

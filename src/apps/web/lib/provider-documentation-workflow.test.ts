@@ -655,6 +655,110 @@ describe("provider documentation workflow", () => {
     expect(executePolicyBoundPaymentMock).toHaveBeenCalledTimes(1);
   });
 
+  it("blocks from canonical UM request fields when persisted evidence is stale and would approve", async () => {
+    const platform = createInMemoryUmPlatform();
+    const record = platform.submitPriorAuth({
+      requestType: "outpatient_service",
+      serviceCode: "full_body_wellness_mri",
+      acknowledgedNotCovered: true
+    });
+    const canonicalEvidence = platform.getEvidence(record.id)!;
+    const staleApprovedEvidence = {
+      ...canonicalEvidence,
+      serviceCode: "knee_mri" as const,
+      billingCode: "73721",
+      coveredBenefit: true,
+      crdCoveredBenefit: true,
+      dtrRequested: true,
+      dtrCompleted: true,
+      dtrTemplateCompleted: true,
+      attachmentChecklistComplete: true,
+      fhirFieldsPresent: true
+    };
+    const storedRequest: StoredPasSubmission = {
+      umRequest: record,
+      evidence: staleApprovedEvidence,
+      fhirBundle: buildPasFhirBundle(record, canonicalEvidence)
+    };
+    let incentiveRow: IncentiveWorklistRow | null = null;
+    const workflow = createProviderDocumentationWorkflow(createInMemoryUmPlatform(), {
+      backend: "firestore",
+      async savePasSubmission() {
+        return undefined;
+      },
+      async savePriorAuth() {
+        return undefined;
+      },
+      async saveUmRequest() {
+        return undefined;
+      },
+      async listUmRequests() {
+        return [storedRequest.umRequest];
+      },
+      async getUmRequest(umRequestId) {
+        return umRequestId === record.id ? storedRequest.umRequest : null;
+      },
+      async listUmEvents() {
+        return [{ eventType: "UM_REQUEST_CREATED", caseId: record.id, umRequestId: record.id }];
+      },
+      async listPriorAuthRecords() {
+        return [storedRequest.umRequest];
+      },
+      async getPriorAuthRecord(caseId) {
+        return caseId === record.id ? storedRequest.umRequest : null;
+      },
+      async getEvidence(umRequestId) {
+        return umRequestId === record.id ? storedRequest.evidence : null;
+      },
+      async listPasEvents() {
+        return [];
+      },
+      async saveIncentiveRow(row) {
+        incentiveRow = row;
+      },
+      async listIncentiveRows() {
+        return incentiveRow ? [incentiveRow] : [];
+      },
+      async getIncentiveRow(umRequestId) {
+        return umRequestId === record.id ? incentiveRow : null;
+      }
+    });
+
+    await expect(workflow.getEvidence(record.id)).resolves.toMatchObject({
+      id: record.id,
+      umRequestId: record.id,
+      caseId: record.id,
+      serviceCode: "full_body_wellness_mri",
+      coveredBenefit: false,
+      dtrCompleted: false,
+      dtrTemplateCompleted: false
+    });
+
+    const rows = await workflow.listIncentiveRows();
+
+    expect(rows[0]).toMatchObject({
+      id: record.id,
+      umRequestId: record.id,
+      caseId: record.id,
+      serviceCode: "full_body_wellness_mri",
+      incentiveStatus: "not_eligible",
+      paymentStatus: "blocked_by_policy",
+      incentiveValue: 0,
+      reason: "Non-covered benefit",
+      reasonCodes: expect.arrayContaining(["BENEFIT_NOT_COVERED"])
+    });
+    expect(rows[0]!.policyCriteria).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: "Request is a covered benefit",
+          actual: "false",
+          passed: false
+        })
+      ])
+    );
+    expect(executePolicyBoundPaymentMock).not.toHaveBeenCalled();
+  });
+
   it("does not block provider submission when incentive evidence processing is unavailable", async () => {
     const platform = createInMemoryUmPlatform();
     const workflow = createProviderDocumentationWorkflow({
