@@ -61,6 +61,7 @@ export function evaluateProviderDocumentationEvent(
     throw new Error("UNSUPPORTED_PROVIDER_DOCUMENTATION_EVENT");
   }
   assertProviderDocumentationEventIdsMatch(event);
+  assertProviderDocumentationCanonicalPaId(event.umRequestId);
 
   const evidence = dependencies.getEvidenceByUmRequestId(event.umRequestId);
   if (!evidence) {
@@ -108,6 +109,12 @@ export function evaluateProviderDocumentationEvent(
 function assertProviderDocumentationEventIdsMatch(event: { umRequestId: string; caseId?: string }): void {
   if (event.caseId !== undefined && event.caseId !== event.umRequestId) {
     throw new Error(`PROVIDER_DOCUMENTATION_EVENT_ID_MISMATCH:${event.umRequestId}`);
+  }
+}
+
+function assertProviderDocumentationCanonicalPaId(umRequestId: string): void {
+  if (!umRequestId.startsWith("PA-")) {
+    throw new Error(`PROVIDER_DOCUMENTATION_EVENT_ID_NOT_CANONICAL:${umRequestId}`);
   }
 }
 

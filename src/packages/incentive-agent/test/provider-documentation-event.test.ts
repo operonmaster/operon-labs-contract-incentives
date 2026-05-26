@@ -199,6 +199,23 @@ describe("evaluateProviderDocumentationEvent", () => {
     expect(getEvidence).not.toHaveBeenCalled();
   });
 
+  it("rejects matching legacy UMR ids before evidence lookup", () => {
+    const getEvidence = vi.fn();
+    const umRequestId = "UMR-260524-2102-LEGACY1";
+
+    expect(() =>
+      evaluateProviderDocumentationEvent(
+        {
+          eventType: "UM_REQUEST_CREATED",
+          umRequestId,
+          caseId: umRequestId
+        },
+        { getEvidenceByUmRequestId: getEvidence, policy: createProviderDocumentationPolicy(5), monthToDateAmount: 0 }
+      )
+    ).toThrow(`PROVIDER_DOCUMENTATION_EVENT_ID_NOT_CANONICAL:${umRequestId}`);
+    expect(getEvidence).not.toHaveBeenCalled();
+  });
+
   it("throws when UM request evidence is missing for the umRequestId", () => {
     const getEvidence = vi.fn(() => null);
 
