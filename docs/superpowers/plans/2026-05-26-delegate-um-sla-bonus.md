@@ -839,7 +839,7 @@ export async function GET() {
 }
 ```
 
-In `src/apps/web/app/api/um/prior-auths/[caseId]/evidence/route.ts`, resolve either ID form:
+In `src/apps/web/app/api/um/prior-auths/[caseId]/evidence/route.ts`, resolve only the canonical PA/UM request ID:
 
 ```ts
 export async function GET(_request: Request, context: { params: Promise<{ caseId: string }> }) {
@@ -2203,10 +2203,9 @@ expect(source).toContain("umRequestId");
 expect(source).not.toContain("submitted.caseId");
 ```
 
-For `PlanAuditDetailsModal.test.ts`, assert the modal labels both IDs:
+For `PlanAuditDetailsModal.test.ts`, assert the modal labels the canonical ID:
 
 ```ts
-expect(source).toContain("UM request ID");
 expect(source).toContain("Canonical PA/UM request ID");
 ```
 

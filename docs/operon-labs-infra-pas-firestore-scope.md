@@ -317,12 +317,13 @@ Shape:
   },
   "fhirBundle": {
     "resourceType": "Bundle",
-    "id": "pas-PA-260524-2102-AAAA1111",
+    "id": "PA-260524-2102-AAAA1111",
     "type": "collection",
     "entry": [
       {
         "resource": {
           "resourceType": "Claim",
+          "id": "PA-260524-2102-AAAA1111",
           "use": "preauthorization"
         }
       }
