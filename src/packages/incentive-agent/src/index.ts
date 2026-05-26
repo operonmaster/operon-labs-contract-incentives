@@ -54,12 +54,13 @@ export function explainDecision(result: PolicyEvaluationResult): string {
 }
 
 export function evaluateProviderDocumentationEvent(
-  event: { eventType: string; umRequestId: string },
+  event: { eventType: string; umRequestId: string; caseId?: string },
   dependencies: ProviderDocumentationEvaluationDependencies
 ): DemoEvaluation {
   if (event.eventType !== "UM_REQUEST_CREATED") {
     throw new Error("UNSUPPORTED_PROVIDER_DOCUMENTATION_EVENT");
   }
+  assertProviderDocumentationEventIdsMatch(event);
 
   const evidence = dependencies.getEvidenceByUmRequestId(event.umRequestId);
   if (!evidence) {
@@ -102,6 +103,12 @@ export function evaluateProviderDocumentationEvent(
     result,
     explanation: explainDecision(result)
   };
+}
+
+function assertProviderDocumentationEventIdsMatch(event: { umRequestId: string; caseId?: string }): void {
+  if (event.caseId !== undefined && event.caseId !== event.umRequestId) {
+    throw new Error(`PROVIDER_DOCUMENTATION_EVENT_ID_MISMATCH:${event.umRequestId}`);
+  }
 }
 
 function assertProviderDocumentationEvidenceMatchesEvent(

@@ -182,6 +182,23 @@ describe("evaluateProviderDocumentationEvent", () => {
     expect(getEvidence).not.toHaveBeenCalled();
   });
 
+  it("rejects UM request events whose caseId does not match the umRequestId before evidence lookup", () => {
+    const getEvidence = vi.fn();
+    const umRequestId = "PA-260524-2102-EVENT001";
+
+    expect(() =>
+      evaluateProviderDocumentationEvent(
+        {
+          eventType: "UM_REQUEST_CREATED",
+          umRequestId,
+          caseId: "PA-260524-2102-OTHER001"
+        },
+        { getEvidenceByUmRequestId: getEvidence, policy: createProviderDocumentationPolicy(5), monthToDateAmount: 0 }
+      )
+    ).toThrow(`PROVIDER_DOCUMENTATION_EVENT_ID_MISMATCH:${umRequestId}`);
+    expect(getEvidence).not.toHaveBeenCalled();
+  });
+
   it("throws when UM request evidence is missing for the umRequestId", () => {
     const getEvidence = vi.fn(() => null);
 
