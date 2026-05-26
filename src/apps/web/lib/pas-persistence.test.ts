@@ -251,6 +251,57 @@ describe("PAS persistence store selection", () => {
     });
   });
 
+  it("canonicalizes legacy UM requests from doc id instead of sourceCaseId", async () => {
+    const firestore = createFakeFirestore();
+    const store = createFirestorePasPersistenceStore(
+      {
+        projectId: "operon-labs-nonprod",
+        databaseId: "(default)"
+      },
+      firestore
+    );
+    const platform = createInMemoryUmPlatform({
+      generateCaseId: () => "PA-260526-0900-REQDOC1"
+    });
+    const umRequest = platform.submitPriorAuth({
+      requestType: "outpatient_service",
+      serviceCode: "knee_mri"
+    });
+    const evidence = platform.getEvidence(umRequest.id)!;
+    const legacyUmRequest = {
+      ...umRequest,
+      id: "UMR-260526-0900-REQDOC1",
+      caseId: undefined,
+      sourceCaseId: "PA-260526-0900-WRONG99"
+    };
+
+    await firestore.collection("pasClaims").doc(umRequest.id).set({
+      umRequest: legacyUmRequest,
+      evidence,
+      fhirBundle: buildPasFhirBundle(umRequest, evidence),
+      storedAt: umRequest.submittedAt
+    });
+
+    await expect(store.getUmRequest(umRequest.id)).resolves.toMatchObject({
+      id: umRequest.id,
+      caseId: umRequest.id,
+      sourceCaseId: umRequest.id
+    });
+    await expect(store.listUmRequests()).resolves.toEqual([
+      expect.objectContaining({
+        id: umRequest.id,
+        caseId: umRequest.id,
+        sourceCaseId: umRequest.id
+      })
+    ]);
+    await expect(store.getEvidence(umRequest.id)).resolves.toMatchObject({
+      id: umRequest.id,
+      umRequestId: umRequest.id,
+      caseId: umRequest.id,
+      sourceCaseId: umRequest.id
+    });
+  });
+
   it("canonicalizes legacy stored evidence to the full UM evidence shape without using sourceCaseId as identity", async () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(
@@ -661,6 +712,39 @@ describe("PAS persistence store selection", () => {
       })
     ]);
   });
+
+  it("scrubs legacy PA outcome fields from persisted incentive rows on read", async () => {
+    const firestore = createFakeFirestore();
+    const store = createFirestorePasPersistenceStore(
+      {
+        projectId: "operon-labs-nonprod",
+        databaseId: "(default)"
+      },
+      firestore
+    );
+    const platform = createInMemoryUmPlatform({
+      generateCaseId: () => "PA-260526-0900-ROWLEG2"
+    });
+    const umRequest = platform.submitPriorAuth({
+      requestType: "outpatient_service",
+      serviceCode: "knee_mri"
+    });
+
+    await firestore.collection("incentiveEvaluations").doc(umRequest.id).set({
+      ...buildPersistedIncentiveRow(umRequest),
+      paResult: "submitted_pending",
+      denialReason: null,
+      storedAt: umRequest.submittedAt
+    });
+
+    const row = await store.getIncentiveRow(umRequest.id);
+    expect(row).not.toHaveProperty("paResult");
+    expect(row).not.toHaveProperty("denialReason");
+
+    const rows = await store.listIncentiveRows();
+    expect(rows[0]).not.toHaveProperty("paResult");
+    expect(rows[0]).not.toHaveProperty("denialReason");
+  });
 });
 
 function buildPersistedIncentiveRow(
@@ -753,7 +837,8 @@ function createFakeFirestore(): FirestoreDatabase & { collectionNames(): string[
         },
         async get() {
           return {
-            docs: [...collection.values()].map((value) => ({
+            docs: [...collection.entries()].map(([id, value]) => ({
+              id,
               data() {
                 return value;
               }
@@ -763,15 +848,16 @@ function createFakeFirestore(): FirestoreDatabase & { collectionNames(): string[
         orderBy(field, direction) {
           return {
             async get() {
-              const values = [...collection.values()]
-                .filter((value) => getNestedValue(value, field) !== undefined)
-                .sort((left, right) => String(getNestedValue(left, field)).localeCompare(String(getNestedValue(right, field))));
+              const values = [...collection.entries()]
+                .filter(([, value]) => getNestedValue(value, field) !== undefined)
+                .sort(([, left], [, right]) => String(getNestedValue(left, field)).localeCompare(String(getNestedValue(right, field))));
               if (direction === "desc") {
                 values.reverse();
               }
 
               return {
-                docs: values.map((value) => ({
+                docs: values.map(([id, value]) => ({
+                  id,
                   data() {
                     return value;
                   }

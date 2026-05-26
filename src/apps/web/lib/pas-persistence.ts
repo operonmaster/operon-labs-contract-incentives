@@ -231,7 +231,7 @@ class FirestorePasPersistenceStore implements UmPasPersistenceStore {
     const firestore = await this.getFirestore();
     const snapshot = await firestore.collection(PAS_CLAIMS_COLLECTION).get();
     return snapshot.docs
-      .map((doc) => extractStoredUmRequest(doc.data() as StoredPasClaimDocument))
+      .map((doc) => extractStoredUmRequest(doc.data() as StoredPasClaimDocument, doc.id))
       .filter((umRequest): umRequest is UMRequest => Boolean(umRequest))
       .sort((left, right) => right.submittedAt.localeCompare(left.submittedAt));
   }
@@ -239,7 +239,7 @@ class FirestorePasPersistenceStore implements UmPasPersistenceStore {
   async getUmRequest(umRequestId: string): Promise<UMRequest | null> {
     const data = await this.getStoredPasSubmissionDataByUmRequestId(umRequestId);
 
-    return data ? extractStoredUmRequest(data) : null;
+    return data ? extractStoredUmRequest(data, umRequestId) : null;
   }
 
   async getEvidence(umRequestId: string): Promise<ProviderDocumentationEvidence | null> {
@@ -249,7 +249,7 @@ class FirestorePasPersistenceStore implements UmPasPersistenceStore {
       return null;
     }
 
-    return canonicalizeStoredEvidence(data.evidence, extractStoredUmRequest(data)?.id ?? umRequestId);
+    return canonicalizeStoredEvidence(data.evidence, extractStoredUmRequest(data, umRequestId)?.id ?? umRequestId);
   }
 
   async listUmEvents(): Promise<UMPlatformEvent[]> {
@@ -449,14 +449,14 @@ function buildStoredEvidence(
   };
 }
 
-function extractStoredUmRequest(data: StoredPasClaimDocument): UMRequest | null {
+function extractStoredUmRequest(data: StoredPasClaimDocument, fallbackCanonicalId: string | undefined): UMRequest | null {
   const umRequest = data.umRequest ?? data.record ?? null;
 
-  return umRequest ? canonicalizeStoredUmRequest(umRequest) : null;
+  return umRequest ? canonicalizeStoredUmRequest(umRequest, fallbackCanonicalId) : null;
 }
 
-function canonicalizeStoredUmRequest(umRequest: UMRequest): UMRequest {
-  const canonicalId = getStoredCanonicalPaId(umRequest.caseId, umRequest.sourceCaseId, umRequest.id);
+function canonicalizeStoredUmRequest(umRequest: UMRequest, fallbackCanonicalId: string | undefined): UMRequest {
+  const canonicalId = getStoredCanonicalPaId(umRequest.id, fallbackCanonicalId, umRequest.caseId);
   const auditRefs = umRequest.auditRefs ?? {
     pasClaimBundleId: canonicalId,
     pasClaimResponseBundleId: null
@@ -543,6 +543,8 @@ function canonicalizeStoredIncentiveRow(
   const incentiveRow = { ...row } as PersistedIncentiveWorklistRow & {
     caseId?: string;
     id?: string;
+    paResult?: unknown;
+    denialReason?: unknown;
     storedAt?: string;
   };
   const canonicalId = getStoredCanonicalPaId(
@@ -553,6 +555,8 @@ function canonicalizeStoredIncentiveRow(
   );
 
   delete (incentiveRow as PersistedIncentiveWorklistRow & { storedAt?: string }).storedAt;
+  delete incentiveRow.paResult;
+  delete incentiveRow.denialReason;
   return {
     ...incentiveRow,
     ...(incentiveRow.id !== undefined ? { id: canonicalId } : {}),

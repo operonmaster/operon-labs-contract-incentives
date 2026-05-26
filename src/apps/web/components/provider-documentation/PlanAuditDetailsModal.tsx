@@ -32,7 +32,7 @@ export function PlanAuditDetailsModal({ row, onClose }: PlanAuditDetailsModalPro
         <dl className="detail-grid plan-audit-grid">
           <div>
             <dt>Event</dt>
-            <dd>PAS_SUBMITTED</dd>
+            <dd>UM_REQUEST_CREATED</dd>
           </div>
           <div>
             <dt>Evidence source</dt>

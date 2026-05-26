@@ -18,6 +18,8 @@ describe("plan audit details modal", () => {
     expect(source).toContain("Close details");
     expect(source).toContain("Request type");
     expect(source).toContain("formatRequestType(row.requestType)");
+    expect(source).toContain("UM_REQUEST_CREATED");
+    expect(source).not.toContain("PAS_SUBMITTED");
     expect(source).toContain("<dt>UM status</dt>");
     expect(source).toContain("formatUmStatus(row)");
     expect(source).toContain("Payment intent");
