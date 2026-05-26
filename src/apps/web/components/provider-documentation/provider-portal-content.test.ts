@@ -124,4 +124,18 @@ describe("provider portal content", () => {
     expect(source).not.toContain("assessment-pill");
   });
 
+  it("uses UM request identity and status fields in the provider submission confirmation", () => {
+    const source = readRepoFile("src/apps/web/components/provider-documentation/ProviderDocumentationWizard.tsx");
+
+    expect(source).toContain("UMRequest");
+    expect(source).not.toContain("PriorAuthRecord");
+    expect(source).not.toContain("submitted.caseId");
+    expect(source).not.toContain("submitted.paResult");
+    expect(source).toContain("<dt>UM request ID</dt>");
+    expect(source).toContain("<dt>Canonical PA/UM request ID</dt>");
+    expect(source).toContain("{submitted.id}");
+    expect(source).toContain("formatSubmissionStatus(submitted)");
+    expect(source).toContain("<UseCaseNavigation activeView=\"provider\" umRequestId={submitted?.id} />");
+    expect(source).toContain("umRequestId=${encodeURIComponent(submitted.id)}");
+  });
 });

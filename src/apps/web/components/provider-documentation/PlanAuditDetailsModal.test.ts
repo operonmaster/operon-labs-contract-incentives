@@ -17,6 +17,10 @@ describe("plan audit details modal", () => {
     expect(source).toContain("UM request creation policy audit");
     expect(source).toContain("{row.umRequestId}");
     expect(source).not.toContain("{row.caseId}");
+    expect(source).toContain("<dt>UM request ID</dt>");
+    expect(source).toContain("<dd className=\"mono-cell\">{row.umRequestId}</dd>");
+    expect(source).toContain("<dt>Canonical PA/UM request ID</dt>");
+    expect(source).toContain("<dd className=\"mono-cell\">{row.id}</dd>");
     expect(source).toContain("Close details");
     expect(source).toContain("Request type");
     expect(source).toContain("formatRequestType(row.requestType)");
@@ -55,6 +59,7 @@ describe("plan audit details modal", () => {
     expect(source).toContain("PlanAuditDetailsModal");
     expect(source).toContain("formatRequestType(row.requestType)");
     expect(source).toContain("setDetailsUmRequestId(row.umRequestId)");
+    expect(source).toContain("<UseCaseNavigation activeView=\"plan\" umRequestId={selectedUmRequestId ?? requestedUmRequestId} />");
     expect(source).not.toContain("setDetailsCaseId");
     expect(source).not.toContain("selectedCaseId");
     expect(source).not.toContain("detailsCaseId");
@@ -124,5 +129,18 @@ describe("plan audit details modal", () => {
     expect(source).not.toContain("setInterval");
     expect(source).not.toContain("clearInterval");
     expect(source).not.toContain('"poll"');
+  });
+
+  it("uses UM request id query parameters for provider documentation audit navigation", () => {
+    const navigationSource = readRepoFile("src/apps/web/components/provider-documentation/UseCaseNavigation.tsx");
+    const incentivesPageSource = readRepoFile("src/apps/web/app/provider-documentation/incentives/page.tsx");
+
+    expect(navigationSource).toContain("umRequestId?: string | null");
+    expect(navigationSource).toContain("resolvedUmRequestId");
+    expect(navigationSource).toContain("?umRequestId=");
+    expect(navigationSource).not.toContain("?caseId=");
+    expect(incentivesPageSource).toContain("searchParams?: Promise<{ umRequestId?: string }>");
+    expect(incentivesPageSource).toContain("initialUmRequestId={params?.umRequestId ?? null}");
+    expect(incentivesPageSource).not.toContain("params?.caseId");
   });
 });

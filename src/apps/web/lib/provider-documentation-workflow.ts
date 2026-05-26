@@ -116,7 +116,10 @@ export function createProviderDocumentationWorkflow(
     if (existing && isCurrentIncentiveRow(existing, record)) {
       const refreshed = refreshIncentiveRowDisplayFields(existing, record);
       rows.set(event.umRequestId, refreshed);
-      if (hasIncentiveRowDisplayFieldChanges(existing, refreshed)) {
+      if (
+        hasIncentiveRowDisplayFieldChanges(existing, refreshed) &&
+        !hasOnlyPaidLifecycleDisplayFieldChanges(existing, refreshed)
+      ) {
         await persistence?.saveIncentiveRow(refreshed);
       }
       return refreshed;
@@ -364,6 +367,11 @@ export function createProviderDocumentationWorkflow(
       await processPlatformEvents();
       const persistedRows = (await persistence?.listIncentiveRows()) ?? [];
       for (const row of persistedRows) {
+        const processedRow = rows.get(row.umRequestId);
+        if (processedRow && hasOnlyPaidLifecycleDisplayFieldChanges(row, processedRow)) {
+          continue;
+        }
+
         rows.set(row.umRequestId, row);
       }
 
@@ -432,6 +440,24 @@ function hasIncentiveRowDisplayFieldChanges(left: IncentiveWorklistRow, right: I
     left.state !== right.state ||
     left.outcomeStatus !== right.outcomeStatus ||
     left.umEvidenceSignature !== right.umEvidenceSignature
+  );
+}
+
+function hasOnlyPaidLifecycleDisplayFieldChanges(left: IncentiveWorklistRow, right: IncentiveWorklistRow): boolean {
+  return (
+    left.incentiveStatus === "paid" &&
+    Boolean(left.transactionId) &&
+    left.id === right.id &&
+    left.umRequestId === right.umRequestId &&
+    left.caseId === right.caseId &&
+    left.planId === right.planId &&
+    left.planDisplay === right.planDisplay &&
+    left.submittedAt === right.submittedAt &&
+    left.providerGroupDisplay === right.providerGroupDisplay &&
+    left.requestType === right.requestType &&
+    left.serviceLabel === right.serviceLabel &&
+    left.serviceCode === right.serviceCode &&
+    (left.state !== right.state || left.outcomeStatus !== right.outcomeStatus || left.umEvidenceSignature !== right.umEvidenceSignature)
   );
 }
 

@@ -18,7 +18,7 @@ export const metadata: Metadata = {
 export default async function ProviderDocumentationPoliciesPage({
   searchParams
 }: {
-  searchParams?: Promise<{ caseId?: string }>;
+  searchParams?: Promise<{ umRequestId?: string }>;
 }) {
   const params = await searchParams;
   const businessPolicies = await policyStore.listPolicies(providerDocumentationBusinessPolicyType);
@@ -28,7 +28,7 @@ export default async function ProviderDocumentationPoliciesPage({
     <PolicyConsole
       businessPolicies={businessPolicies.flatMap(buildProviderDocumentationBusinessPolicyCards)}
       paymentPolicies={paymentPolicies.map(buildHederaAgentKitPlanPolicyCards)}
-      initialCaseId={params?.caseId ?? null}
+      initialCaseId={params?.umRequestId ?? null}
     />
   );
 }

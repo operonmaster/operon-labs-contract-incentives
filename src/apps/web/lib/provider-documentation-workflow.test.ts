@@ -814,6 +814,7 @@ describe("provider documentation workflow", () => {
       fhirBundle: buildPasFhirBundle(record, evidence)
     };
     let incentiveRow: IncentiveWorklistRow | null = null;
+    const savedRows: IncentiveWorklistRow[] = [];
     const persistence: UmPasPersistenceStore = {
       backend: "firestore",
       async savePasSubmission() {
@@ -848,6 +849,7 @@ describe("provider documentation workflow", () => {
       },
       async saveIncentiveRow(row) {
         incentiveRow = row;
+        savedRows.push(row);
       },
       async listIncentiveRows() {
         return incentiveRow ? [incentiveRow] : [];
@@ -859,6 +861,7 @@ describe("provider documentation workflow", () => {
     const workflow = createProviderDocumentationWorkflow(createInMemoryUmPlatform(), persistence);
 
     const [paidRow] = await workflow.listIncentiveRows();
+    expect(savedRows).toHaveLength(2);
     incentiveRow = {
       ...incentiveRow!,
       umEvidenceSignature: JSON.stringify({
@@ -897,6 +900,7 @@ describe("provider documentation workflow", () => {
       transactionId: paidRow!.transactionId
     });
     expect(updatedRow!.audit.transactionId).toBe(paidRow!.audit.transactionId);
+    expect(savedRows).toHaveLength(2);
     expect(executePolicyBoundPaymentMock).toHaveBeenCalledTimes(1);
   });
 

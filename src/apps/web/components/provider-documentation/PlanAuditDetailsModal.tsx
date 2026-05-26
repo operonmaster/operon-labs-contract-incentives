@@ -39,6 +39,14 @@ export function PlanAuditDetailsModal({ row, onClose }: PlanAuditDetailsModalPro
             <dd>UM Platform API</dd>
           </div>
           <div>
+            <dt>UM request ID</dt>
+            <dd className="mono-cell">{row.umRequestId}</dd>
+          </div>
+          <div>
+            <dt>Canonical PA/UM request ID</dt>
+            <dd className="mono-cell">{row.id}</dd>
+          </div>
+          <div>
             <dt>Request type</dt>
             <dd>{formatRequestType(row.requestType)}</dd>
           </div>

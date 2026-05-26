@@ -6,9 +6,9 @@ import type {
   DtrQuestion,
   DtrQuestionnaire,
   DtrQuestionnaireResponse,
-  PriorAuthRecord,
   RequestType,
-  ServiceCode
+  ServiceCode,
+  UMRequest
 } from "@operon-labs/um-platform";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -45,7 +45,7 @@ export function ProviderDocumentationWizard() {
   const [dtrQuestionnaire, setDtrQuestionnaire] = useState<DtrQuestionnaire | null>(null);
   const [assessmentStatus, setAssessmentStatus] = useState<AssessmentStatus>("not_started");
   const [acknowledgedNotCovered, setAcknowledgedNotCovered] = useState(false);
-  const [submitted, setSubmitted] = useState<PriorAuthRecord | null>(null);
+  const [submitted, setSubmitted] = useState<UMRequest | null>(null);
   const [checkingRequirements, setCheckingRequirements] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -401,7 +401,7 @@ export function ProviderDocumentationWizard() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body)
       });
-      const payload = (await response.json()) as PriorAuthRecord | { error?: string };
+      const payload = (await response.json()) as UMRequest | { error?: string };
 
       if (submitRequestRef.current !== requestId || selectedPathRef.current !== requestPath) {
         return;
@@ -412,7 +412,7 @@ export function ProviderDocumentationWizard() {
         return;
       }
 
-      setSubmitted(payload as PriorAuthRecord);
+      setSubmitted(payload as UMRequest);
     } catch {
       if (submitRequestRef.current !== requestId || selectedPathRef.current !== requestPath) {
         return;
@@ -432,7 +432,7 @@ export function ProviderDocumentationWizard() {
         <Link className="back" href="/">
           Back to demos
         </Link>
-        <UseCaseNavigation activeView="provider" caseId={submitted?.caseId} />
+        <UseCaseNavigation activeView="provider" umRequestId={submitted?.id} />
       </div>
 
       <LabsHero className="provider-hero" compact eyebrow="Provider portal" title="New prior authorization">
@@ -947,7 +947,7 @@ function ReviewStep({
   );
 }
 
-function SubmissionConfirmation({ submitted, onSubmitAnother }: { submitted: PriorAuthRecord; onSubmitAnother: () => void }) {
+function SubmissionConfirmation({ submitted, onSubmitAnother }: { submitted: UMRequest; onSubmitAnother: () => void }) {
   return (
     <div className="confirmation-panel" aria-live="polite" role="status">
       <LabsBadge variant="info">Pending review</LabsBadge>
@@ -955,12 +955,16 @@ function SubmissionConfirmation({ submitted, onSubmitAnother }: { submitted: Pri
       <p>The request was received by the plan and is pending review.</p>
       <dl className="review-list review-main">
         <div>
-          <dt>PA ID</dt>
-          <dd>{submitted.caseId}</dd>
+          <dt>UM request ID</dt>
+          <dd>{submitted.id}</dd>
+        </div>
+        <div>
+          <dt>Canonical PA/UM request ID</dt>
+          <dd>{submitted.id}</dd>
         </div>
         <div>
           <dt>Status</dt>
-          <dd>{submitted.paResult === "denied_not_covered" ? "Denied - not covered benefit" : "Pending review"}</dd>
+          <dd>{formatSubmissionStatus(submitted)}</dd>
         </div>
         <div>
           <dt>Request type</dt>
@@ -972,7 +976,7 @@ function SubmissionConfirmation({ submitted, onSubmitAnother }: { submitted: Pri
         </div>
       </dl>
       <div className="button-row">
-        <Link className="primary-button" href={`/provider-documentation/incentives?caseId=${encodeURIComponent(submitted.caseId)}`}>
+        <Link className="primary-button" href={`/provider-documentation/incentives?umRequestId=${encodeURIComponent(submitted.id)}`}>
           View health plan audit
         </Link>
         <button className="primary-button secondary-button" type="button" onClick={onSubmitAnother}>
@@ -1024,6 +1028,21 @@ function formatAssessmentStatus(status: AssessmentStatus) {
       return "Not required";
     case "not_started":
       return "Not started";
+  }
+}
+
+function formatSubmissionStatus(submitted: UMRequest) {
+  if (submitted.outcomeStatus) {
+    return submitted.outcomeStatus === "approved" ? "Determined - approved" : "Determined - denied";
+  }
+
+  switch (submitted.state) {
+    case "pend":
+      return "Pending review";
+    case "in_clinical_review":
+      return "In clinical review";
+    case "determined":
+      return "Determined";
   }
 }
 

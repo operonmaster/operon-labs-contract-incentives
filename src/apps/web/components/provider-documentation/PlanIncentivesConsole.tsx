@@ -102,7 +102,7 @@ export function PlanIncentivesConsole({ initialUmRequestId = null }: { initialUm
         <Link className="back" href="/">
           Back to demos
         </Link>
-        <UseCaseNavigation activeView="plan" caseId={selectedUmRequestId ?? requestedUmRequestId} />
+        <UseCaseNavigation activeView="plan" umRequestId={selectedUmRequestId ?? requestedUmRequestId} />
       </div>
 
       <LabsHero compact eyebrow="Health plan audit console" title="Provider documentation incentives">

@@ -9,9 +9,9 @@ export const metadata: Metadata = {
 export default async function ProviderDocumentationIncentivesPage({
   searchParams
 }: {
-  searchParams?: Promise<{ caseId?: string }>;
+  searchParams?: Promise<{ umRequestId?: string }>;
 }) {
   const params = await searchParams;
 
-  return <PlanIncentivesConsole initialUmRequestId={params?.caseId ?? null} />;
+  return <PlanIncentivesConsole initialUmRequestId={params?.umRequestId ?? null} />;
 }
