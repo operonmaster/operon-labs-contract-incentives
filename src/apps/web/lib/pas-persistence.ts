@@ -295,6 +295,8 @@ class FirestorePasPersistenceStore implements UmPasPersistenceStore {
       throw new Error("UM_REQUEST_ID_REQUIRED");
     }
 
+    validateIncentiveRowIds(row);
+
     const firestore = await this.getFirestore();
     await firestore.collection(INCENTIVE_EVALUATIONS_COLLECTION).doc(row.umRequestId).set({
       ...row,
@@ -305,7 +307,7 @@ class FirestorePasPersistenceStore implements UmPasPersistenceStore {
   async listIncentiveRows(): Promise<PersistedIncentiveWorklistRow[]> {
     const firestore = await this.getFirestore();
     const snapshot = await firestore.collection(INCENTIVE_EVALUATIONS_COLLECTION).orderBy("submittedAt", "desc").get();
-    return snapshot.docs.map((doc) => stripStoredAt(doc.data() as PersistedIncentiveWorklistRow & { storedAt?: string }));
+    return snapshot.docs.map((doc) => canonicalizeStoredIncentiveRow(doc.data() as PersistedIncentiveWorklistRow & { storedAt?: string }));
   }
 
   async getIncentiveRow(umRequestId: string): Promise<PersistedIncentiveWorklistRow | null> {
@@ -313,7 +315,7 @@ class FirestorePasPersistenceStore implements UmPasPersistenceStore {
     const snapshot = await firestore.collection(INCENTIVE_EVALUATIONS_COLLECTION).doc(umRequestId).get();
 
     if (snapshot.exists) {
-      return stripStoredAt(snapshot.data() as PersistedIncentiveWorklistRow & { storedAt?: string });
+      return canonicalizeStoredIncentiveRow(snapshot.data() as PersistedIncentiveWorklistRow & { storedAt?: string });
     }
 
     return null;
@@ -367,6 +369,18 @@ function validateUmRequestIds(umRequest: UMRequest): void {
   assertMatchingCanonicalId(umRequest.sourceCaseId, umRequest.id, "umRequest.sourceCaseId");
 }
 
+function validateIncentiveRowIds(row: PersistedIncentiveWorklistRow): void {
+  const rowIds = row as PersistedIncentiveWorklistRow & { caseId?: string; id?: string };
+
+  assertCanonicalPaId(row.umRequestId, "row.umRequestId");
+  if (rowIds.caseId !== undefined) {
+    assertMatchingCanonicalId(rowIds.caseId, row.umRequestId, "row.caseId");
+  }
+  if (rowIds.id !== undefined) {
+    assertMatchingCanonicalId(rowIds.id, row.umRequestId, "row.id");
+  }
+}
+
 function assertCanonicalPaId(value: string, fieldName: string): void {
   if (!value.startsWith("PA-")) {
     throw new Error(`PAS_SUBMISSION_ID_NOT_CANONICAL:${fieldName}`);
@@ -402,6 +416,10 @@ function extractStoredUmRequest(data: StoredPasClaimDocument): UMRequest | null 
 
 function canonicalizeStoredUmRequest(umRequest: UMRequest): UMRequest {
   const canonicalId = getStoredCanonicalPaId(umRequest.caseId, umRequest.sourceCaseId, umRequest.id);
+  const auditRefs = umRequest.auditRefs ?? {
+    pasClaimBundleId: canonicalId,
+    pasClaimResponseBundleId: null
+  };
 
   return {
     ...umRequest,
@@ -409,8 +427,8 @@ function canonicalizeStoredUmRequest(umRequest: UMRequest): UMRequest {
     caseId: canonicalId,
     sourceCaseId: canonicalId,
     auditRefs: {
-      ...umRequest.auditRefs,
-      pasClaimBundleId: canonicalizeLegacyCanonicalId(umRequest.auditRefs.pasClaimBundleId)
+      ...auditRefs,
+      pasClaimBundleId: canonicalizeLegacyCanonicalId(auditRefs.pasClaimBundleId)
     }
   };
 }
@@ -471,13 +489,22 @@ function canonicalizeLegacyCanonicalId(id: string): string {
   return id;
 }
 
-function stripStoredAt(
+function canonicalizeStoredIncentiveRow(
   row: PersistedIncentiveWorklistRow & { storedAt?: string }
 ): PersistedIncentiveWorklistRow {
-  const incentiveRow = { ...row };
+  const incentiveRow = { ...row } as PersistedIncentiveWorklistRow & {
+    caseId?: string;
+    id?: string;
+    storedAt?: string;
+  };
+  const canonicalId = getStoredCanonicalPaId(incentiveRow.umRequestId, incentiveRow.caseId, incentiveRow.id);
+
   delete (incentiveRow as PersistedIncentiveWorklistRow & { storedAt?: string }).storedAt;
   return {
     ...incentiveRow,
+    ...(incentiveRow.id !== undefined ? { id: canonicalId } : {}),
+    ...(incentiveRow.caseId !== undefined ? { caseId: canonicalId } : {}),
+    umRequestId: canonicalId,
     paymentIntentId: incentiveRow.paymentIntentId ?? null,
     settlementToken: incentiveRow.settlementToken ?? {
       symbol: incentiveRow.currency

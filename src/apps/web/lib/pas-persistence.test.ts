@@ -3,10 +3,11 @@ import {
   createFirestorePasPersistenceStore,
   createPasPersistenceStoreFromEnv,
   toPasSubmittedEvent,
+  type PersistedIncentiveWorklistRow,
   type FirestoreDatabase,
   type FirestoreDocumentReference
 } from "./pas-persistence";
-import { createInMemoryUmPlatform, buildPasFhirBundle } from "@operon-labs/um-platform";
+import { createInMemoryUmPlatform, buildPasFhirBundle, type UMRequest } from "@operon-labs/um-platform";
 
 describe("PAS persistence store selection", () => {
   it("uses Firestore in operon-labs-nonprod when no PAS store backend is configured", () => {
@@ -395,7 +396,123 @@ describe("PAS persistence store selection", () => {
       exists: false
     });
   });
+
+  it("rejects incentive rows whose canonical IDs do not match", async () => {
+    const firestore = createFakeFirestore();
+    const store = createFirestorePasPersistenceStore(
+      {
+        projectId: "operon-labs-nonprod",
+        databaseId: "(default)"
+      },
+      firestore
+    );
+    const platform = createInMemoryUmPlatform({
+      generateCaseId: () => "PA-260526-0900-ROWMATCH"
+    });
+    const umRequest = platform.submitPriorAuth({
+      requestType: "outpatient_service",
+      serviceCode: "knee_mri"
+    });
+
+    await expect(
+      store.saveIncentiveRow(buildPersistedIncentiveRow(umRequest, {
+        umRequestId: "UMR-260526-0900-ROWMATCH"
+      }))
+    ).rejects.toThrow("PAS_SUBMISSION_ID_NOT_CANONICAL:row.umRequestId");
+
+    await expect(
+      store.saveIncentiveRow(buildPersistedIncentiveRow(umRequest, {
+        caseId: "PA-260526-0900-OTHER01"
+      }))
+    ).rejects.toThrow("PAS_SUBMISSION_ID_MISMATCH:row.caseId");
+
+    await expect(firestore.collection("incentiveEvaluations").doc(umRequest.id).get()).resolves.toMatchObject({
+      exists: false
+    });
+  });
+
+  it("canonicalizes legacy stored UMR incentive row ids to the PA id on read", async () => {
+    const firestore = createFakeFirestore();
+    const store = createFirestorePasPersistenceStore(
+      {
+        projectId: "operon-labs-nonprod",
+        databaseId: "(default)"
+      },
+      firestore
+    );
+    const platform = createInMemoryUmPlatform({
+      generateCaseId: () => "PA-260526-0900-ROWLEG1"
+    });
+    const umRequest = platform.submitPriorAuth({
+      requestType: "outpatient_service",
+      serviceCode: "knee_mri"
+    });
+    const legacyRow = buildPersistedIncentiveRow(umRequest, {
+      umRequestId: "UMR-260526-0900-ROWLEG1",
+      caseId: "UMR-260526-0900-ROWLEG1"
+    });
+
+    await firestore.collection("incentiveEvaluations").doc(umRequest.id).set({
+      ...legacyRow,
+      storedAt: umRequest.submittedAt
+    });
+
+    await expect(store.getIncentiveRow(umRequest.id)).resolves.toMatchObject({
+      umRequestId: umRequest.id,
+      caseId: umRequest.id,
+      paymentIntentId: "pi_test"
+    });
+    await expect(store.listIncentiveRows()).resolves.toEqual([
+      expect.objectContaining({
+        umRequestId: umRequest.id,
+        caseId: umRequest.id
+      })
+    ]);
+  });
 });
+
+function buildPersistedIncentiveRow(
+  umRequest: UMRequest,
+  overrides: Partial<PersistedIncentiveWorklistRow> = {}
+): PersistedIncentiveWorklistRow {
+  return {
+    umRequestId: umRequest.id,
+    caseId: umRequest.id,
+    submittedAt: umRequest.submittedAt,
+    providerGroupDisplay: umRequest.providerGroupDisplay,
+    requestType: umRequest.requestType,
+    serviceLabel: umRequest.serviceLabel,
+    serviceCode: umRequest.serviceCode,
+    paResult: umRequest.paResult,
+    denialReason: umRequest.denialReason,
+    incentiveStatus: "paid",
+    paymentStatus: "auto_executed",
+    incentiveValue: 5,
+    currency: "HBAR",
+    settlementToken: {
+      symbol: "HBAR"
+    },
+    reason: "Complete DTR + PAS before cutoff",
+    reasonCodes: [],
+    policyId: "provider-documentation-completeness-v1",
+    policyControls: [],
+    policyCriteria: [],
+    audit: {
+      id: "audit-1",
+      requestHash: "hash-1",
+      policyId: "provider-documentation-completeness-v1",
+      policyVersion: "2026-05-24",
+      decision: "approved",
+      reasonCodes: [],
+      transactionId: "testnet-1",
+      createdAt: umRequest.submittedAt
+    },
+    walletId: "0.0.9049549",
+    paymentIntentId: "pi_test",
+    transactionId: "testnet-1",
+    ...overrides
+  };
+}
 
 function createFakeFirestore(): FirestoreDatabase & { collectionNames(): string[]; batchCommits(): number } {
   const collections = new Map<string, Map<string, unknown>>();
