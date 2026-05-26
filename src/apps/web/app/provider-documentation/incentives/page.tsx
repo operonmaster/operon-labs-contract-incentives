@@ -13,5 +13,5 @@ export default async function ProviderDocumentationIncentivesPage({
 }) {
   const params = await searchParams;
 
-  return <PlanIncentivesConsole initialCaseId={params?.caseId ?? null} />;
+  return <PlanIncentivesConsole initialUmRequestId={params?.caseId ?? null} />;
 }

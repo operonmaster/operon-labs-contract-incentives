@@ -14,7 +14,9 @@ describe("plan audit details modal", () => {
     expect(source).toContain('className="modal-backdrop audit-modal-backdrop"');
     expect(source).toContain('className="modal plan-audit-modal"');
     expect(source).toContain('role="dialog"');
-    expect(source).toContain("PA preview and policy audit");
+    expect(source).toContain("UM request creation policy audit");
+    expect(source).toContain("{row.umRequestId}");
+    expect(source).not.toContain("{row.caseId}");
     expect(source).toContain("Close details");
     expect(source).toContain("Request type");
     expect(source).toContain("formatRequestType(row.requestType)");
@@ -52,7 +54,12 @@ describe("plan audit details modal", () => {
 
     expect(source).toContain("PlanAuditDetailsModal");
     expect(source).toContain("formatRequestType(row.requestType)");
-    expect(source).toContain("setDetailsCaseId(row.caseId)");
+    expect(source).toContain("setDetailsUmRequestId(row.umRequestId)");
+    expect(source).not.toContain("setDetailsCaseId");
+    expect(source).not.toContain("selectedCaseId");
+    expect(source).not.toContain("detailsCaseId");
+    expect(source).not.toContain("initialCaseId");
+    expect(source).not.toContain("row.caseId");
     expect(source).not.toContain('className="panel detail-panel"');
   });
 
@@ -60,6 +67,7 @@ describe("plan audit details modal", () => {
     const source = readRepoFile("src/apps/web/components/provider-documentation/PlanIncentivesConsole.tsx");
 
     expect(source).toContain("<th>Health Plan</th>");
+    expect(source).toContain("<th>UM request ID</th>");
     expect(source).toMatch(/<th>Health Plan<\/th>\s*<th>Provider group<\/th>/);
     expect(source).toContain('<th className="badge-cell">Business Policy</th>');
     expect(source).toContain('<th className="badge-cell">Payment Policy</th>');
@@ -96,7 +104,12 @@ describe("plan audit details modal", () => {
 
     expect(componentSource).toContain('className="loading-row"');
     expect(componentSource).toContain('role="status"');
-    expect(componentSource).toContain("Loading submitted PA events");
+    expect(componentSource).toContain("Loading UM request creation events");
+    expect(componentSource).toContain("Review UM request creation events");
+    expect(componentSource).toContain("UM request worklist");
+    expect(componentSource).not.toContain("submitted PA events");
+    expect(componentSource).not.toContain("Submitted PA worklist");
+    expect(componentSource).not.toContain("Loading submitted PA events");
     expect(componentSource).toContain('className="loading-indicator"');
     expect(componentSource).toContain('className="loading-dot"');
     expect(styleSource).toContain(".loading-row");

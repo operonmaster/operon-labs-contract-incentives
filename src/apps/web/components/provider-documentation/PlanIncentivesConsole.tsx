@@ -13,18 +13,18 @@ interface IncentiveRowsResponse {
 
 type RefreshSource = "initial" | "manual";
 
-export function PlanIncentivesConsole({ initialCaseId = null }: { initialCaseId?: string | null }) {
-  const requestedCaseId = initialCaseId;
+export function PlanIncentivesConsole({ initialUmRequestId = null }: { initialUmRequestId?: string | null }) {
+  const requestedUmRequestId = initialUmRequestId;
   const [rows, setRows] = useState<IncentiveWorklistRow[]>([]);
-  const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
-  const [detailsCaseId, setDetailsCaseId] = useState<string | null>(null);
+  const [selectedUmRequestId, setSelectedUmRequestId] = useState<string | null>(null);
+  const [detailsUmRequestId, setDetailsUmRequestId] = useState<string | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(false);
   const refreshSequenceRef = useRef(0);
 
-  const detailsRow = rows.find((row) => row.caseId === detailsCaseId) ?? null;
+  const detailsRow = rows.find((row) => row.umRequestId === detailsUmRequestId) ?? null;
 
   const refreshRows = useCallback(async (source: RefreshSource = "manual") => {
     const requestId = refreshSequenceRef.current + 1;
@@ -54,16 +54,16 @@ export function PlanIncentivesConsole({ initialCaseId = null }: { initialCaseId?
       }
 
       setRows(payload.rows);
-      setSelectedCaseId((currentCaseId) => {
-        if (requestedCaseId && payload.rows.some((row) => row.caseId === requestedCaseId)) {
-          return requestedCaseId;
+      setSelectedUmRequestId((currentUmRequestId) => {
+        if (requestedUmRequestId && payload.rows.some((row) => row.umRequestId === requestedUmRequestId)) {
+          return requestedUmRequestId;
         }
 
-        if (currentCaseId && payload.rows.some((row) => row.caseId === currentCaseId)) {
-          return currentCaseId;
+        if (currentUmRequestId && payload.rows.some((row) => row.umRequestId === currentUmRequestId)) {
+          return currentUmRequestId;
         }
 
-        return payload.rows[0]?.caseId ?? null;
+        return payload.rows[0]?.umRequestId ?? null;
       });
       return true;
     } catch {
@@ -82,7 +82,7 @@ export function PlanIncentivesConsole({ initialCaseId = null }: { initialCaseId?
         setRefreshing(false);
       }
     }
-  }, [requestedCaseId]);
+  }, [requestedUmRequestId]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -102,19 +102,19 @@ export function PlanIncentivesConsole({ initialCaseId = null }: { initialCaseId?
         <Link className="back" href="/">
           Back to demos
         </Link>
-        <UseCaseNavigation activeView="plan" caseId={selectedCaseId ?? requestedCaseId} />
+        <UseCaseNavigation activeView="plan" caseId={selectedUmRequestId ?? requestedUmRequestId} />
       </div>
 
       <LabsHero compact eyebrow="Health plan audit console" title="Provider documentation incentives">
         <p>
-          Review submitted PA events, inspect policy-safe evidence, and verify policy-bound Hedera testnet settlement.
+          Review UM request creation events, inspect policy-safe evidence, and verify policy-bound Hedera testnet settlement.
         </p>
       </LabsHero>
 
       <section className="panel">
         <div className="toolbar">
           <div>
-            <h2>Submitted PA worklist</h2>
+            <h2>UM request worklist</h2>
             <p>{rows.length === 1 ? "1 event loaded" : `${rows.length} events loaded`}</p>
           </div>
           <button
@@ -137,7 +137,7 @@ export function PlanIncentivesConsole({ initialCaseId = null }: { initialCaseId?
           <table className="worklist">
             <thead>
               <tr>
-                <th>PA ID</th>
+                <th>UM request ID</th>
                 <th>Health Plan</th>
                 <th>Provider group</th>
                 <th>Request type</th>
@@ -153,7 +153,7 @@ export function PlanIncentivesConsole({ initialCaseId = null }: { initialCaseId?
                   <td colSpan={8}>
                     <div className="loading-indicator" role="status" aria-live="polite">
                       <span className="loading-dot" aria-hidden="true" />
-                      <span>Loading submitted PA events</span>
+                      <span>Loading UM request creation events</span>
                     </div>
                   </td>
                 </tr>
@@ -162,8 +162,8 @@ export function PlanIncentivesConsole({ initialCaseId = null }: { initialCaseId?
                 const paymentPolicyOutcome = formatPaymentPolicyOutcome(row) || null;
 
                 return (
-                  <tr key={row.caseId} className={row.caseId === selectedCaseId ? "selected" : ""}>
-                    <td className="mono-cell">{row.caseId}</td>
+                  <tr key={row.umRequestId} className={row.umRequestId === selectedUmRequestId ? "selected" : ""}>
+                    <td className="mono-cell">{row.umRequestId}</td>
                     <td>{row.planDisplay ?? row.planId ?? "Unknown plan"}</td>
                     <td>{row.providerGroupDisplay}</td>
                     <td>{formatRequestType(row.requestType)}</td>
@@ -183,8 +183,8 @@ export function PlanIncentivesConsole({ initialCaseId = null }: { initialCaseId?
                         className="row-action"
                         type="button"
                         onClick={() => {
-                          setSelectedCaseId(row.caseId);
-                          setDetailsCaseId(row.caseId);
+                          setSelectedUmRequestId(row.umRequestId);
+                          setDetailsUmRequestId(row.umRequestId);
                         }}
                       >
                         View details
@@ -196,7 +196,7 @@ export function PlanIncentivesConsole({ initialCaseId = null }: { initialCaseId?
               {!initialLoading && rows.length === 0 ? (
                 <tr>
                   <td className="empty-state" colSpan={8}>
-                    No submitted PA incentive events yet. Submit a prior authorization from the provider portal.
+                    No UM request creation incentive events yet. Submit a prior authorization from the provider portal.
                   </td>
                 </tr>
               ) : null}
@@ -205,7 +205,7 @@ export function PlanIncentivesConsole({ initialCaseId = null }: { initialCaseId?
         </div>
       </section>
 
-      {detailsRow ? <PlanAuditDetailsModal row={detailsRow} onClose={() => setDetailsCaseId(null)} /> : null}
+      {detailsRow ? <PlanAuditDetailsModal row={detailsRow} onClose={() => setDetailsUmRequestId(null)} /> : null}
     </LabsPageShell>
   );
 }

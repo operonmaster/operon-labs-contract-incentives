@@ -21,8 +21,8 @@ export function PlanAuditDetailsModal({ row, onClose }: PlanAuditDetailsModalPro
         <div className="modal-toolbar">
           <div>
             <span className="eyebrow">Policy event</span>
-            <h2 id="plan-audit-title">PA preview and policy audit</h2>
-            <p>{row.caseId}</p>
+            <h2 id="plan-audit-title">UM request creation policy audit</h2>
+            <p>{row.umRequestId}</p>
           </div>
           <button className="row-action" type="button" onClick={onClose}>
             Close details
