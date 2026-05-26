@@ -251,6 +251,44 @@ describe("PAS persistence store selection", () => {
     });
   });
 
+  it("normalizes stored UM events from umRequestId when caseId is stale", async () => {
+    const firestore = createFakeFirestore();
+    const store = createFirestorePasPersistenceStore(
+      {
+        projectId: "operon-labs-nonprod",
+        databaseId: "(default)"
+      },
+      firestore
+    );
+
+    await firestore.collection("auditEvents").doc("stale-case-event").set({
+      eventType: "UM_REQUEST_CREATED",
+      caseId: "PA-260526-0900-WRONG99",
+      umRequestId: "PA-260526-0900-EVENT01",
+      submittedAt: "2026-05-26T09:00:00.000Z",
+      storedAt: "2026-05-26T09:00:00.000Z"
+    });
+
+    await expect(store.listUmEvents()).resolves.toEqual([
+      {
+        eventType: "UM_REQUEST_CREATED",
+        caseId: "PA-260526-0900-EVENT01",
+        umRequestId: "PA-260526-0900-EVENT01"
+      }
+    ]);
+    expect(
+      toPasSubmittedEvent({
+        eventType: "PAS_SUBMITTED",
+        caseId: "PA-260526-0900-WRONG99",
+        umRequestId: "PA-260526-0900-EVENT01"
+      })
+    ).toEqual({
+      eventType: "PAS_SUBMITTED",
+      caseId: "PA-260526-0900-EVENT01",
+      umRequestId: "PA-260526-0900-EVENT01"
+    });
+  });
+
   it("canonicalizes legacy UM requests from doc id instead of sourceCaseId", async () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(
@@ -744,6 +782,57 @@ describe("PAS persistence store selection", () => {
     const rows = await store.listIncentiveRows();
     expect(rows[0]).not.toHaveProperty("paResult");
     expect(rows[0]).not.toHaveProperty("denialReason");
+  });
+
+  it("backfills UM row fields for legacy persisted incentive rows", async () => {
+    const firestore = createFakeFirestore();
+    const store = createFirestorePasPersistenceStore(
+      {
+        projectId: "operon-labs-nonprod",
+        databaseId: "(default)"
+      },
+      firestore
+    );
+    const platform = createInMemoryUmPlatform({
+      generateCaseId: () => "PA-260526-0900-ROWLEG3"
+    });
+    const umRequest = platform.submitPriorAuth({
+      requestType: "outpatient_service",
+      serviceCode: "knee_mri"
+    });
+    const legacyRow = {
+      ...buildPersistedIncentiveRow(umRequest),
+      id: undefined,
+      state: undefined,
+      outcomeStatus: undefined,
+      paResult: "submitted_pending",
+      denialReason: null
+    };
+
+    await firestore.collection("incentiveEvaluations").doc(umRequest.id).set({
+      ...legacyRow,
+      storedAt: umRequest.submittedAt
+    });
+
+    await expect(store.getIncentiveRow(umRequest.id)).resolves.toMatchObject({
+      id: umRequest.id,
+      umRequestId: umRequest.id,
+      caseId: umRequest.id,
+      state: "pend",
+      outcomeStatus: null
+    });
+    await expect(store.listIncentiveRows()).resolves.toEqual([
+      expect.objectContaining({
+        id: umRequest.id,
+        umRequestId: umRequest.id,
+        caseId: umRequest.id,
+        state: "pend",
+        outcomeStatus: null
+      })
+    ]);
+    const row = await store.getIncentiveRow(umRequest.id);
+    expect(row).not.toHaveProperty("paResult");
+    expect(row).not.toHaveProperty("denialReason");
   });
 });
 

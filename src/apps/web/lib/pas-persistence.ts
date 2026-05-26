@@ -336,7 +336,7 @@ class FirestorePasPersistenceStore implements UmPasPersistenceStore {
 }
 
 export function toPasSubmittedEvent(event: StoredPasSubmittedEvent): PasSubmittedEvent {
-  const canonicalId = getStoredCanonicalPaId(event.caseId, event.umRequestId);
+  const canonicalId = getStoredCanonicalPaId(event.umRequestId, event.caseId);
 
   return {
     eventType: "PAS_SUBMITTED",
@@ -505,7 +505,7 @@ function canonicalizeStoredEvidence(
 }
 
 function normalizeStoredUmEvent(event: UMPlatformEvent): UMPlatformEvent {
-  const canonicalId = getStoredCanonicalPaId(event.caseId, event.umRequestId);
+  const canonicalId = getStoredCanonicalPaId(event.umRequestId, event.caseId);
 
   return {
     eventType: event.eventType,
@@ -559,9 +559,11 @@ function canonicalizeStoredIncentiveRow(
   delete incentiveRow.denialReason;
   return {
     ...incentiveRow,
-    ...(incentiveRow.id !== undefined ? { id: canonicalId } : {}),
-    ...(incentiveRow.caseId !== undefined ? { caseId: canonicalId } : {}),
+    id: canonicalId,
     umRequestId: canonicalId,
+    caseId: canonicalId,
+    state: incentiveRow.state ?? "pend",
+    outcomeStatus: incentiveRow.outcomeStatus ?? null,
     paymentIntentId: incentiveRow.paymentIntentId ? canonicalId : null,
     settlementToken: incentiveRow.settlementToken ?? {
       symbol: incentiveRow.currency
