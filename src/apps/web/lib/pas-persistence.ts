@@ -414,15 +414,25 @@ function validateFhirClaimIdentifiers(fhirBundle: PasFhirBundle, canonicalId: st
     return;
   }
 
+  const requiredSystems = new Set(["prior-auth-case-id", "um-request-id"]);
   claim.identifier.forEach((identifier, index) => {
     if (isCanonicalPaIdentifierSystem(identifier.system)) {
       assertMatchingCanonicalId(identifier.value, canonicalId, `fhirBundle.claim.identifier[${index}].value`);
+      requiredSystems.delete(getCanonicalPaIdentifierSystemName(identifier.system));
     }
   });
+
+  for (const systemName of requiredSystems) {
+    throw new Error(`PAS_SUBMISSION_ID_MISSING:fhirBundle.claim.identifier.${systemName}`);
+  }
 }
 
 function isCanonicalPaIdentifierSystem(system: string): boolean {
   return system.endsWith("/prior-auth-case-id") || system.endsWith("/um-request-id");
+}
+
+function getCanonicalPaIdentifierSystemName(system: string): "prior-auth-case-id" | "um-request-id" {
+  return system.endsWith("/prior-auth-case-id") ? "prior-auth-case-id" : "um-request-id";
 }
 
 function buildStoredEvidence(
@@ -456,7 +466,10 @@ function canonicalizeStoredUmRequest(umRequest: UMRequest): UMRequest {
     sourceCaseId: canonicalId,
     auditRefs: {
       ...auditRefs,
-      pasClaimBundleId: canonicalizeLegacyCanonicalId(auditRefs.pasClaimBundleId)
+      pasClaimBundleId: canonicalizeLegacyCanonicalId(auditRefs.pasClaimBundleId),
+      pasClaimResponseBundleId: auditRefs.pasClaimResponseBundleId
+        ? canonicalizeLegacyCanonicalId(auditRefs.pasClaimResponseBundleId)
+        : null
     }
   };
 }

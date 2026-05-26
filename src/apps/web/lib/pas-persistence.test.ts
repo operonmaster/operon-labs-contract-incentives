@@ -273,7 +273,8 @@ describe("PAS persistence store selection", () => {
       sourceCaseId: umRequest.id,
       auditRefs: {
         ...umRequest.auditRefs,
-        pasClaimBundleId: "pas-UMR-260526-0900-RECORD1"
+        pasClaimBundleId: "pas-UMR-260526-0900-RECORD1",
+        pasClaimResponseBundleId: "pas-UMR-260526-0900-RECORD1"
       }
     };
 
@@ -290,7 +291,8 @@ describe("PAS persistence store selection", () => {
         caseId: umRequest.id,
         sourceCaseId: umRequest.id,
         auditRefs: expect.objectContaining({
-          pasClaimBundleId: umRequest.id
+          pasClaimBundleId: umRequest.id,
+          pasClaimResponseBundleId: umRequest.id
         })
       })
     ]);
@@ -421,6 +423,52 @@ describe("PAS persistence store selection", () => {
         }
       })
     ).rejects.toThrow("PAS_SUBMISSION_ID_MISMATCH:fhirBundle.claim.identifier[1].value");
+
+    await expect(
+      store.savePasSubmission({
+        umRequest,
+        evidence,
+        fhirBundle: {
+          ...fhirBundle,
+          entry: fhirBundle.entry.map((entry) =>
+            entry.resource.resourceType === "Claim"
+              ? {
+                  ...entry,
+                  resource: {
+                    ...entry.resource,
+                    identifier: entry.resource.identifier.filter(
+                      (identifier) => !identifier.system.endsWith("/prior-auth-case-id")
+                    )
+                  }
+                }
+              : entry
+          )
+        }
+      })
+    ).rejects.toThrow("PAS_SUBMISSION_ID_MISSING:fhirBundle.claim.identifier.prior-auth-case-id");
+
+    await expect(
+      store.savePasSubmission({
+        umRequest,
+        evidence,
+        fhirBundle: {
+          ...fhirBundle,
+          entry: fhirBundle.entry.map((entry) =>
+            entry.resource.resourceType === "Claim"
+              ? {
+                  ...entry,
+                  resource: {
+                    ...entry.resource,
+                    identifier: entry.resource.identifier.filter(
+                      (identifier) => !identifier.system.endsWith("/um-request-id")
+                    )
+                  }
+                }
+              : entry
+          )
+        }
+      })
+    ).rejects.toThrow("PAS_SUBMISSION_ID_MISSING:fhirBundle.claim.identifier.um-request-id");
 
     await expect(firestore.collection("pasClaims").doc(umRequest.id).get()).resolves.toMatchObject({
       exists: false
