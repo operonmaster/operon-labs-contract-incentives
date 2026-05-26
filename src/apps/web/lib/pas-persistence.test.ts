@@ -99,7 +99,9 @@ describe("PAS persistence store selection", () => {
 
     await expect(store.getPriorAuthRecord(record.caseId)).resolves.toMatchObject({ caseId: record.caseId });
     await expect(store.getEvidence(record.caseId)).resolves.toMatchObject({ caseId: record.caseId, fhirFieldsPresent: true });
-    await expect(store.listPasEvents()).resolves.toEqual([{ eventType: "PAS_SUBMITTED", caseId: record.caseId }]);
+    await expect(store.listPasEvents()).resolves.toEqual([
+      { eventType: "PAS_SUBMITTED", caseId: record.caseId, umRequestId: record.id }
+    ]);
     await expect(store.listIncentiveRows()).resolves.toEqual([
       expect.objectContaining({ caseId: record.caseId, paymentStatus: "auto_executed" })
     ]);
@@ -133,7 +135,9 @@ describe("PAS persistence store selection", () => {
 
     expect(firestore.batchCommits()).toBe(1);
     await expect(store.getPriorAuthRecord(record.caseId)).resolves.toMatchObject({ caseId: record.caseId });
-    await expect(store.listPasEvents()).resolves.toEqual([{ eventType: "PAS_SUBMITTED", caseId: record.caseId }]);
+    await expect(store.listPasEvents()).resolves.toEqual([
+      { eventType: "PAS_SUBMITTED", caseId: record.caseId, umRequestId: record.id }
+    ]);
   });
 });
 

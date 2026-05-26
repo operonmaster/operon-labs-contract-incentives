@@ -10,7 +10,10 @@ export type ServiceCode = "knee_mri" | "full_body_wellness_mri" | "wegovy_semagl
 export type CodingSystem = "CPT" | "NDC";
 export type PlanId = "acme-health-ppo" | "summit-health-hmo";
 export type PaResult = "submitted_pending" | "denied_not_covered";
+export type UMRequestState = "pend" | "in_clinical_review" | "determined";
+export type UMOutcomeStatus = "approved" | "denied";
 export type PasEventType = "PAS_SUBMITTED";
+export type UMRequestEventType = "UM_REQUEST_CREATED" | "UM_REQUEST_REVIEW_STARTED" | "UM_REQUEST_DETERMINED";
 
 export interface CoverageRequirements {
   requestType: RequestType;
@@ -44,33 +47,87 @@ export interface PriorAuthSubmissionInput {
   acknowledgedNotCovered?: boolean;
 }
 
-export interface PriorAuthRecord {
+export interface PriorAuthCompatibilityFields {
   caseId: string;
-  patientId: string;
-  patientDisplay: string;
-  planId: PlanId;
-  planDisplay: string;
   providerGroupId: "lakeside-provider-admin";
   providerGroupDisplay: "Lakeside Provider Admin";
-  requestType: RequestType;
-  serviceCode: ServiceCode;
-  serviceLabel: string;
-  codingSystem: CodingSystem;
-  billingCode: string;
-  submittedAt: string;
-  coverage: CoverageRequirements;
-  dtr: DtrAnswers | null;
-  dtrQuestionnaireResponse: DtrQuestionnaireResponse | null;
   pasSubmitted: true;
   submittedBeforeInitialDecision: boolean;
   paResult: PaResult;
   denialReason: "BENEFIT_NOT_COVERED" | null;
 }
 
+export interface UMRequest extends PriorAuthCompatibilityFields {
+  id: string;
+  source: "pas_fhir";
+  sourceCaseId: string;
+  patientId: string;
+  patientDisplay: string;
+  planId: PlanId;
+  planDisplay: string;
+  providerId: "lakeside-provider-admin";
+  providerDisplay: "Lakeside Provider Admin";
+  delegateVendorId: "northstar-um" | null;
+  requestType: RequestType;
+  serviceCode: ServiceCode;
+  serviceLabel: string;
+  codingSystem: CodingSystem;
+  billingCode: string;
+  state: UMRequestState;
+  outcomeStatus: UMOutcomeStatus | null;
+  submittedAt: string;
+  pendStartedAt: string;
+  reviewStartedAt: string | null;
+  determinedAt: string | null;
+  slaDeadlineAt: string;
+  slaHours: 24;
+  coverage: CoverageRequirements;
+  dtr: DtrAnswers | null;
+  dtrQuestionnaireResponse: DtrQuestionnaireResponse | null;
+  documentation: {
+    coverageChecked: boolean;
+    coveredBenefit: boolean;
+    dtrRequested: boolean;
+    dtrCompleted: boolean;
+    attachmentChecklistComplete: boolean;
+    fhirFieldsPresent: boolean;
+  };
+  clinicalReview: {
+    reviewerId: string | null;
+    medicalNecessityReviewed: boolean;
+    policyCriteriaChecked: boolean;
+    rationaleCaptured: boolean;
+    denialReasonCode: string | null;
+  };
+  auditRefs: {
+    pasClaimBundleId: string;
+    pasClaimResponseBundleId: string | null;
+  };
+}
+
 export interface PasSubmittedEvent {
   eventType: PasEventType;
   caseId: string;
+  umRequestId: string;
 }
+
+export interface UMRequestLifecycleEvent {
+  eventType: UMRequestEventType;
+  caseId: string;
+  umRequestId: string;
+}
+
+export type UMPlatformEvent = PasSubmittedEvent | UMRequestLifecycleEvent;
+
+export interface CompleteClinicalReviewInput {
+  outcomeStatus: UMOutcomeStatus;
+  medicalNecessityReviewed: boolean;
+  policyCriteriaChecked: boolean;
+  rationaleCaptured: boolean;
+  denialReasonCode?: string | null;
+}
+
+export type PriorAuthRecord = UMRequest;
 
 export interface ProviderDocumentationEvidence {
   caseId: string;
@@ -102,10 +159,15 @@ export interface ProviderDocumentationEvidence {
 }
 
 export interface UmPlatform {
-  submitPriorAuth(input: PriorAuthSubmissionInput): PriorAuthRecord;
+  submitPriorAuth(input: PriorAuthSubmissionInput): UMRequest;
+  listUmRequests(): UMRequest[];
+  getUmRequest(umRequestId: string): UMRequest | null;
+  findUmRequestBySourceCaseId(caseId: string): UMRequest | null;
+  listEvents(): UMPlatformEvent[];
+  getEvidence(umRequestId: string): ProviderDocumentationEvidence | null;
+  startClinicalReview(umRequestId: string, reviewerId: string): UMRequest;
+  completeClinicalReview(umRequestId: string, input: CompleteClinicalReviewInput): UMRequest;
   listPriorAuths(): PriorAuthRecord[];
-  listEvents(): PasSubmittedEvent[];
-  getEvidence(caseId: string): ProviderDocumentationEvidence | null;
 }
 
 export interface UmPlatformOptions {
@@ -128,6 +190,9 @@ const defaultPatientByPlanId: Record<PlanId, { patientId: string; patientDisplay
   }
 };
 
+const DEFAULT_DELEGATE_VENDOR_ID = "northstar-um" as const;
+const DEFAULT_SLA_HOURS = 24 as const;
+
 export function getCoverageRequirements(serviceCode: ServiceCode): CoverageRequirements {
   return getCrdCoverageRequirements(serviceCode);
 }
@@ -142,9 +207,85 @@ export function generatePriorAuthCaseId(date: Date = new Date()): string {
   return `PA-${yy}${month}${day}-${hour}${minute}-${generateCaseIdSalt()}`;
 }
 
+export function generateUmRequestId(sourceCaseId: string): string {
+  return sourceCaseId.replace(/^PA-/, "UMR-");
+}
+
+function addHours(isoTimestamp: string, hours: number): string {
+  return new Date(new Date(isoTimestamp).getTime() + hours * 60 * 60 * 1000).toISOString();
+}
+
+function buildDocumentation(record: {
+  coverage: CoverageRequirements;
+  dtr: DtrAnswers | null;
+  dtrQuestionnaireResponse: DtrQuestionnaireResponse | null;
+}) {
+  const dtrCompleted = record.coverage.documentationTemplateId
+    ? isCompleteDtr(record.dtr) ||
+      isCompleteDtrQuestionnaireResponse(record.dtrQuestionnaireResponse, record.coverage.documentationTemplateId)
+    : false;
+
+  return {
+    coverageChecked: true,
+    coveredBenefit: record.coverage.coveredBenefit,
+    dtrRequested: Boolean(record.coverage.documentationTemplateId),
+    dtrCompleted,
+    attachmentChecklistComplete: dtrCompleted,
+    fhirFieldsPresent: dtrCompleted
+  };
+}
+
+export function startClinicalReviewForRequest(request: UMRequest, reviewerId: string, now: Date = new Date()): UMRequest {
+  if (request.state !== "pend" && request.state !== "in_clinical_review") {
+    throw new Error("UM_REQUEST_NOT_REVIEWABLE");
+  }
+
+  return copyUmRequest({
+    ...request,
+    state: "in_clinical_review",
+    reviewStartedAt: request.reviewStartedAt ?? now.toISOString(),
+    clinicalReview: {
+      ...request.clinicalReview,
+      reviewerId
+    }
+  });
+}
+
+export function completeClinicalReviewForRequest(
+  request: UMRequest,
+  input: CompleteClinicalReviewInput,
+  now: Date = new Date()
+): UMRequest {
+  if (request.state !== "in_clinical_review") {
+    throw new Error("UM_REQUEST_NOT_IN_CLINICAL_REVIEW");
+  }
+
+  if (!input.medicalNecessityReviewed || !input.policyCriteriaChecked || !input.rationaleCaptured) {
+    throw new Error("CLINICAL_REVIEW_INCOMPLETE");
+  }
+
+  if (input.outcomeStatus === "denied" && !input.denialReasonCode) {
+    throw new Error("DENIAL_REASON_REQUIRED");
+  }
+
+  return copyUmRequest({
+    ...request,
+    state: "determined",
+    outcomeStatus: input.outcomeStatus,
+    determinedAt: now.toISOString(),
+    clinicalReview: {
+      ...request.clinicalReview,
+      medicalNecessityReviewed: input.medicalNecessityReviewed,
+      policyCriteriaChecked: input.policyCriteriaChecked,
+      rationaleCaptured: input.rationaleCaptured,
+      denialReasonCode: input.outcomeStatus === "denied" ? input.denialReasonCode ?? null : null
+    }
+  });
+}
+
 export function createInMemoryUmPlatform(options: UmPlatformOptions = {}): UmPlatform {
-  const records = new Map<string, PriorAuthRecord>();
-  const events: PasSubmittedEvent[] = [];
+  const requests = new Map<string, PriorAuthRecord>();
+  const events: UMPlatformEvent[] = [];
   const generateCaseId = options.generateCaseId ?? generatePriorAuthCaseId;
 
   return {
@@ -163,64 +304,145 @@ export function createInMemoryUmPlatform(options: UmPlatformOptions = {}): UmPla
         throw new Error("NOT_COVERED_ACKNOWLEDGEMENT_REQUIRED");
       }
 
-      const caseId = getUnusedCaseId(records, generateCaseId);
+      const caseId = getUnusedCaseId(requests, generateCaseId);
+      const umRequestId = generateUmRequestId(caseId);
       const planId = input.planId ?? "acme-health-ppo";
       const defaultPatient = defaultPatientByPlanId[planId];
+      const submittedAt = new Date().toISOString();
+      const dtr = copyDtrAnswers(input.dtr);
+      const dtrQuestionnaireResponse = copyDtrQuestionnaireResponse(input.dtrQuestionnaireResponse);
+      const documentation = buildDocumentation({
+        coverage,
+        dtr,
+        dtrQuestionnaireResponse
+      });
 
-      const record: PriorAuthRecord = {
+      const request: PriorAuthRecord = {
+        id: umRequestId,
+        source: "pas_fhir",
+        sourceCaseId: caseId,
         caseId,
         patientId: input.patientId ?? defaultPatient.patientId,
         patientDisplay: input.patientDisplay ?? defaultPatient.patientDisplay,
         planId,
         planDisplay: input.planDisplay ?? defaultPlanDisplayById[planId],
+        providerId: "lakeside-provider-admin",
+        providerDisplay: "Lakeside Provider Admin",
         providerGroupId: "lakeside-provider-admin",
         providerGroupDisplay: "Lakeside Provider Admin",
+        delegateVendorId: DEFAULT_DELEGATE_VENDOR_ID,
         requestType: input.requestType,
         serviceCode: input.serviceCode,
         serviceLabel: coverage.serviceLabel,
         codingSystem: coverage.codingSystem,
         billingCode: coverage.billingCode,
-        submittedAt: new Date().toISOString(),
+        state: "pend",
+        outcomeStatus: null,
+        submittedAt,
+        pendStartedAt: submittedAt,
+        reviewStartedAt: null,
+        determinedAt: null,
+        slaDeadlineAt: addHours(submittedAt, DEFAULT_SLA_HOURS),
+        slaHours: DEFAULT_SLA_HOURS,
         coverage,
-        dtr: copyDtrAnswers(input.dtr),
-        dtrQuestionnaireResponse: copyDtrQuestionnaireResponse(input.dtrQuestionnaireResponse),
+        dtr,
+        dtrQuestionnaireResponse,
+        documentation,
+        clinicalReview: {
+          reviewerId: null,
+          medicalNecessityReviewed: false,
+          policyCriteriaChecked: false,
+          rationaleCaptured: false,
+          denialReasonCode: null
+        },
+        auditRefs: {
+          pasClaimBundleId: `pas-${caseId}`,
+          pasClaimResponseBundleId: null
+        },
         pasSubmitted: true,
         submittedBeforeInitialDecision: true,
         paResult: coverage.coveredBenefit ? "submitted_pending" : "denied_not_covered",
         denialReason: coverage.reasonCode
       };
 
-      records.set(caseId, record);
-      events.push({ eventType: "PAS_SUBMITTED", caseId });
+      requests.set(umRequestId, request);
+      events.push({ eventType: "PAS_SUBMITTED", caseId, umRequestId });
+      events.push({ eventType: "UM_REQUEST_CREATED", caseId, umRequestId });
 
-      return copyPriorAuthRecord(record);
+      return copyUmRequest(request);
+    },
+    listUmRequests() {
+      return [...requests.values()].map(copyUmRequest);
+    },
+    getUmRequest(umRequestId) {
+      const request = requests.get(umRequestId);
+
+      return request ? copyUmRequest(request) : null;
+    },
+    findUmRequestBySourceCaseId(caseId) {
+      const request = findRequestBySourceCaseId(requests, caseId);
+
+      return request ? copyUmRequest(request) : null;
     },
     listPriorAuths() {
-      return [...records.values()].map(copyPriorAuthRecord);
+      return [...requests.values()].map(copyPriorAuthRecord);
     },
     listEvents() {
-      return events.map(copyPasSubmittedEvent);
+      return events.map(copyUmPlatformEvent);
     },
-    getEvidence(caseId) {
-      const record = records.get(caseId);
+    getEvidence(umRequestId) {
+      const request = requests.get(umRequestId) ?? findRequestBySourceCaseId(requests, umRequestId);
 
-      if (!record) {
+      if (!request) {
         return null;
       }
 
-      return buildProviderDocumentationEvidence(record);
+      return buildProviderDocumentationEvidence(request);
+    },
+    startClinicalReview(umRequestId, reviewerId) {
+      const request = requests.get(umRequestId);
+
+      if (!request) {
+        throw new Error("UM_REQUEST_NOT_FOUND");
+      }
+
+      const updated = startClinicalReviewForRequest(request, reviewerId) as PriorAuthRecord;
+      requests.set(updated.id, updated);
+      events.push({
+        eventType: "UM_REQUEST_REVIEW_STARTED",
+        caseId: updated.sourceCaseId,
+        umRequestId: updated.id
+      });
+
+      return copyUmRequest(updated);
+    },
+    completeClinicalReview(umRequestId, input) {
+      const request = requests.get(umRequestId);
+
+      if (!request) {
+        throw new Error("UM_REQUEST_NOT_FOUND");
+      }
+
+      const updated = completeClinicalReviewForRequest(request, input) as PriorAuthRecord;
+      requests.set(updated.id, updated);
+      events.push({
+        eventType: "UM_REQUEST_DETERMINED",
+        caseId: updated.sourceCaseId,
+        umRequestId: updated.id
+      });
+
+      return copyUmRequest(updated);
     }
   };
 }
 
-export function buildProviderDocumentationEvidence(record: PriorAuthRecord): ProviderDocumentationEvidence {
-  const dtrTemplateCompleted = record.coverage.documentationTemplateId
-    ? isCompleteDtr(record.dtr) ||
-      isCompleteDtrQuestionnaireResponse(record.dtrQuestionnaireResponse, record.coverage.documentationTemplateId)
-    : false;
+export function buildProviderDocumentationEvidence(record: UMRequest): ProviderDocumentationEvidence {
+  const documentation = buildDocumentation(record);
+  const paResult: PaResult = record.coverage.coveredBenefit ? "submitted_pending" : "denied_not_covered";
+  const denialReason = record.coverage.reasonCode;
 
   return {
-    caseId: record.caseId,
+    caseId: record.sourceCaseId,
     planId: record.planId,
     submitter: {
       id: "lakeside-provider-admin"
@@ -230,18 +452,18 @@ export function buildProviderDocumentationEvidence(record: PriorAuthRecord): Pro
     serviceCode: record.serviceCode,
     codingSystem: record.codingSystem,
     billingCode: record.billingCode,
-    coverageStatusConfirmed: true,
+    coverageStatusConfirmed: documentation.coverageChecked,
     coveredBenefit: record.coverage.coveredBenefit,
-    dtrRequested: Boolean(record.coverage.documentationTemplateId),
-    crdCoverageChecked: true,
+    dtrRequested: documentation.dtrRequested,
+    crdCoverageChecked: documentation.coverageChecked,
     crdCoveredBenefit: record.coverage.coveredBenefit,
-    dtrTemplateCompleted,
-    attachmentChecklistComplete: dtrTemplateCompleted,
-    fhirFieldsPresent: dtrTemplateCompleted,
-    pasSubmitted: record.pasSubmitted,
-    submittedBeforeInitialDecision: record.submittedBeforeInitialDecision,
-    paResult: record.paResult,
-    denialReason: record.denialReason,
+    dtrTemplateCompleted: documentation.dtrCompleted,
+    attachmentChecklistComplete: documentation.attachmentChecklistComplete,
+    fhirFieldsPresent: documentation.fhirFieldsPresent,
+    pasSubmitted: true,
+    submittedBeforeInitialDecision: true,
+    paResult,
+    denialReason,
     paResultUsedForPositivePayment: false,
     approvalOutcomeUsed: false,
     referralVolumeMetricUsed: false,
@@ -264,15 +486,15 @@ export {
   type DtrQuestionnaireResponse
 } from "./crd-dtr";
 
-function copyPasSubmittedEvent(event: PasSubmittedEvent): PasSubmittedEvent {
+function copyUmPlatformEvent(event: UMPlatformEvent): UMPlatformEvent {
   return { ...event };
 }
 
-function getUnusedCaseId(records: Map<string, PriorAuthRecord>, generateCaseId: () => string): string {
+function getUnusedCaseId(requests: Map<string, UMRequest>, generateCaseId: () => string): string {
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const candidate = generateCaseId();
 
-    if (!records.has(candidate)) {
+    if (!findRequestBySourceCaseId(requests, candidate)) {
       return candidate;
     }
   }
@@ -298,13 +520,24 @@ function generateCaseIdSalt(length = 8): string {
   return Array.from({ length }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
 }
 
-function copyPriorAuthRecord(record: PriorAuthRecord): PriorAuthRecord {
+function findRequestBySourceCaseId(requests: Map<string, UMRequest>, caseId: string): UMRequest | null {
+  return [...requests.values()].find((request) => request.sourceCaseId === caseId) ?? null;
+}
+
+function copyUmRequest(request: UMRequest): UMRequest {
   return {
-    ...record,
-    coverage: copyCoverageRequirements(record.coverage),
-    dtr: copyDtrAnswers(record.dtr),
-    dtrQuestionnaireResponse: copyDtrQuestionnaireResponse(record.dtrQuestionnaireResponse)
+    ...request,
+    coverage: copyCoverageRequirements(request.coverage),
+    dtr: copyDtrAnswers(request.dtr),
+    dtrQuestionnaireResponse: copyDtrQuestionnaireResponse(request.dtrQuestionnaireResponse),
+    documentation: { ...request.documentation },
+    clinicalReview: { ...request.clinicalReview },
+    auditRefs: { ...request.auditRefs }
   };
+}
+
+function copyPriorAuthRecord(record: PriorAuthRecord): PriorAuthRecord {
+  return copyUmRequest(record) as PriorAuthRecord;
 }
 
 function copyCoverageRequirements(requirements: CoverageRequirements): CoverageRequirements {

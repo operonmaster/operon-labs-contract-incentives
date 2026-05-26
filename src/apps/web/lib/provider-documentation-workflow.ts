@@ -12,9 +12,10 @@ import {
   type ProviderDocumentationEvidence,
   type RequestType,
   type ServiceCode,
+  type UMPlatformEvent,
   type UmPlatform
 } from "@operon-labs/um-platform";
-import { createPasPersistenceStoreFromEnv, type PasPersistenceStore } from "./pas-persistence";
+import { createPasPersistenceStoreFromEnv, toPasSubmittedEvent, type PasPersistenceStore } from "./pas-persistence";
 import { createPaymentIntentStoreFromEnv } from "./payment-intent-store";
 import { createPolicyStoreFromEnv, type PolicyStore } from "./policy-store";
 import { createBusinessEvaluationAttestationStore } from "./business-evaluation-attestation-store";
@@ -279,7 +280,9 @@ export function createProviderDocumentationWorkflow(
   }
 
   async function processPlatformEvents(caseId?: string): Promise<void> {
-    const events = persistence ? await persistence.listPasEvents() : platform.listEvents();
+    const events = persistence
+      ? (await persistence.listPasEvents()).map(toPasSubmittedEvent)
+      : platform.listEvents().filter(isPasSubmittedEvent);
 
     for (const event of events) {
       if (!caseId || event.caseId === caseId) {
@@ -343,6 +346,10 @@ export function createProviderDocumentationWorkflow(
     },
     getIncentiveRow
   };
+}
+
+function isPasSubmittedEvent(event: UMPlatformEvent): event is PasSubmittedEvent {
+  return event.eventType === "PAS_SUBMITTED";
 }
 
 export const providerDocumentationWorkflow = createProviderDocumentationWorkflow();

@@ -139,7 +139,7 @@ describe("provider documentation UM Platform", () => {
       dtr: null
     });
     expect(submitted.caseId).toMatch(PA_CASE_ID_PATTERN);
-    expect(platform.getEvidence(submitted.caseId)).toMatchObject({
+    expect(platform.getEvidence(submitted.id)).toMatchObject({
       serviceCode: "knee_mri",
       requestType: "outpatient_service",
       crdCoveredBenefit: true,
@@ -165,7 +165,7 @@ describe("provider documentation UM Platform", () => {
       }
     });
 
-    expect(platform.getEvidence(submitted.caseId)).toMatchObject({
+    expect(platform.getEvidence(submitted.id)).toMatchObject({
       dtrTemplateCompleted: false,
       attachmentChecklistComplete: false,
       fhirFieldsPresent: false
@@ -195,10 +195,16 @@ describe("provider documentation UM Platform", () => {
     expect(platform.listEvents()).toEqual([
       {
         eventType: "PAS_SUBMITTED",
-        caseId: submitted.caseId
+        caseId: submitted.caseId,
+        umRequestId: submitted.id
+      },
+      {
+        eventType: "UM_REQUEST_CREATED",
+        caseId: submitted.caseId,
+        umRequestId: submitted.id
       }
     ]);
-    expect(platform.getEvidence(submitted.caseId)).toMatchObject({
+    expect(platform.getEvidence(submitted.id)).toMatchObject({
       caseId: submitted.caseId,
       requestType: "outpatient_service",
       serviceCode: "knee_mri",
@@ -243,7 +249,7 @@ describe("provider documentation UM Platform", () => {
         ])
       }
     });
-    expect(platform.getEvidence(submitted.caseId)).toMatchObject({
+    expect(platform.getEvidence(submitted.id)).toMatchObject({
       dtrTemplateCompleted: true,
       attachmentChecklistComplete: true,
       fhirFieldsPresent: true
@@ -271,7 +277,7 @@ describe("provider documentation UM Platform", () => {
       paResult: "submitted_pending"
     });
     expect(submitted.caseId).toMatch(PA_CASE_ID_PATTERN);
-    expect(platform.getEvidence(submitted.caseId)).toMatchObject({
+    expect(platform.getEvidence(submitted.id)).toMatchObject({
       requestType: "pharmacy_benefit",
       serviceCode: "wegovy_semaglutide",
       crdCoveredBenefit: true,
@@ -300,7 +306,13 @@ describe("provider documentation UM Platform", () => {
     expect(platform.listEvents()).toEqual([
       {
         eventType: "PAS_SUBMITTED",
-        caseId: submitted.caseId
+        caseId: submitted.caseId,
+        umRequestId: submitted.id
+      },
+      {
+        eventType: "UM_REQUEST_CREATED",
+        caseId: submitted.caseId,
+        umRequestId: submitted.id
       }
     ]);
   });
@@ -331,7 +343,7 @@ describe("provider documentation UM Platform", () => {
       denialReason: "BENEFIT_NOT_COVERED"
     });
     expect(submitted.caseId).toMatch(PA_CASE_ID_PATTERN);
-    expect(platform.getEvidence(submitted.caseId)).toMatchObject({
+    expect(platform.getEvidence(submitted.id)).toMatchObject({
       serviceCode: "full_body_wellness_mri",
       requestType: "outpatient_service",
       crdCoveredBenefit: false,
@@ -371,7 +383,7 @@ describe("provider documentation UM Platform", () => {
     submitted.dtr!.clinicalNoteAttached = false;
     platform.listPriorAuths()[0]!.dtr!.examFindingsConfirmed = false;
 
-    expect(platform.getEvidence(submitted.caseId)).toMatchObject({
+    expect(platform.getEvidence(submitted.id)).toMatchObject({
       crdCoveredBenefit: true,
       dtrTemplateCompleted: true,
       attachmentChecklistComplete: true,
@@ -392,5 +404,162 @@ describe("provider documentation UM Platform", () => {
         examFindingsConfirmed: true
       }
     });
+  });
+
+  it("creates a UMRequest from an accepted PAS submission and emits intake events", () => {
+    const platform = createInMemoryUmPlatform({
+      generateCaseId: () => "PA-260526-0900-AAAA1111"
+    });
+
+    const umRequest = platform.submitPriorAuth({
+      requestType: "outpatient_service",
+      serviceCode: "knee_mri",
+      dtr: {
+        symptomDurationConfirmed: true,
+        conservativeTherapyConfirmed: true,
+        examFindingsConfirmed: true,
+        clinicalNoteAttached: true
+      }
+    });
+
+    expect(umRequest).toMatchObject({
+      id: "UMR-260526-0900-AAAA1111",
+      source: "pas_fhir",
+      sourceCaseId: "PA-260526-0900-AAAA1111",
+      state: "pend",
+      outcomeStatus: null,
+      slaHours: 24,
+      documentation: {
+        coverageChecked: true,
+        coveredBenefit: true,
+        dtrRequested: true,
+        dtrCompleted: true,
+        attachmentChecklistComplete: true,
+        fhirFieldsPresent: true
+      },
+      clinicalReview: {
+        reviewerId: null,
+        medicalNecessityReviewed: false,
+        policyCriteriaChecked: false,
+        rationaleCaptured: false,
+        denialReasonCode: null
+      },
+      auditRefs: {
+        pasClaimBundleId: "pas-PA-260526-0900-AAAA1111",
+        pasClaimResponseBundleId: null
+      }
+    });
+    expect(new Date(umRequest.slaDeadlineAt).getTime() - new Date(umRequest.pendStartedAt).getTime()).toBe(
+      24 * 60 * 60 * 1000
+    );
+    expect(platform.listEvents()).toEqual([
+      {
+        eventType: "PAS_SUBMITTED",
+        caseId: "PA-260526-0900-AAAA1111",
+        umRequestId: "UMR-260526-0900-AAAA1111"
+      },
+      {
+        eventType: "UM_REQUEST_CREATED",
+        caseId: "PA-260526-0900-AAAA1111",
+        umRequestId: "UMR-260526-0900-AAAA1111"
+      }
+    ]);
+  });
+
+  it("supports delegate clinical review state transitions with approved and denied outcomes", () => {
+    const platform = createInMemoryUmPlatform({
+      generateCaseId: () => "PA-260526-0900-BBBB2222"
+    });
+    const umRequest = platform.submitPriorAuth({
+      requestType: "outpatient_service",
+      serviceCode: "knee_mri"
+    });
+
+    const started = platform.startClinicalReview(umRequest.id, "reviewer-ana");
+    expect(started).toMatchObject({
+      id: umRequest.id,
+      state: "in_clinical_review",
+      clinicalReview: {
+        reviewerId: "reviewer-ana"
+      }
+    });
+
+    const determined = platform.completeClinicalReview(umRequest.id, {
+      outcomeStatus: "approved",
+      medicalNecessityReviewed: true,
+      policyCriteriaChecked: true,
+      rationaleCaptured: true
+    });
+
+    expect(determined).toMatchObject({
+      id: umRequest.id,
+      state: "determined",
+      outcomeStatus: "approved",
+      clinicalReview: {
+        medicalNecessityReviewed: true,
+        policyCriteriaChecked: true,
+        rationaleCaptured: true,
+        denialReasonCode: null
+      }
+    });
+  });
+
+  it("requires a denial reason when a delegate review is denied", () => {
+    const platform = createInMemoryUmPlatform({
+      generateCaseId: () => "PA-260526-0900-CCCC3333"
+    });
+    const umRequest = platform.submitPriorAuth({
+      requestType: "outpatient_service",
+      serviceCode: "knee_mri"
+    });
+    platform.startClinicalReview(umRequest.id, "reviewer-ana");
+
+    expect(() =>
+      platform.completeClinicalReview(umRequest.id, {
+        outcomeStatus: "denied",
+        medicalNecessityReviewed: true,
+        policyCriteriaChecked: true,
+        rationaleCaptured: true
+      })
+    ).toThrow("DENIAL_REASON_REQUIRED");
+  });
+
+  it("requires clinical review to start before a delegate review is completed", () => {
+    const platform = createInMemoryUmPlatform({
+      generateCaseId: () => "PA-260526-0900-DDDD4444"
+    });
+    const umRequest = platform.submitPriorAuth({
+      requestType: "outpatient_service",
+      serviceCode: "knee_mri"
+    });
+
+    expect(() =>
+      platform.completeClinicalReview(umRequest.id, {
+        outcomeStatus: "approved",
+        medicalNecessityReviewed: true,
+        policyCriteriaChecked: true,
+        rationaleCaptured: true
+      })
+    ).toThrow("UM_REQUEST_NOT_IN_CLINICAL_REVIEW");
+  });
+
+  it("requires a complete delegate review checklist before determination", () => {
+    const platform = createInMemoryUmPlatform({
+      generateCaseId: () => "PA-260526-0900-EEEE5555"
+    });
+    const umRequest = platform.submitPriorAuth({
+      requestType: "outpatient_service",
+      serviceCode: "knee_mri"
+    });
+    platform.startClinicalReview(umRequest.id, "reviewer-ana");
+
+    expect(() =>
+      platform.completeClinicalReview(umRequest.id, {
+        outcomeStatus: "approved",
+        medicalNecessityReviewed: true,
+        policyCriteriaChecked: false,
+        rationaleCaptured: true
+      })
+    ).toThrow("CLINICAL_REVIEW_INCOMPLETE");
   });
 });

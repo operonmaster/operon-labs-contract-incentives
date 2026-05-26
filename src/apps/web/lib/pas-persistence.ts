@@ -4,9 +4,13 @@ import type {
   PriorAuthRecord,
   ProviderDocumentationEvidence
 } from "@operon-labs/um-platform";
+import { generateUmRequestId } from "@operon-labs/um-platform";
 import type { IncentiveWorklistRow } from "./provider-documentation-workflow";
 
 export type PasStoreBackend = "firestore";
+export type StoredPasSubmittedEvent = Omit<PasSubmittedEvent, "umRequestId"> & {
+  umRequestId?: string;
+};
 
 export interface StoredPasRequest {
   record: PriorAuthRecord;
@@ -21,7 +25,7 @@ export interface PasPersistenceStore {
   listPriorAuthRecords(): Promise<PriorAuthRecord[]>;
   getPriorAuthRecord(caseId: string): Promise<PriorAuthRecord | null>;
   getEvidence(caseId: string): Promise<ProviderDocumentationEvidence | null>;
-  listPasEvents(): Promise<PasSubmittedEvent[]>;
+  listPasEvents(): Promise<StoredPasSubmittedEvent[]>;
   saveIncentiveRow(row: IncentiveWorklistRow): Promise<void>;
   listIncentiveRows(): Promise<IncentiveWorklistRow[]>;
   getIncentiveRow(caseId: string): Promise<IncentiveWorklistRow | null>;
@@ -128,7 +132,8 @@ class FirestorePasPersistenceStore implements PasPersistenceStore {
     const storedAt = new Date().toISOString();
     const event: PasSubmittedEvent = {
       eventType: "PAS_SUBMITTED",
-      caseId: request.record.caseId
+      caseId: request.record.caseId,
+      umRequestId: request.record.id
     };
 
     const firestore = await this.getFirestore();
@@ -180,15 +185,11 @@ class FirestorePasPersistenceStore implements PasPersistenceStore {
     return (snapshot.data() as { evidence: ProviderDocumentationEvidence }).evidence;
   }
 
-  async listPasEvents(): Promise<PasSubmittedEvent[]> {
+  async listPasEvents(): Promise<StoredPasSubmittedEvent[]> {
     const firestore = await this.getFirestore();
     const snapshot = await firestore.collection(AUDIT_EVENTS_COLLECTION).orderBy("submittedAt", "asc").get();
     return snapshot.docs.map((doc) => {
-      const data = doc.data() as PasSubmittedEvent;
-      return {
-        eventType: data.eventType,
-        caseId: data.caseId
-      };
+      return normalizeStoredPasEvent(doc.data() as StoredPasSubmittedEvent);
     });
   }
 
@@ -228,6 +229,18 @@ class FirestorePasPersistenceStore implements PasPersistenceStore {
 
     return this.firestore;
   }
+}
+
+export function toPasSubmittedEvent(event: StoredPasSubmittedEvent): PasSubmittedEvent {
+  return {
+    eventType: "PAS_SUBMITTED",
+    caseId: event.caseId,
+    umRequestId: event.umRequestId ?? generateUmRequestId(event.caseId)
+  };
+}
+
+function normalizeStoredPasEvent(event: StoredPasSubmittedEvent): StoredPasSubmittedEvent {
+  return toPasSubmittedEvent(event);
 }
 
 function stripStoredAt(row: IncentiveWorklistRow & { storedAt?: string }): IncentiveWorklistRow {
