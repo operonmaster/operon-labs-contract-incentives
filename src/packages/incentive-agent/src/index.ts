@@ -65,6 +65,7 @@ export function evaluateProviderDocumentationEvent(
   if (!evidence) {
     throw new Error(`PROVIDER_DOCUMENTATION_EVIDENCE_NOT_FOUND:${event.umRequestId}`);
   }
+  assertProviderDocumentationEvidenceMatchesEvent(evidence, event.umRequestId);
 
   const policy = dependencies.policy;
   const request: EvaluationRequest = {
@@ -101,6 +102,15 @@ export function evaluateProviderDocumentationEvent(
     result,
     explanation: explainDecision(result)
   };
+}
+
+function assertProviderDocumentationEvidenceMatchesEvent(
+  evidence: ProviderDocumentationEvidence,
+  umRequestId: string
+): void {
+  if (evidence.id !== umRequestId || evidence.umRequestId !== umRequestId || evidence.caseId !== umRequestId) {
+    throw new Error(`PROVIDER_DOCUMENTATION_EVIDENCE_ID_MISMATCH:${umRequestId}`);
+  }
 }
 
 const demoRequests: Record<string, EvaluationRequest> = {

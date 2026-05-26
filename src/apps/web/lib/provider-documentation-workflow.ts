@@ -64,6 +64,7 @@ export interface IncentiveWorklistRow {
   policyId: string;
   policyControls: string[];
   policyCriteria: PolicyCriterionMatch[];
+  umEvidenceSignature?: string;
   audit: AuditRecord;
   walletId: string | null;
   paymentIntentId: string | null;
@@ -184,6 +185,7 @@ export function createProviderDocumentationWorkflow(
       policyId: evaluation.result.policyId,
       policyControls,
       policyCriteria: buildProviderDocumentationPolicyCriteria(evaluation),
+      umEvidenceSignature: buildUmEvidenceSignature(record),
       audit,
       walletId: evaluation.result.walletId,
       paymentIntentId: null,
@@ -374,7 +376,36 @@ function isUmRequestCreatedEvent(event: UMPlatformEvent): event is UMPlatformEve
 export const providerDocumentationWorkflow = createProviderDocumentationWorkflow();
 
 function isCurrentIncentiveRow(row: IncentiveWorklistRow, record: PriorAuthRecord): boolean {
-  return row.submittedAt === record.submittedAt;
+  return (
+    row.submittedAt === record.submittedAt &&
+    row.id === record.id &&
+    row.umRequestId === record.id &&
+    row.caseId === record.id &&
+    row.state === record.state &&
+    row.outcomeStatus === record.outcomeStatus &&
+    row.requestType === record.requestType &&
+    row.serviceCode === record.serviceCode &&
+    row.umEvidenceSignature === buildUmEvidenceSignature(record)
+  );
+}
+
+function buildUmEvidenceSignature(record: UMRequest): string {
+  const evidence = buildProviderDocumentationEvidence(record);
+
+  return JSON.stringify({
+    id: evidence.id,
+    planId: evidence.planId,
+    providerId: evidence.providerId,
+    requestType: evidence.requestType,
+    serviceCode: evidence.serviceCode,
+    codingSystem: evidence.codingSystem,
+    billingCode: evidence.billingCode,
+    coveredBenefit: evidence.coveredBenefit,
+    dtrRequested: evidence.dtrRequested,
+    dtrCompleted: evidence.dtrCompleted,
+    state: record.state,
+    outcomeStatus: record.outcomeStatus
+  });
 }
 
 function summarizeReason(evidence: ProviderDocumentationEvidence, reasonCodes: string[]): string {

@@ -395,7 +395,8 @@ describe("PAS persistence store selection", () => {
         sourceCaseId: "PA-260526-0900-STALE99",
         auditRefs: {
           pasClaimBundleId: "PA-260526-0900-STALE99",
-          pasClaimResponseBundleId: "PA-260526-0900-STALE99"
+          pasClaimResponseBundleId: "PA-260526-0900-STALE99",
+          staleNestedCaseId: "PA-260526-0900-STALE99"
         }
       },
       evidence: {
@@ -418,6 +419,7 @@ describe("PAS persistence store selection", () => {
         pasClaimResponseBundleId: umRequest.id
       }
     });
+    expect((await store.getUmRequest(umRequest.id))?.auditRefs).not.toHaveProperty("staleNestedCaseId");
     await expect(store.getEvidence(umRequest.id)).resolves.toMatchObject({
       id: umRequest.id,
       umRequestId: umRequest.id,

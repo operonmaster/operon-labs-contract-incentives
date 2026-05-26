@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createProviderDocumentationWorkflow, type IncentiveWorklistRow } from "./provider-documentation-workflow";
-import type { StoredPasSubmission } from "./pas-persistence";
+import type { StoredPasSubmission, UmPasPersistenceStore } from "./pas-persistence";
 import { createInMemoryPolicyStore, defaultIncentivePolicies } from "./policy-store";
 import { executePolicyBoundPayment } from "@operon-labs/hedera-executor";
 import { buildPasFhirBundle, createInMemoryUmPlatform, getDtrQuestionnaire } from "@operon-labs/um-platform";
@@ -652,6 +652,146 @@ describe("provider documentation workflow", () => {
       settlementToken: { symbol: "HBAR" },
       reasonCodes: []
     });
+    expect(executePolicyBoundPaymentMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("reprocesses a current-timestamp row when canonical UM documentation changes", async () => {
+    const platform = createInMemoryUmPlatform();
+    const record = platform.submitPriorAuth({
+      requestType: "outpatient_service",
+      serviceCode: "knee_mri"
+    });
+    const initialEvidence = platform.getEvidence(record.id)!;
+    let storedRequest: StoredPasSubmission = {
+      umRequest: record,
+      evidence: initialEvidence,
+      fhirBundle: buildPasFhirBundle(record, initialEvidence)
+    };
+    let incentiveRow: IncentiveWorklistRow | null = {
+      id: record.id,
+      umRequestId: record.id,
+      caseId: record.id,
+      submittedAt: record.submittedAt,
+      providerGroupDisplay: record.providerGroupDisplay,
+      requestType: record.requestType,
+      serviceLabel: record.serviceLabel,
+      serviceCode: record.serviceCode,
+      state: record.state,
+      outcomeStatus: record.outcomeStatus,
+      incentiveStatus: "not_eligible",
+      paymentStatus: "blocked_by_policy",
+      incentiveValue: 0,
+      currency: "HBAR",
+      settlementToken: { symbol: "HBAR" },
+      reason: "Requested DTR incomplete",
+      reasonCodes: ["DTR_TEMPLATE_INCOMPLETE"],
+      policyId: "provider-documentation-completeness-v1",
+      policyControls: [],
+      policyCriteria: [
+        {
+          id: "dtrTemplateCompleted",
+          label: "Requested DTR is complete",
+          expected: "true",
+          actual: "false",
+          passed: false,
+          reasonCode: "DTR_TEMPLATE_INCOMPLETE"
+        }
+      ],
+      audit: {
+        id: "audit-current-stale",
+        requestHash: "hash-current-stale",
+        policyId: "provider-documentation-completeness-v1",
+        policyVersion: "v1",
+        decision: "blocked",
+        reasonCodes: ["DTR_TEMPLATE_INCOMPLETE"],
+        transactionId: null,
+        createdAt: record.submittedAt
+      },
+      walletId: null,
+      paymentIntentId: null,
+      transactionId: null
+    };
+    const persistence: UmPasPersistenceStore = {
+      backend: "firestore" as const,
+      async savePasSubmission(request: StoredPasSubmission) {
+        storedRequest = request;
+      },
+      async savePriorAuth(request) {
+        storedRequest = {
+          umRequest: request.record,
+          evidence: request.evidence,
+          fhirBundle: request.fhirBundle
+        };
+      },
+      async saveUmRequest(umRequest) {
+        storedRequest = {
+          ...storedRequest,
+          umRequest
+        };
+      },
+      async listUmRequests() {
+        return [storedRequest.umRequest];
+      },
+      async getUmRequest(umRequestId: string) {
+        return umRequestId === record.id ? storedRequest.umRequest : null;
+      },
+      async listUmEvents() {
+        return [{ eventType: "UM_REQUEST_CREATED" as const, caseId: record.id, umRequestId: record.id }];
+      },
+      async listPriorAuthRecords() {
+        return [storedRequest.umRequest];
+      },
+      async getPriorAuthRecord(caseId: string) {
+        return caseId === record.id ? storedRequest.umRequest : null;
+      },
+      async getEvidence(umRequestId: string) {
+        return umRequestId === record.id ? storedRequest.evidence : null;
+      },
+      async listPasEvents() {
+        return [];
+      },
+      async saveIncentiveRow(row: IncentiveWorklistRow) {
+        incentiveRow = row;
+      },
+      async listIncentiveRows() {
+        return incentiveRow ? [incentiveRow] : [];
+      },
+      async getIncentiveRow(umRequestId: string) {
+        return umRequestId === record.id ? incentiveRow : null;
+      }
+    };
+    const workflow = createProviderDocumentationWorkflow(createInMemoryUmPlatform(), persistence);
+
+    await persistence.saveUmRequest({
+      ...record,
+      dtr: {
+        symptomDurationConfirmed: true,
+        conservativeTherapyConfirmed: true,
+        examFindingsConfirmed: true,
+        clinicalNoteAttached: true
+      }
+    });
+    const rows = await workflow.listIncentiveRows();
+
+    expect(rows[0]).toMatchObject({
+      id: record.id,
+      umRequestId: record.id,
+      submittedAt: record.submittedAt,
+      incentiveStatus: "paid",
+      paymentStatus: "auto_executed",
+      incentiveValue: 5,
+      reason: "Completed requested DTR",
+      reasonCodes: []
+    });
+    expect(rows[0]!.policyCriteria).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "dtrTemplateCompleted",
+          actual: "true",
+          passed: true
+        })
+      ])
+    );
     expect(executePolicyBoundPaymentMock).toHaveBeenCalledTimes(1);
   });
 

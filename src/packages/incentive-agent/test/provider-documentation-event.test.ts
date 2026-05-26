@@ -196,6 +196,33 @@ describe("evaluateProviderDocumentationEvent", () => {
     expect(getEvidence).toHaveBeenCalledWith(missingUmRequestId);
   });
 
+  it("rejects evidence whose canonical ids do not match the event UM request id", () => {
+    const eventUmRequestId = "PA-260524-2102-EVENT001";
+    const evidence = {
+      id: "PA-260524-2102-OTHER001",
+      umRequestId: "PA-260524-2102-OTHER001",
+      caseId: "PA-260524-2102-OTHER001",
+      planId: "acme-health-ppo",
+      submitter: { id: "lakeside-provider-admin" },
+      providerId: "lakeside-provider-admin",
+      requestType: "outpatient_service",
+      serviceCode: "knee_mri",
+      codingSystem: "CPT",
+      billingCode: "73721",
+      coveredBenefit: true,
+      dtrRequested: true,
+      dtrCompleted: true,
+      dtrTemplateCompleted: true
+    } as unknown as ProviderDocumentationEvidence;
+
+    expect(() =>
+      evaluateProviderDocumentationEvent(
+        { eventType: "UM_REQUEST_CREATED", umRequestId: eventUmRequestId },
+        { getEvidenceByUmRequestId: () => evidence, policy: createProviderDocumentationPolicy(5), monthToDateAmount: 0 }
+      )
+    ).toThrow(`PROVIDER_DOCUMENTATION_EVIDENCE_ID_MISMATCH:${eventUmRequestId}`);
+  });
+
   it("treats covered services without requested DTR as not applicable to this policy", () => {
     const evidence = {
       id: "PA-260524-2102-AAAA1111",

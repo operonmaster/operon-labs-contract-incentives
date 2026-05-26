@@ -479,7 +479,6 @@ function canonicalizeStoredUmRequest(umRequest: UMRequest, fallbackCanonicalId: 
     caseId: canonicalId,
     sourceCaseId: canonicalId,
     auditRefs: {
-      ...auditRefs,
       pasClaimBundleId: canonicalId,
       pasClaimResponseBundleId: auditRefs.pasClaimResponseBundleId ? canonicalId : null
     }
