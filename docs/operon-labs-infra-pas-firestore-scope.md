@@ -262,7 +262,7 @@ Shape:
       "actual": "5 HBAR"
     }
   ],
-  "paymentIntentId": "pi_9998988d92a70ee853bdc929848893fc",
+  "paymentIntentId": "PA-260524-2102-AAAA1111",
   "transactionId": "0.0.6870566@1779686274.765050870",
   "createdAt": "2026-05-24T00:00:00.000Z",
   "updatedAt": "2026-05-24T00:00:00.000Z"
@@ -277,8 +277,10 @@ Shape:
 
 ```json
 {
-  "record": {
+  "umRequest": {
+    "id": "PA-260524-2102-AAAA1111",
     "caseId": "PA-260524-2102-AAAA1111",
+    "sourceCaseId": "PA-260524-2102-AAAA1111",
     "patientId": "patient-maya-chen",
     "patientDisplay": "Maya Chen",
     "providerGroupId": "lakeside-provider-admin",
@@ -296,6 +298,8 @@ Shape:
   },
   "evidence": {
     "caseId": "PA-260524-2102-AAAA1111",
+    "umRequestId": "PA-260524-2102-AAAA1111",
+    "sourceCaseId": "PA-260524-2102-AAAA1111",
     "planId": "acme-health-ppo",
     "providerId": "lakeside-provider-admin",
     "requestType": "outpatient_service",
@@ -343,6 +347,7 @@ Shape:
 {
   "eventType": "PAS_SUBMITTED",
   "caseId": "PA-260524-2102-AAAA1111",
+  "umRequestId": "PA-260524-2102-AAAA1111",
   "submittedAt": "2026-05-24T00:00:00.000Z",
   "storedAt": "2026-05-24T00:00:00.000Z"
 }
@@ -356,6 +361,7 @@ Shape:
 
 ```json
 {
+  "umRequestId": "PA-260524-2102-AAAA1111",
   "caseId": "PA-260524-2102-AAAA1111",
   "submittedAt": "2026-05-24T00:00:00.000Z",
   "policyId": "provider-documentation-completeness-v1",
@@ -379,15 +385,15 @@ Shape:
 
 Persisting `incentiveEvaluations` is recommended once Firestore is introduced, because otherwise PA requests survive restart but their plan-side payment/audit rows do not.
 
-### `paymentIntents/{paymentIntentId}`
+### `paymentIntents/{canonicalId}`
 
-Stores the durable Hedera Agent Kit settlement intent used to prevent duplicate payments at transfer execution time. The document id is deterministic from `planId + incentiveEvaluationId + policyId + token`, so retries for the same plan/evaluation/policy/token reserve the same id.
+Stores the durable Hedera Agent Kit settlement intent used to prevent duplicate payments at transfer execution time. For PA-tied incentives, the document id is the canonical PA/UM request id, so retries for the same request reserve the same id.
 
 Shape:
 
 ```json
 {
-  "id": "pi_9998988d92a70ee853bdc929848893fc",
+  "id": "PA-260524-2102-AAAA1111",
   "auditId": "audit_abc123",
   "caseId": "PA-260524-2102-AAAA1111",
   "incentiveEvaluationId": "PA-260524-2102-AAAA1111",

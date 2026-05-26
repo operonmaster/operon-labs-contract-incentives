@@ -175,7 +175,7 @@ describe("Hedera policy-bound payment executor", () => {
 
     expect(result).toMatchObject({
       status: "submitted",
-      paymentIntentId: expect.stringMatching(/^pi_[a-f0-9]{32}$/)
+      paymentIntentId: caseId
     });
     expect(businessEvaluationStore.getAttestation).toHaveBeenCalledTimes(1);
     expect(businessEvaluationStore.getAttestation).toHaveBeenCalledWith({
@@ -339,7 +339,7 @@ describe("Hedera policy-bound payment executor", () => {
     expect(runner.runHbarTransfer).not.toHaveBeenCalled();
   });
 
-  it("builds a deterministic payment intent for duplicate-payment prevention", () => {
+  it("uses the canonical PA id as the deterministic payment intent for duplicate-payment prevention", () => {
     const first = buildPaymentIntent({
       auditId: "audit-1",
       caseId,
@@ -370,15 +370,48 @@ describe("Hedera policy-bound payment executor", () => {
     });
 
     expect(first.id).toBe(second.id);
-    expect(first.id).toMatch(/^pi_[a-f0-9]{32}$/);
+    expect(first.id).toBe(caseId);
     expect(first).toMatchObject({
       caseId,
+      incentiveEvaluationId: caseId,
       policyId: "provider-documentation-completeness-v1",
       triggerEvent: "PAS_SUBMITTED",
       token: "HBAR",
       amount: 5,
       recipientAccountId: "0.0.23456"
     });
+  });
+
+  it("falls back to a hashed payment intent id only when no canonical PA id is supplied", () => {
+    const intent = buildPaymentIntent({
+      auditId: "audit-1",
+      amount: 5,
+      currency: "HBAR",
+      walletId: "0.0.23456",
+      policyId: "provider-documentation-completeness-v1"
+    }, {
+      sourceAccountId: "0.0.1001",
+      transactionMemo: caseId
+    });
+
+    expect(intent.id).toMatch(/^pi_[a-f0-9]{32}$/);
+  });
+
+  it("rejects payment envelopes with mismatched case and incentive evaluation ids", () => {
+    expect(() =>
+      buildPaymentIntent({
+        auditId: "audit-1",
+        caseId,
+        incentiveEvaluationId: "PA-260524-2102-BBBBBBBB",
+        amount: 5,
+        currency: "HBAR",
+        walletId: "0.0.23456",
+        policyId: "provider-documentation-completeness-v1"
+      }, {
+        sourceAccountId: "0.0.1001",
+        transactionMemo: caseId
+      })
+    ).toThrow("PAYMENT_ID_MISMATCH");
   });
 
   it("uses the Agent Kit policy hook to reserve an intent and block duplicate transfers", async () => {

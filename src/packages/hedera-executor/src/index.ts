@@ -317,14 +317,30 @@ export function buildPaymentIntent(
 }
 
 export function buildPaymentIntentId(request: PaymentApprovalRequest): string {
+  const canonicalPaymentId = getCanonicalPaymentId(request);
+  if (canonicalPaymentId) {
+    return canonicalPaymentId;
+  }
+
   const raw = [
     request.planId ?? "plan",
-    request.incentiveEvaluationId ?? request.caseId ?? request.auditId,
+    request.auditId,
     request.policyId ?? "policy",
     request.currency
   ].join("|");
 
   return `pi_${createHash("sha256").update(raw).digest("hex").slice(0, 32)}`;
+}
+
+function getCanonicalPaymentId(request: PaymentApprovalRequest): string | null {
+  const incentiveEvaluationId = request.incentiveEvaluationId?.trim();
+  const caseId = request.caseId?.trim();
+
+  if (incentiveEvaluationId && caseId && incentiveEvaluationId !== caseId) {
+    throw new Error("PAYMENT_ID_MISMATCH");
+  }
+
+  return incentiveEvaluationId || caseId || null;
 }
 
 export function createInMemoryPaymentIntentStore(): PaymentIntentStore {
