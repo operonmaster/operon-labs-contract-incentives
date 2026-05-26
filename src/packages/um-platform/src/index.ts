@@ -9,7 +9,6 @@ export type RequestType = "outpatient_service" | "pharmacy_benefit" | "inpatient
 export type ServiceCode = "knee_mri" | "full_body_wellness_mri" | "wegovy_semaglutide" | "humira_adalimumab";
 export type CodingSystem = "CPT" | "NDC";
 export type PlanId = "acme-health-ppo" | "summit-health-hmo";
-export type PaResult = "submitted_pending" | "denied_not_covered";
 export type UMRequestState = "pend" | "in_clinical_review" | "determined";
 export type UMOutcomeStatus = "approved" | "denied";
 export type PasEventType = "PAS_SUBMITTED";
@@ -151,8 +150,6 @@ export interface ProviderDocumentationEvidence {
   fhirFieldsPresent: boolean;
   pasSubmitted: boolean;
   submittedBeforeInitialDecision: boolean;
-  paResult: PaResult;
-  denialReason: "BENEFIT_NOT_COVERED" | null;
   paResultUsedForPositivePayment: false;
   approvalOutcomeUsed: false;
   referralVolumeMetricUsed: false;
@@ -431,8 +428,6 @@ export function createInMemoryUmPlatform(options: UmPlatformOptions = {}): UmPla
 
 export function buildProviderDocumentationEvidence(record: UMRequest): ProviderDocumentationEvidence {
   const documentation = buildDocumentation(record);
-  const paResult: PaResult = record.coverage.coveredBenefit ? "submitted_pending" : "denied_not_covered";
-  const denialReason = record.coverage.reasonCode;
 
   return {
     id: record.id,
@@ -458,8 +453,6 @@ export function buildProviderDocumentationEvidence(record: UMRequest): ProviderD
     fhirFieldsPresent: documentation.fhirFieldsPresent,
     pasSubmitted: true,
     submittedBeforeInitialDecision: true,
-    paResult,
-    denialReason,
     paResultUsedForPositivePayment: false,
     approvalOutcomeUsed: false,
     referralVolumeMetricUsed: false,

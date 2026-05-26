@@ -285,6 +285,34 @@ describe("PAS persistence store selection", () => {
     });
   });
 
+  it("quarantines stored UM request created events with matching legacy UMR ids", async () => {
+    const firestore = createFakeFirestore();
+    const store = createFirestorePasPersistenceStore(
+      {
+        projectId: "operon-labs-nonprod",
+        databaseId: "(default)"
+      },
+      firestore
+    );
+
+    await firestore.collection("auditEvents").doc("PA-260526-0900-EVENT04-UM_REQUEST_CREATED").set({
+      eventType: "UM_REQUEST_CREATED",
+      caseId: "UMR-260526-0900-EVENT04",
+      umRequestId: "UMR-260526-0900-EVENT04",
+      submittedAt: "2026-05-26T09:00:00.000Z",
+      storedAt: "2026-05-26T09:00:00.000Z"
+    });
+    await firestore.collection("auditEvents").doc("PA-260526-0900-EVENT05-UM_REQUEST_CREATED").set({
+      eventType: "UM_REQUEST_CREATED",
+      caseId: "pas-UMR-260526-0900-EVENT05",
+      umRequestId: "pas-UMR-260526-0900-EVENT05",
+      submittedAt: "2026-05-26T09:00:00.000Z",
+      storedAt: "2026-05-26T09:00:00.000Z"
+    });
+
+    await expect(store.listUmEvents()).resolves.toEqual([]);
+  });
+
   it("quarantines stored UM request created events when embedded ids disagree with the document id", async () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(

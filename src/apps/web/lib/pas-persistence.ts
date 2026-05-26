@@ -496,6 +496,8 @@ function canonicalizeStoredEvidence(
     umRequestId?: string;
     sourceCaseId?: string;
     dtrCompleted?: boolean;
+    paResult?: unknown;
+    denialReason?: unknown;
   };
   const canonicalId = getStoredCanonicalPaId(
     fallbackCanonicalId,
@@ -503,9 +505,16 @@ function canonicalizeStoredEvidence(
     storedEvidence.id,
     storedEvidence.caseId
   );
+  const sanitizedEvidence = { ...evidence } as StoredProviderDocumentationEvidence & {
+    paResult?: unknown;
+    denialReason?: unknown;
+  };
+
+  delete sanitizedEvidence.paResult;
+  delete sanitizedEvidence.denialReason;
 
   return {
-    ...evidence,
+    ...sanitizedEvidence,
     id: canonicalId,
     caseId: canonicalId,
     umRequestId: canonicalId,
@@ -537,9 +546,9 @@ function normalizeStoredUmRequestCreatedEvent(
   fallbackCanonicalId?: string
 ): UMPlatformEvent | null {
   const storedEvent = event as UMPlatformEvent & { caseId?: string; umRequestId?: string };
-  const documentCanonicalId = getCanonicalPaIdOrNull(getAuditEventCanonicalIdFromDocumentId(fallbackCanonicalId));
-  const embeddedUmRequestId = getCanonicalPaIdOrNull(storedEvent.umRequestId);
-  const embeddedCaseId = getCanonicalPaIdOrNull(storedEvent.caseId);
+  const documentCanonicalId = getStrictPaIdOrNull(getAuditEventCanonicalIdFromDocumentId(fallbackCanonicalId));
+  const embeddedUmRequestId = getStrictPaIdOrNull(storedEvent.umRequestId);
+  const embeddedCaseId = getStrictPaIdOrNull(storedEvent.caseId);
 
   if (storedEvent.umRequestId !== undefined && !embeddedUmRequestId) {
     return null;
@@ -611,6 +620,14 @@ function getCanonicalPaIdOrNull(id: string | null | undefined): string | null {
   const canonicalId = canonicalizeLegacyCanonicalId(id);
 
   return canonicalId.startsWith("PA-") ? canonicalId : null;
+}
+
+function getStrictPaIdOrNull(id: string | null | undefined): string | null {
+  if (!id) {
+    return null;
+  }
+
+  return id.startsWith("PA-") ? id : null;
 }
 
 function canonicalizeLegacyCanonicalId(id: string): string {

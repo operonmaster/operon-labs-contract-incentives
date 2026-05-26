@@ -152,9 +152,10 @@ describe("provider documentation UM Platform", () => {
       dtrTemplateCompleted: false,
       attachmentChecklistComplete: false,
       fhirFieldsPresent: false,
-      pasSubmitted: true,
-      denialReason: null
+      pasSubmitted: true
     });
+    expect(platform.getEvidence(submitted.id)).not.toHaveProperty("paResult");
+    expect(platform.getEvidence(submitted.id)).not.toHaveProperty("denialReason");
   });
 
   it("stores incomplete knee MRI assessment as incomplete evidence instead of blocking submission", () => {
@@ -370,12 +371,13 @@ describe("provider documentation UM Platform", () => {
       attachmentChecklistComplete: false,
       fhirFieldsPresent: false,
       pasSubmitted: true,
-      denialReason: "BENEFIT_NOT_COVERED",
       paResultUsedForPositivePayment: false,
       approvalOutcomeUsed: false,
       referralVolumeMetricUsed: false,
       containsPhi: false
     });
+    expect(platform.getEvidence(submitted.id)).not.toHaveProperty("paResult");
+    expect(platform.getEvidence(submitted.id)).not.toHaveProperty("denialReason");
   });
 
   it("returns null for missing case evidence", () => {

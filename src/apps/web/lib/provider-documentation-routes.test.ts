@@ -240,6 +240,8 @@ describe("provider documentation API routes", () => {
       caseId: submitted.id,
       fhirFieldsPresent: true
     });
+    expect(evidence).not.toHaveProperty("paResult");
+    expect(evidence).not.toHaveProperty("denialReason");
   });
 
   it("returns 404 for missing evidence", async () => {
