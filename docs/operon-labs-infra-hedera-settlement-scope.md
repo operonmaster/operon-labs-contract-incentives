@@ -14,11 +14,11 @@ Approved provider-documentation PAS events follow this path:
 
 1. Provider submits a PAS-style prior authorization.
 2. The server records the PAS claim and emits `PAS_SUBMITTED`.
-3. The incentive agent fetches policy-safe evidence by `caseId`.
+3. The incentive agent fetches policy-safe evidence by the canonical PA/UM request ID.
 4. The deterministic policy evaluates evidence, amount, token symbol, submitter, and wallet mapping.
 5. The payment policy layer runs the plan-level Hedera Agent Kit controls and stores the control-level result in `paymentPolicyEvidences/{incentiveEvaluationId}`.
 6. The Hedera executor calls Hedera Agent Kit `transfer_hbar_tool` with a single recipient, a capped amount, and a non-PHI memo containing only the incentive evaluation id.
-7. The real transaction ID is stored in `incentiveEvaluations/{caseId}` and shown in the plan audit console.
+7. The real transaction ID is stored in `incentiveEvaluations/{canonicalId}` and shown in the plan audit console.
 
 Blocked policy outcomes do not call Hedera.
 

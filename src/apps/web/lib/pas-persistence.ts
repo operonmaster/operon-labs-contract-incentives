@@ -5,7 +5,6 @@ import type {
   UMRequest,
   ProviderDocumentationEvidence
 } from "@operon-labs/um-platform";
-import { generateUmRequestId } from "@operon-labs/um-platform";
 import type { IncentiveWorklistRow } from "./provider-documentation-workflow";
 
 export type PasStoreBackend = "firestore";
@@ -164,6 +163,8 @@ class FirestorePasPersistenceStore implements UmPasPersistenceStore {
   }
 
   async savePasSubmission(request: StoredPasSubmission): Promise<void> {
+    validatePasSubmission(request);
+
     const storedAt = new Date().toISOString();
     const events: UMPlatformEvent[] = [
       { eventType: "PAS_SUBMITTED", caseId: request.umRequest.id, umRequestId: request.umRequest.id },
@@ -209,6 +210,8 @@ class FirestorePasPersistenceStore implements UmPasPersistenceStore {
   }
 
   async saveUmRequest(umRequest: UMRequest): Promise<void> {
+    validateUmRequestIds(umRequest);
+
     const firestore = await this.getFirestore();
     const ref = firestore.collection(PAS_CLAIMS_COLLECTION).doc(umRequest.id);
     const snapshot = await ref.get();
@@ -245,7 +248,7 @@ class FirestorePasPersistenceStore implements UmPasPersistenceStore {
       return null;
     }
 
-    return data.evidence;
+    return canonicalizeStoredEvidence(data.evidence, extractStoredUmRequest(data)?.id ?? umRequestId);
   }
 
   async listUmEvents(): Promise<UMPlatformEvent[]> {
@@ -330,11 +333,54 @@ class FirestorePasPersistenceStore implements UmPasPersistenceStore {
 }
 
 export function toPasSubmittedEvent(event: StoredPasSubmittedEvent): PasSubmittedEvent {
+  const canonicalId = getStoredCanonicalPaId(event.caseId, event.umRequestId);
+
   return {
     eventType: "PAS_SUBMITTED",
-    caseId: event.caseId,
-    umRequestId: event.umRequestId ?? generateUmRequestId(event.caseId)
+    caseId: canonicalId,
+    umRequestId: canonicalId
   };
+}
+
+function validatePasSubmission(request: StoredPasSubmission): void {
+  const canonicalId = request.umRequest.id;
+  const evidence = request.evidence as ProviderDocumentationEvidence & {
+    umRequestId?: string;
+    sourceCaseId?: string;
+  };
+
+  validateUmRequestIds(request.umRequest);
+  assertMatchingCanonicalId(request.evidence.caseId, canonicalId, "evidence.caseId");
+  if (evidence.umRequestId !== undefined) {
+    assertMatchingCanonicalId(evidence.umRequestId, canonicalId, "evidence.umRequestId");
+  }
+  if (evidence.sourceCaseId !== undefined) {
+    assertMatchingCanonicalId(evidence.sourceCaseId, canonicalId, "evidence.sourceCaseId");
+  }
+  assertMatchingCanonicalId(request.fhirBundle.id, canonicalId, "fhirBundle.id");
+  assertMatchingCanonicalId(getFhirClaimId(request.fhirBundle), canonicalId, "fhirBundle.claim.id");
+}
+
+function validateUmRequestIds(umRequest: UMRequest): void {
+  assertCanonicalPaId(umRequest.id, "umRequest.id");
+  assertMatchingCanonicalId(umRequest.caseId, umRequest.id, "umRequest.caseId");
+  assertMatchingCanonicalId(umRequest.sourceCaseId, umRequest.id, "umRequest.sourceCaseId");
+}
+
+function assertCanonicalPaId(value: string, fieldName: string): void {
+  if (!value.startsWith("PA-")) {
+    throw new Error(`PAS_SUBMISSION_ID_NOT_CANONICAL:${fieldName}`);
+  }
+}
+
+function assertMatchingCanonicalId(value: string | null | undefined, expected: string, fieldName: string): void {
+  if (value !== expected) {
+    throw new Error(`PAS_SUBMISSION_ID_MISMATCH:${fieldName}`);
+  }
+}
+
+function getFhirClaimId(fhirBundle: PasFhirBundle): string | undefined {
+  return fhirBundle.entry.find((entry) => entry.resource.resourceType === "Claim")?.resource.id;
 }
 
 function buildStoredEvidence(
@@ -349,15 +395,80 @@ function buildStoredEvidence(
 }
 
 function extractStoredUmRequest(data: StoredPasClaimDocument): UMRequest | null {
-  return data.umRequest ?? data.record ?? null;
+  const umRequest = data.umRequest ?? data.record ?? null;
+
+  return umRequest ? canonicalizeStoredUmRequest(umRequest) : null;
+}
+
+function canonicalizeStoredUmRequest(umRequest: UMRequest): UMRequest {
+  const canonicalId = getStoredCanonicalPaId(umRequest.caseId, umRequest.sourceCaseId, umRequest.id);
+
+  return {
+    ...umRequest,
+    id: canonicalId,
+    caseId: canonicalId,
+    sourceCaseId: canonicalId,
+    auditRefs: {
+      ...umRequest.auditRefs,
+      pasClaimBundleId: canonicalizeLegacyCanonicalId(umRequest.auditRefs.pasClaimBundleId)
+    }
+  };
+}
+
+function canonicalizeStoredEvidence(
+  evidence: ProviderDocumentationEvidence,
+  fallbackCanonicalId: string
+): StoredProviderDocumentationEvidence {
+  const storedEvidence = evidence as ProviderDocumentationEvidence & {
+    umRequestId?: string;
+    sourceCaseId?: string;
+  };
+  const canonicalId = getStoredCanonicalPaId(
+    storedEvidence.caseId,
+    storedEvidence.sourceCaseId,
+    storedEvidence.umRequestId,
+    fallbackCanonicalId
+  );
+
+  return {
+    ...evidence,
+    caseId: canonicalId,
+    umRequestId: canonicalId,
+    sourceCaseId: canonicalId
+  };
 }
 
 function normalizeStoredUmEvent(event: UMPlatformEvent): UMPlatformEvent {
+  const canonicalId = getStoredCanonicalPaId(event.caseId, event.umRequestId);
+
   return {
     eventType: event.eventType,
-    caseId: event.caseId,
-    umRequestId: event.umRequestId ?? generateUmRequestId(event.caseId)
+    caseId: canonicalId,
+    umRequestId: canonicalId
   };
+}
+
+function getStoredCanonicalPaId(...ids: Array<string | null | undefined>): string {
+  const canonicalizedIds = ids.filter((id): id is string => Boolean(id)).map(canonicalizeLegacyCanonicalId);
+  const paId = canonicalizedIds.find((id) => id.startsWith("PA-"));
+
+  return paId ?? canonicalizedIds[0] ?? "";
+}
+
+function canonicalizeLegacyCanonicalId(id: string): string {
+  if (id.startsWith("UMR-")) {
+    return `PA-${id.slice("UMR-".length)}`;
+  }
+
+  if (id.startsWith("pas-UMR-")) {
+    return `PA-${id.slice("pas-UMR-".length)}`;
+  }
+
+  if (id.startsWith("pas-PA-")) {
+    return id.slice("pas-".length);
+  }
+
+  return id;
 }
 
 function stripStoredAt(

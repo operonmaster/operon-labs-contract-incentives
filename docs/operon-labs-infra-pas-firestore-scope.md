@@ -14,7 +14,7 @@ Keep one public Next.js Cloud Run service for the demo:
 2. Next.js server route maps the request into a PAS-style FHIR Bundle.
 3. Next.js server code writes the record to Firestore using the Cloud Run service account.
 4. The incentive workflow reads policy-safe evidence derived from the stored PAS record.
-5. The agent receives only `caseId` and policy-safe evidence, not full FHIR or PHI-bearing payloads.
+5. The agent receives only the canonical PA/UM request ID and policy-safe evidence, not full FHIR or PHI-bearing payloads.
 
 Do not add a separate backend API service for this first version. A separate API service can be introduced later if multiple apps need the same backend, if service-to-service authentication becomes a useful demo point, or if we want the public Next app to become UI-only.
 
@@ -225,7 +225,7 @@ Shape:
 }
 ```
 
-The business evaluation attestation control fetches `incentiveEvaluations/{caseId}` and `incentivePolicies/{policyId}` once during payment execution to confirm that the approved evaluation was recorded and that the referenced business policy remains active. It does not fetch PAS evidence or re-evaluate healthcare business criteria.
+The business evaluation attestation control fetches `incentiveEvaluations/{canonicalId}` and `incentivePolicies/{policyId}` once during payment execution to confirm that the approved evaluation was recorded and that the referenced business policy remains active. It does not fetch PAS evidence or re-evaluate healthcare business criteria.
 
 ### `paymentPolicyEvidences/{incentiveEvaluationId}`
 
@@ -269,7 +269,7 @@ Shape:
 }
 ```
 
-### `pasClaims/{caseId}`
+### `pasClaims/{canonicalId}`
 
 Stores the submitted prior authorization record, policy-safe evidence projection, and PAS-style synthetic FHIR Bundle. The implemented app shape is intentionally nested so the domain record, policy evidence, and FHIR artifact stay distinct.
 
@@ -348,7 +348,7 @@ Shape:
 }
 ```
 
-### `incentiveEvaluations/{caseId}`
+### `incentiveEvaluations/{canonicalId}`
 
 Stores plan-side policy evaluation and payment/audit results.
 
@@ -553,7 +553,7 @@ Infra is ready when:
 2. The app Cloud Run service runs as a dedicated service account.
 3. That service account can create/read/update documents in the planned collections.
 4. The deployed app has the Firestore env vars set.
-5. Submitting a PA in the deployed app writes a `pasClaims/{caseId}` document.
+5. Submitting a PA in the deployed app writes a `pasClaims/{canonicalId}` document.
 6. Restarting/redeploying the app does not lose submitted PAS requests.
 7. Plan-side incentive rows remain available after restart once `incentiveEvaluations` persistence is implemented.
 8. No service account keys or Terraform files are introduced into the public app repo.

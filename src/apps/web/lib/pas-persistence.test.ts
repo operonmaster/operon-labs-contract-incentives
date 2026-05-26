@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createFirestorePasPersistenceStore,
   createPasPersistenceStoreFromEnv,
+  toPasSubmittedEvent,
   type FirestoreDatabase,
   type FirestoreDocumentReference
 } from "./pas-persistence";
@@ -172,6 +173,169 @@ describe("PAS persistence store selection", () => {
       { eventType: "PAS_SUBMITTED", caseId: umRequest.id, umRequestId: umRequest.id },
       { eventType: "UM_REQUEST_CREATED", caseId: umRequest.id, umRequestId: umRequest.id }
     ]);
+  });
+
+  it("canonicalizes legacy stored UMR request and event ids to the PA id", async () => {
+    const firestore = createFakeFirestore();
+    const store = createFirestorePasPersistenceStore(
+      {
+        projectId: "operon-labs-nonprod",
+        databaseId: "(default)"
+      },
+      firestore
+    );
+    const platform = createInMemoryUmPlatform({
+      generateCaseId: () => "PA-260526-0900-LEGACY1"
+    });
+    const umRequest = platform.submitPriorAuth({
+      requestType: "outpatient_service",
+      serviceCode: "knee_mri"
+    });
+    const evidence = platform.getEvidence(umRequest.id)!;
+    const legacyUmRequest = {
+      ...umRequest,
+      id: "UMR-260526-0900-LEGACY1",
+      sourceCaseId: umRequest.id
+    };
+
+    await firestore.collection("pasClaims").doc(umRequest.id).set({
+      umRequest: legacyUmRequest,
+      evidence: {
+        ...evidence,
+        umRequestId: "UMR-260526-0900-LEGACY1",
+        sourceCaseId: umRequest.id
+      },
+      fhirBundle: buildPasFhirBundle(umRequest, evidence),
+      storedAt: umRequest.submittedAt
+    });
+    await firestore.collection("auditEvents").doc(`${umRequest.id}-PAS_SUBMITTED`).set({
+      eventType: "PAS_SUBMITTED",
+      caseId: umRequest.id,
+      umRequestId: "UMR-260526-0900-LEGACY1",
+      submittedAt: umRequest.submittedAt,
+      storedAt: umRequest.submittedAt
+    });
+
+    await expect(store.getUmRequest(umRequest.id)).resolves.toMatchObject({
+      id: umRequest.id,
+      caseId: umRequest.id,
+      sourceCaseId: umRequest.id
+    });
+    await expect(store.listUmRequests()).resolves.toEqual([
+      expect.objectContaining({
+        id: umRequest.id,
+        caseId: umRequest.id,
+        sourceCaseId: umRequest.id
+      })
+    ]);
+    await expect(store.getEvidence(umRequest.id)).resolves.toMatchObject({
+      caseId: umRequest.id,
+      umRequestId: umRequest.id,
+      sourceCaseId: umRequest.id
+    });
+    await expect(store.listUmEvents()).resolves.toEqual([
+      { eventType: "PAS_SUBMITTED", caseId: umRequest.id, umRequestId: umRequest.id }
+    ]);
+    expect(
+      toPasSubmittedEvent({
+        eventType: "PAS_SUBMITTED",
+        caseId: umRequest.id,
+        umRequestId: "UMR-260526-0900-LEGACY1"
+      })
+    ).toEqual({
+      eventType: "PAS_SUBMITTED",
+      caseId: umRequest.id,
+      umRequestId: umRequest.id
+    });
+  });
+
+  it("rejects PAS submissions when canonical ids differ across evidence or FHIR artifacts", async () => {
+    const firestore = createFakeFirestore();
+    const store = createFirestorePasPersistenceStore(
+      {
+        projectId: "operon-labs-nonprod",
+        databaseId: "(default)"
+      },
+      firestore
+    );
+    const platform = createInMemoryUmPlatform({
+      generateCaseId: () => "PA-260526-0900-MATCH01"
+    });
+    const umRequest = platform.submitPriorAuth({
+      requestType: "outpatient_service",
+      serviceCode: "knee_mri"
+    });
+    const evidence = platform.getEvidence(umRequest.id)!;
+    const fhirBundle = buildPasFhirBundle(umRequest, evidence);
+
+    await expect(
+      store.savePasSubmission({
+        umRequest: {
+          ...umRequest,
+          id: "UMR-260526-0900-MATCH01"
+        },
+        evidence,
+        fhirBundle
+      })
+    ).rejects.toThrow("PAS_SUBMISSION_ID_NOT_CANONICAL:umRequest.id");
+
+    await expect(
+      store.savePasSubmission({
+        umRequest: {
+          ...umRequest,
+          sourceCaseId: "PA-260526-0900-MISMAT0"
+        },
+        evidence,
+        fhirBundle
+      })
+    ).rejects.toThrow("PAS_SUBMISSION_ID_MISMATCH:umRequest.sourceCaseId");
+
+    await expect(
+      store.savePasSubmission({
+        umRequest,
+        evidence: {
+          ...evidence,
+          caseId: "PA-260526-0900-MISMAT1"
+        },
+        fhirBundle
+      })
+    ).rejects.toThrow("PAS_SUBMISSION_ID_MISMATCH:evidence.caseId");
+
+    await expect(
+      store.savePasSubmission({
+        umRequest,
+        evidence,
+        fhirBundle: {
+          ...fhirBundle,
+          id: "PA-260526-0900-MISMAT2"
+        }
+      })
+    ).rejects.toThrow("PAS_SUBMISSION_ID_MISMATCH:fhirBundle.id");
+
+    await expect(
+      store.savePasSubmission({
+        umRequest,
+        evidence,
+        fhirBundle: {
+          ...fhirBundle,
+          entry: fhirBundle.entry.map((entry) =>
+            entry.resource.resourceType === "Claim"
+              ? {
+                  ...entry,
+                  resource: {
+                    ...entry.resource,
+                    id: "PA-260526-0900-MISMAT3"
+                  }
+                }
+              : entry
+          )
+        }
+      })
+    ).rejects.toThrow("PAS_SUBMISSION_ID_MISMATCH:fhirBundle.claim.id");
+
+    await expect(firestore.collection("pasClaims").doc(umRequest.id).get()).resolves.toMatchObject({
+      exists: false
+    });
   });
 
   it("rejects incentive rows without a UM request id instead of falling back to another key", async () => {
