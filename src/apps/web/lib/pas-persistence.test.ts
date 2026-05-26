@@ -107,6 +107,7 @@ describe("PAS persistence store selection", () => {
         id: umRequest.id
       },
       evidence: {
+        id: umRequest.id,
         umRequestId: umRequest.id
       },
       fhirBundle: {
@@ -117,6 +118,7 @@ describe("PAS persistence store selection", () => {
       id: umRequest.id
     });
     await expect(store.getEvidence(umRequest.id)).resolves.toMatchObject({
+      id: umRequest.id,
       umRequestId: umRequest.id,
       fhirFieldsPresent: true
     });
@@ -340,6 +342,55 @@ describe("PAS persistence store selection", () => {
     });
   });
 
+  it("uses the lookup id over stale embedded UM request and evidence ids on read", async () => {
+    const firestore = createFakeFirestore();
+    const store = createFirestorePasPersistenceStore(
+      {
+        projectId: "operon-labs-nonprod",
+        databaseId: "(default)"
+      },
+      firestore
+    );
+    const platform = createInMemoryUmPlatform({
+      generateCaseId: () => "PA-260526-0900-LOOKUP1"
+    });
+    const umRequest = platform.submitPriorAuth({
+      requestType: "outpatient_service",
+      serviceCode: "knee_mri"
+    });
+    const evidence = platform.getEvidence(umRequest.id)!;
+
+    await firestore.collection("pasClaims").doc(umRequest.id).set({
+      umRequest: {
+        ...umRequest,
+        id: "PA-260526-0900-STALE99",
+        caseId: "PA-260526-0900-STALE99",
+        sourceCaseId: "PA-260526-0900-STALE99"
+      },
+      evidence: {
+        ...evidence,
+        id: "PA-260526-0900-STALE99",
+        umRequestId: "PA-260526-0900-STALE99",
+        caseId: "PA-260526-0900-STALE99",
+        sourceCaseId: "PA-260526-0900-STALE99"
+      },
+      fhirBundle: buildPasFhirBundle(umRequest, evidence),
+      storedAt: umRequest.submittedAt
+    });
+
+    await expect(store.getUmRequest(umRequest.id)).resolves.toMatchObject({
+      id: umRequest.id,
+      caseId: umRequest.id,
+      sourceCaseId: umRequest.id
+    });
+    await expect(store.getEvidence(umRequest.id)).resolves.toMatchObject({
+      id: umRequest.id,
+      umRequestId: umRequest.id,
+      caseId: umRequest.id,
+      sourceCaseId: umRequest.id
+    });
+  });
+
   it("canonicalizes legacy stored evidence to the full UM evidence shape without using sourceCaseId as identity", async () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(
@@ -503,6 +554,17 @@ describe("PAS persistence store selection", () => {
         fhirBundle
       })
     ).rejects.toThrow("PAS_SUBMISSION_ID_MISMATCH:evidence.caseId");
+
+    await expect(
+      store.savePasSubmission({
+        umRequest,
+        evidence: {
+          ...evidence,
+          id: "PA-260526-0900-MISMAT4"
+        },
+        fhirBundle
+      })
+    ).rejects.toThrow("PAS_SUBMISSION_ID_MISMATCH:evidence.id");
 
     await expect(
       store.savePasSubmission({
@@ -833,6 +895,40 @@ describe("PAS persistence store selection", () => {
     const row = await store.getIncentiveRow(umRequest.id);
     expect(row).not.toHaveProperty("paResult");
     expect(row).not.toHaveProperty("denialReason");
+  });
+
+  it("uses the lookup id over stale embedded incentive row ids on read", async () => {
+    const firestore = createFakeFirestore();
+    const store = createFirestorePasPersistenceStore(
+      {
+        projectId: "operon-labs-nonprod",
+        databaseId: "(default)"
+      },
+      firestore
+    );
+    const platform = createInMemoryUmPlatform({
+      generateCaseId: () => "PA-260526-0900-ROWLOOK"
+    });
+    const umRequest = platform.submitPriorAuth({
+      requestType: "outpatient_service",
+      serviceCode: "knee_mri"
+    });
+
+    await firestore.collection("incentiveEvaluations").doc(umRequest.id).set({
+      ...buildPersistedIncentiveRow(umRequest),
+      id: "PA-260526-0900-ROWBAD1",
+      umRequestId: "PA-260526-0900-ROWBAD1",
+      caseId: "PA-260526-0900-ROWBAD1",
+      paymentIntentId: "PA-260526-0900-ROWBAD1",
+      storedAt: umRequest.submittedAt
+    });
+
+    await expect(store.getIncentiveRow(umRequest.id)).resolves.toMatchObject({
+      id: umRequest.id,
+      umRequestId: umRequest.id,
+      caseId: umRequest.id,
+      paymentIntentId: umRequest.id
+    });
   });
 });
 
