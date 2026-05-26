@@ -114,8 +114,12 @@ export function createProviderDocumentationWorkflow(
 
     const existing = rows.get(event.umRequestId) ?? (await persistence?.getIncentiveRow(event.umRequestId)) ?? null;
     if (existing && isCurrentIncentiveRow(existing, record)) {
-      rows.set(event.umRequestId, existing);
-      return existing;
+      const refreshed = refreshIncentiveRowDisplayFields(existing, record);
+      rows.set(event.umRequestId, refreshed);
+      if (hasIncentiveRowDisplayFieldChanges(existing, refreshed)) {
+        await persistence?.saveIncentiveRow(refreshed);
+      }
+      return refreshed;
     }
 
     const existingSettlement = settlementsInFlight.get(event.umRequestId);
@@ -381,11 +385,53 @@ function isCurrentIncentiveRow(row: IncentiveWorklistRow, record: PriorAuthRecor
     row.id === record.id &&
     row.umRequestId === record.id &&
     row.caseId === record.id &&
-    row.state === record.state &&
-    row.outcomeStatus === record.outcomeStatus &&
     row.requestType === record.requestType &&
     row.serviceCode === record.serviceCode &&
-    row.umEvidenceSignature === buildUmEvidenceSignature(record)
+    isCurrentUmEvidenceSignature(row, record)
+  );
+}
+
+function isCurrentUmEvidenceSignature(row: IncentiveWorklistRow, record: UMRequest): boolean {
+  return (
+    row.umEvidenceSignature === buildUmEvidenceSignature(record) ||
+    row.umEvidenceSignature === buildLegacyUmEvidenceSignature(record, row.state, row.outcomeStatus)
+  );
+}
+
+function refreshIncentiveRowDisplayFields(row: IncentiveWorklistRow, record: UMRequest): IncentiveWorklistRow {
+  return {
+    ...row,
+    id: record.id,
+    umRequestId: record.id,
+    caseId: record.id,
+    planId: record.planId,
+    planDisplay: record.planDisplay,
+    submittedAt: record.submittedAt,
+    providerGroupDisplay: record.providerGroupDisplay,
+    requestType: record.requestType,
+    serviceLabel: record.serviceLabel,
+    serviceCode: record.serviceCode,
+    state: record.state,
+    outcomeStatus: record.outcomeStatus,
+    umEvidenceSignature: buildUmEvidenceSignature(record)
+  };
+}
+
+function hasIncentiveRowDisplayFieldChanges(left: IncentiveWorklistRow, right: IncentiveWorklistRow): boolean {
+  return (
+    left.id !== right.id ||
+    left.umRequestId !== right.umRequestId ||
+    left.caseId !== right.caseId ||
+    left.planId !== right.planId ||
+    left.planDisplay !== right.planDisplay ||
+    left.submittedAt !== right.submittedAt ||
+    left.providerGroupDisplay !== right.providerGroupDisplay ||
+    left.requestType !== right.requestType ||
+    left.serviceLabel !== right.serviceLabel ||
+    left.serviceCode !== right.serviceCode ||
+    left.state !== right.state ||
+    left.outcomeStatus !== right.outcomeStatus ||
+    left.umEvidenceSignature !== right.umEvidenceSignature
   );
 }
 
@@ -402,9 +448,30 @@ function buildUmEvidenceSignature(record: UMRequest): string {
     billingCode: evidence.billingCode,
     coveredBenefit: evidence.coveredBenefit,
     dtrRequested: evidence.dtrRequested,
+    dtrCompleted: evidence.dtrCompleted
+  });
+}
+
+function buildLegacyUmEvidenceSignature(
+  record: UMRequest,
+  state: UMRequest["state"],
+  outcomeStatus: UMRequest["outcomeStatus"]
+): string {
+  const evidence = buildProviderDocumentationEvidence(record);
+
+  return JSON.stringify({
+    id: evidence.id,
+    planId: evidence.planId,
+    providerId: evidence.providerId,
+    requestType: evidence.requestType,
+    serviceCode: evidence.serviceCode,
+    codingSystem: evidence.codingSystem,
+    billingCode: evidence.billingCode,
+    coveredBenefit: evidence.coveredBenefit,
+    dtrRequested: evidence.dtrRequested,
     dtrCompleted: evidence.dtrCompleted,
-    state: record.state,
-    outcomeStatus: record.outcomeStatus
+    state,
+    outcomeStatus
   });
 }
 

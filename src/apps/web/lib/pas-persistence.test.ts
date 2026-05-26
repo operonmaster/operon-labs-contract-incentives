@@ -253,7 +253,7 @@ describe("PAS persistence store selection", () => {
     });
   });
 
-  it("normalizes stored UM events from umRequestId when caseId is stale", async () => {
+  it("quarantines stored UM request created events when caseId is stale", async () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(
       {
@@ -271,13 +271,7 @@ describe("PAS persistence store selection", () => {
       storedAt: "2026-05-26T09:00:00.000Z"
     });
 
-    await expect(store.listUmEvents()).resolves.toEqual([
-      {
-        eventType: "UM_REQUEST_CREATED",
-        caseId: "PA-260526-0900-EVENT01",
-        umRequestId: "PA-260526-0900-EVENT01"
-      }
-    ]);
+    await expect(store.listUmEvents()).resolves.toEqual([]);
     expect(
       toPasSubmittedEvent({
         eventType: "PAS_SUBMITTED",
@@ -291,7 +285,7 @@ describe("PAS persistence store selection", () => {
     });
   });
 
-  it("uses the audit event document id over stale embedded event ids on read", async () => {
+  it("quarantines stored UM request created events when embedded ids disagree with the document id", async () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(
       {
@@ -309,13 +303,52 @@ describe("PAS persistence store selection", () => {
       storedAt: "2026-05-26T09:00:00.000Z"
     });
 
+    await expect(store.listUmEvents()).resolves.toEqual([]);
+  });
+
+  it("uses the audit event document id for legacy UM request created events only when umRequestId is absent", async () => {
+    const firestore = createFakeFirestore();
+    const store = createFirestorePasPersistenceStore(
+      {
+        projectId: "operon-labs-nonprod",
+        databaseId: "(default)"
+      },
+      firestore
+    );
+
+    await firestore.collection("auditEvents").doc("PA-260526-0900-EVENT03-UM_REQUEST_CREATED").set({
+      eventType: "UM_REQUEST_CREATED",
+      submittedAt: "2026-05-26T09:00:00.000Z",
+      storedAt: "2026-05-26T09:00:00.000Z"
+    });
+
     await expect(store.listUmEvents()).resolves.toEqual([
       {
         eventType: "UM_REQUEST_CREATED",
-        caseId: "PA-260526-0900-EVENT02",
-        umRequestId: "PA-260526-0900-EVENT02"
+        caseId: "PA-260526-0900-EVENT03",
+        umRequestId: "PA-260526-0900-EVENT03"
       }
     ]);
+  });
+
+  it("does not use caseId as a lookup path for legacy UM request created events", async () => {
+    const firestore = createFakeFirestore();
+    const store = createFirestorePasPersistenceStore(
+      {
+        projectId: "operon-labs-nonprod",
+        databaseId: "(default)"
+      },
+      firestore
+    );
+
+    await firestore.collection("auditEvents").doc("legacy-case-only-event").set({
+      eventType: "UM_REQUEST_CREATED",
+      caseId: "PA-260526-0900-CASEONLY",
+      submittedAt: "2026-05-26T09:00:00.000Z",
+      storedAt: "2026-05-26T09:00:00.000Z"
+    });
+
+    await expect(store.listUmEvents()).resolves.toEqual([]);
   });
 
   it("canonicalizes legacy UM requests from doc id instead of sourceCaseId", async () => {

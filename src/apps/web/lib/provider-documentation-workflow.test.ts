@@ -795,6 +795,111 @@ describe("provider documentation workflow", () => {
     expect(executePolicyBoundPaymentMock).toHaveBeenCalledTimes(1);
   });
 
+  it("preserves paid payment fields when only UM lifecycle display fields change", async () => {
+    const platform = createInMemoryUmPlatform();
+    const record = platform.submitPriorAuth({
+      requestType: "outpatient_service",
+      serviceCode: "knee_mri",
+      dtr: {
+        symptomDurationConfirmed: true,
+        conservativeTherapyConfirmed: true,
+        examFindingsConfirmed: true,
+        clinicalNoteAttached: true
+      }
+    });
+    const evidence = platform.getEvidence(record.id)!;
+    const storedRequest: StoredPasSubmission = {
+      umRequest: record,
+      evidence,
+      fhirBundle: buildPasFhirBundle(record, evidence)
+    };
+    let incentiveRow: IncentiveWorklistRow | null = null;
+    const persistence: UmPasPersistenceStore = {
+      backend: "firestore",
+      async savePasSubmission() {
+        return undefined;
+      },
+      async savePriorAuth() {
+        return undefined;
+      },
+      async saveUmRequest(umRequest) {
+        storedRequest.umRequest = umRequest;
+      },
+      async listUmRequests() {
+        return [storedRequest.umRequest];
+      },
+      async getUmRequest(umRequestId) {
+        return umRequestId === record.id ? storedRequest.umRequest : null;
+      },
+      async listUmEvents() {
+        return [{ eventType: "UM_REQUEST_CREATED", caseId: record.id, umRequestId: record.id }];
+      },
+      async listPriorAuthRecords() {
+        return [storedRequest.umRequest];
+      },
+      async getPriorAuthRecord(caseId) {
+        return caseId === record.id ? storedRequest.umRequest : null;
+      },
+      async getEvidence(umRequestId) {
+        return umRequestId === record.id ? storedRequest.evidence : null;
+      },
+      async listPasEvents() {
+        return [];
+      },
+      async saveIncentiveRow(row) {
+        incentiveRow = row;
+      },
+      async listIncentiveRows() {
+        return incentiveRow ? [incentiveRow] : [];
+      },
+      async getIncentiveRow(umRequestId) {
+        return umRequestId === record.id ? incentiveRow : null;
+      }
+    };
+    const workflow = createProviderDocumentationWorkflow(createInMemoryUmPlatform(), persistence);
+
+    const [paidRow] = await workflow.listIncentiveRows();
+    incentiveRow = {
+      ...incentiveRow!,
+      umEvidenceSignature: JSON.stringify({
+        id: record.id,
+        planId: record.planId,
+        providerId: record.providerId,
+        requestType: record.requestType,
+        serviceCode: record.serviceCode,
+        codingSystem: record.codingSystem,
+        billingCode: record.billingCode,
+        coveredBenefit: true,
+        dtrRequested: true,
+        dtrCompleted: true,
+        state: record.state,
+        outcomeStatus: record.outcomeStatus
+      })
+    };
+    await persistence.saveUmRequest({
+      ...record,
+      state: "determined",
+      outcomeStatus: "denied",
+      determinedAt: record.submittedAt
+    });
+    const restartedWorkflow = createProviderDocumentationWorkflow(createInMemoryUmPlatform(), persistence);
+    const [updatedRow] = await restartedWorkflow.listIncentiveRows();
+
+    expect(updatedRow).toMatchObject({
+      id: record.id,
+      umRequestId: record.id,
+      state: "determined",
+      outcomeStatus: "denied",
+      incentiveStatus: "paid",
+      paymentStatus: "auto_executed",
+      incentiveValue: 5,
+      paymentIntentId: paidRow!.paymentIntentId,
+      transactionId: paidRow!.transactionId
+    });
+    expect(updatedRow!.audit.transactionId).toBe(paidRow!.audit.transactionId);
+    expect(executePolicyBoundPaymentMock).toHaveBeenCalledTimes(1);
+  });
+
   it("blocks from canonical UM request fields when persisted evidence is stale and would approve", async () => {
     const platform = createInMemoryUmPlatform();
     const record = platform.submitPriorAuth({

@@ -261,7 +261,9 @@ class FirestorePasPersistenceStore implements UmPasPersistenceStore {
   async listUmEvents(): Promise<UMPlatformEvent[]> {
     const firestore = await this.getFirestore();
     const snapshot = await firestore.collection(AUDIT_EVENTS_COLLECTION).orderBy("submittedAt", "asc").get();
-    return snapshot.docs.map((doc) => normalizeStoredUmEvent(doc.data() as UMPlatformEvent, doc.id));
+    return snapshot.docs
+      .map((doc) => normalizeStoredUmEvent(doc.data() as UMPlatformEvent, doc.id))
+      .filter((event): event is UMPlatformEvent => Boolean(event));
   }
 
   async savePriorAuth(request: StoredPasRequest): Promise<void> {
@@ -512,7 +514,11 @@ function canonicalizeStoredEvidence(
   };
 }
 
-function normalizeStoredUmEvent(event: UMPlatformEvent, fallbackCanonicalId?: string): UMPlatformEvent {
+function normalizeStoredUmEvent(event: UMPlatformEvent, fallbackCanonicalId?: string): UMPlatformEvent | null {
+  if (event.eventType === "UM_REQUEST_CREATED") {
+    return normalizeStoredUmRequestCreatedEvent(event, fallbackCanonicalId);
+  }
+
   const canonicalId = getStoredCanonicalPaId(
     getAuditEventCanonicalIdFromDocumentId(fallbackCanonicalId),
     event.umRequestId,
@@ -523,6 +529,54 @@ function normalizeStoredUmEvent(event: UMPlatformEvent, fallbackCanonicalId?: st
     eventType: event.eventType,
     caseId: canonicalId,
     umRequestId: canonicalId
+  };
+}
+
+function normalizeStoredUmRequestCreatedEvent(
+  event: UMPlatformEvent,
+  fallbackCanonicalId?: string
+): UMPlatformEvent | null {
+  const storedEvent = event as UMPlatformEvent & { caseId?: string; umRequestId?: string };
+  const documentCanonicalId = getCanonicalPaIdOrNull(getAuditEventCanonicalIdFromDocumentId(fallbackCanonicalId));
+  const embeddedUmRequestId = getCanonicalPaIdOrNull(storedEvent.umRequestId);
+  const embeddedCaseId = getCanonicalPaIdOrNull(storedEvent.caseId);
+
+  if (storedEvent.umRequestId !== undefined && !embeddedUmRequestId) {
+    return null;
+  }
+
+  if (storedEvent.caseId !== undefined && !embeddedCaseId) {
+    return null;
+  }
+
+  if (embeddedUmRequestId) {
+    if (documentCanonicalId && documentCanonicalId !== embeddedUmRequestId) {
+      return null;
+    }
+
+    if (embeddedCaseId && embeddedCaseId !== embeddedUmRequestId) {
+      return null;
+    }
+
+    return {
+      eventType: "UM_REQUEST_CREATED",
+      caseId: embeddedUmRequestId,
+      umRequestId: embeddedUmRequestId
+    };
+  }
+
+  if (!documentCanonicalId) {
+    return null;
+  }
+
+  if (embeddedCaseId && embeddedCaseId !== documentCanonicalId) {
+    return null;
+  }
+
+  return {
+    eventType: "UM_REQUEST_CREATED",
+    caseId: documentCanonicalId,
+    umRequestId: documentCanonicalId
   };
 }
 
@@ -547,6 +601,16 @@ function getStoredCanonicalPaId(...ids: Array<string | null | undefined>): strin
   const paId = canonicalizedIds.find((id) => id.startsWith("PA-"));
 
   return paId ?? canonicalizedIds[0] ?? "";
+}
+
+function getCanonicalPaIdOrNull(id: string | null | undefined): string | null {
+  if (!id) {
+    return null;
+  }
+
+  const canonicalId = canonicalizeLegacyCanonicalId(id);
+
+  return canonicalId.startsWith("PA-") ? canonicalId : null;
 }
 
 function canonicalizeLegacyCanonicalId(id: string): string {
