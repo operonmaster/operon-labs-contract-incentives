@@ -229,10 +229,11 @@ class FirestorePasPersistenceStore implements UmPasPersistenceStore {
 
   async listUmRequests(): Promise<UMRequest[]> {
     const firestore = await this.getFirestore();
-    const snapshot = await firestore.collection(PAS_CLAIMS_COLLECTION).orderBy("umRequest.submittedAt", "desc").get();
+    const snapshot = await firestore.collection(PAS_CLAIMS_COLLECTION).get();
     return snapshot.docs
       .map((doc) => extractStoredUmRequest(doc.data() as StoredPasClaimDocument))
-      .filter((umRequest): umRequest is UMRequest => Boolean(umRequest));
+      .filter((umRequest): umRequest is UMRequest => Boolean(umRequest))
+      .sort((left, right) => right.submittedAt.localeCompare(left.submittedAt));
   }
 
   async getUmRequest(umRequestId: string): Promise<UMRequest | null> {
@@ -361,12 +362,21 @@ function validatePasSubmission(request: StoredPasSubmission): void {
   }
   assertMatchingCanonicalId(request.fhirBundle.id, canonicalId, "fhirBundle.id");
   assertMatchingCanonicalId(getFhirClaimId(request.fhirBundle), canonicalId, "fhirBundle.claim.id");
+  validateFhirClaimIdentifiers(request.fhirBundle, canonicalId);
 }
 
 function validateUmRequestIds(umRequest: UMRequest): void {
   assertCanonicalPaId(umRequest.id, "umRequest.id");
   assertMatchingCanonicalId(umRequest.caseId, umRequest.id, "umRequest.caseId");
   assertMatchingCanonicalId(umRequest.sourceCaseId, umRequest.id, "umRequest.sourceCaseId");
+  assertMatchingCanonicalId(umRequest.auditRefs?.pasClaimBundleId, umRequest.id, "umRequest.auditRefs.pasClaimBundleId");
+  if (umRequest.auditRefs?.pasClaimResponseBundleId !== null) {
+    assertMatchingCanonicalId(
+      umRequest.auditRefs?.pasClaimResponseBundleId,
+      umRequest.id,
+      "umRequest.auditRefs.pasClaimResponseBundleId"
+    );
+  }
 }
 
 function validateIncentiveRowIds(row: PersistedIncentiveWorklistRow): void {
@@ -395,6 +405,24 @@ function assertMatchingCanonicalId(value: string | null | undefined, expected: s
 
 function getFhirClaimId(fhirBundle: PasFhirBundle): string | undefined {
   return fhirBundle.entry.find((entry) => entry.resource.resourceType === "Claim")?.resource.id;
+}
+
+function validateFhirClaimIdentifiers(fhirBundle: PasFhirBundle, canonicalId: string): void {
+  const claim = fhirBundle.entry.find((entry) => entry.resource.resourceType === "Claim")?.resource;
+
+  if (claim?.resourceType !== "Claim") {
+    return;
+  }
+
+  claim.identifier.forEach((identifier, index) => {
+    if (isCanonicalPaIdentifierSystem(identifier.system)) {
+      assertMatchingCanonicalId(identifier.value, canonicalId, `fhirBundle.claim.identifier[${index}].value`);
+    }
+  });
+}
+
+function isCanonicalPaIdentifierSystem(system: string): boolean {
+  return system.endsWith("/prior-auth-case-id") || system.endsWith("/um-request-id");
 }
 
 function buildStoredEvidence(

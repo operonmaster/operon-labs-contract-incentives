@@ -250,6 +250,52 @@ describe("PAS persistence store selection", () => {
     });
   });
 
+  it("lists legacy record-only PAS docs through the canonical PA id", async () => {
+    const firestore = createFakeFirestore();
+    const store = createFirestorePasPersistenceStore(
+      {
+        projectId: "operon-labs-nonprod",
+        databaseId: "(default)"
+      },
+      firestore
+    );
+    const platform = createInMemoryUmPlatform({
+      generateCaseId: () => "PA-260526-0900-RECORD1"
+    });
+    const umRequest = platform.submitPriorAuth({
+      requestType: "outpatient_service",
+      serviceCode: "knee_mri"
+    });
+    const evidence = platform.getEvidence(umRequest.id)!;
+    const legacyRecord = {
+      ...umRequest,
+      id: "UMR-260526-0900-RECORD1",
+      sourceCaseId: umRequest.id,
+      auditRefs: {
+        ...umRequest.auditRefs,
+        pasClaimBundleId: "pas-UMR-260526-0900-RECORD1"
+      }
+    };
+
+    await firestore.collection("pasClaims").doc(umRequest.id).set({
+      record: legacyRecord,
+      evidence,
+      fhirBundle: buildPasFhirBundle(umRequest, evidence),
+      storedAt: umRequest.submittedAt
+    });
+
+    await expect(store.listUmRequests()).resolves.toEqual([
+      expect.objectContaining({
+        id: umRequest.id,
+        caseId: umRequest.id,
+        sourceCaseId: umRequest.id,
+        auditRefs: expect.objectContaining({
+          pasClaimBundleId: umRequest.id
+        })
+      })
+    ]);
+  });
+
   it("rejects PAS submissions when canonical ids differ across evidence or FHIR artifacts", async () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(
@@ -293,6 +339,20 @@ describe("PAS persistence store selection", () => {
 
     await expect(
       store.savePasSubmission({
+        umRequest: {
+          ...umRequest,
+          auditRefs: {
+            ...umRequest.auditRefs,
+            pasClaimBundleId: "UMR-260526-0900-MATCH01"
+          }
+        },
+        evidence,
+        fhirBundle
+      })
+    ).rejects.toThrow("PAS_SUBMISSION_ID_MISMATCH:umRequest.auditRefs.pasClaimBundleId");
+
+    await expect(
+      store.savePasSubmission({
         umRequest,
         evidence: {
           ...evidence,
@@ -333,6 +393,34 @@ describe("PAS persistence store selection", () => {
         }
       })
     ).rejects.toThrow("PAS_SUBMISSION_ID_MISMATCH:fhirBundle.claim.id");
+
+    await expect(
+      store.savePasSubmission({
+        umRequest,
+        evidence,
+        fhirBundle: {
+          ...fhirBundle,
+          entry: fhirBundle.entry.map((entry) =>
+            entry.resource.resourceType === "Claim"
+              ? {
+                  ...entry,
+                  resource: {
+                    ...entry.resource,
+                    identifier: entry.resource.identifier.map((identifier) =>
+                      identifier.system.endsWith("/um-request-id")
+                        ? {
+                            ...identifier,
+                            value: "UMR-260526-0900-MATCH01"
+                          }
+                        : identifier
+                    )
+                  }
+                }
+              : entry
+          )
+        }
+      })
+    ).rejects.toThrow("PAS_SUBMISSION_ID_MISMATCH:fhirBundle.claim.identifier[1].value");
 
     await expect(firestore.collection("pasClaims").doc(umRequest.id).get()).resolves.toMatchObject({
       exists: false
@@ -567,10 +655,12 @@ function createFakeFirestore(): FirestoreDatabase & { collectionNames(): string[
             }))
           };
         },
-        orderBy(_field, direction) {
+        orderBy(field, direction) {
           return {
             async get() {
-              const values = [...collection.values()];
+              const values = [...collection.values()]
+                .filter((value) => getNestedValue(value, field) !== undefined)
+                .sort((left, right) => String(getNestedValue(left, field)).localeCompare(String(getNestedValue(right, field))));
               if (direction === "desc") {
                 values.reverse();
               }
@@ -594,4 +684,18 @@ function createFakeFirestore(): FirestoreDatabase & { collectionNames(): string[
       return batchCommitCount;
     }
   };
+}
+
+function getNestedValue(value: unknown, path: string): unknown {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  return path.split(".").reduce<unknown>((current, part) => {
+    if (!current || typeof current !== "object") {
+      return undefined;
+    }
+
+    return (current as Record<string, unknown>)[part];
+  }, value);
 }
