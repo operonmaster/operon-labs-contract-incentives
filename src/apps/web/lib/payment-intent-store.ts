@@ -66,6 +66,8 @@ class FirestorePaymentIntentStore implements PaymentIntentPersistenceStore {
   }
 
   async reserveIntent(intent: PaymentIntent) {
+    validatePaymentIntentIds(intent);
+
     const firestore = await this.getFirestore();
     const ref = firestore.collection(PAYMENT_INTENTS_COLLECTION).doc(intent.id);
     const existing = await ref.get();
@@ -159,5 +161,31 @@ class FirestorePaymentIntentStore implements PaymentIntentPersistenceStore {
     }
 
     return this.firestore;
+  }
+}
+
+function validatePaymentIntentIds(intent: PaymentIntent): void {
+  const caseId = intent.caseId?.trim();
+  const incentiveEvaluationId = intent.incentiveEvaluationId?.trim();
+  const canonicalId = incentiveEvaluationId || caseId;
+
+  if (!canonicalId) {
+    return;
+  }
+
+  if (!canonicalId.startsWith("PA-")) {
+    throw new Error("PAYMENT_INTENT_ID_NOT_CANONICAL");
+  }
+
+  if (caseId && caseId !== canonicalId) {
+    throw new Error("PAYMENT_INTENT_ID_MISMATCH:caseId");
+  }
+
+  if (incentiveEvaluationId && incentiveEvaluationId !== canonicalId) {
+    throw new Error("PAYMENT_INTENT_ID_MISMATCH:incentiveEvaluationId");
+  }
+
+  if (intent.id !== canonicalId) {
+    throw new Error("PAYMENT_INTENT_ID_MISMATCH:id");
   }
 }

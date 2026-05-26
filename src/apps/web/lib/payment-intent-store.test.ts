@@ -59,6 +59,56 @@ describe("payment intent store", () => {
     });
     expect(firestore.collectionNames()).toEqual(expect.arrayContaining(["paymentIntents"]));
   });
+
+  it("rejects PA-tied payment intents with noncanonical ids", async () => {
+    const store = createFirestorePaymentIntentStore(
+      {
+        projectId: "operon-labs-nonprod",
+        databaseId: "(default)"
+      },
+      createFakeFirestore()
+    );
+    const intent = buildPaymentIntent(
+      {
+        auditId: "audit-1",
+        caseId: "PA-260525-1015-ABCD1234",
+        incentiveEvaluationId: "PA-260525-1015-ABCD1234",
+        amount: 5,
+        currency: "HBAR",
+        walletId: "0.0.9049549",
+        policyId: "provider-documentation-completeness-v1",
+        policyVersion: "v1",
+        triggerEvent: "PAS_SUBMITTED"
+      },
+      {
+        sourceAccountId: "0.0.6870566",
+        transactionMemo: "PA-260525-1015-ABCD1234"
+      }
+    );
+
+    await expect(
+      store.reserveIntent({
+        ...intent,
+        id: "pi_test"
+      })
+    ).rejects.toThrow("PAYMENT_INTENT_ID_MISMATCH:id");
+
+    await expect(
+      store.reserveIntent({
+        ...intent,
+        id: "UMR-260525-1015-ABCD1234",
+        caseId: "UMR-260525-1015-ABCD1234",
+        incentiveEvaluationId: "UMR-260525-1015-ABCD1234"
+      })
+    ).rejects.toThrow("PAYMENT_INTENT_ID_NOT_CANONICAL");
+
+    await expect(
+      store.reserveIntent({
+        ...intent,
+        incentiveEvaluationId: "PA-260525-1015-OTHER01"
+      })
+    ).rejects.toThrow("PAYMENT_INTENT_ID_MISMATCH:caseId");
+  });
 });
 
 function createFakeFirestore(): FirestoreDatabase & { collectionNames(): string[] } {
