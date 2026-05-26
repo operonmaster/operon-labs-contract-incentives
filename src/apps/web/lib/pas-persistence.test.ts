@@ -365,7 +365,11 @@ describe("PAS persistence store selection", () => {
         ...umRequest,
         id: "PA-260526-0900-STALE99",
         caseId: "PA-260526-0900-STALE99",
-        sourceCaseId: "PA-260526-0900-STALE99"
+        sourceCaseId: "PA-260526-0900-STALE99",
+        auditRefs: {
+          pasClaimBundleId: "PA-260526-0900-STALE99",
+          pasClaimResponseBundleId: "PA-260526-0900-STALE99"
+        }
       },
       evidence: {
         ...evidence,
@@ -381,7 +385,11 @@ describe("PAS persistence store selection", () => {
     await expect(store.getUmRequest(umRequest.id)).resolves.toMatchObject({
       id: umRequest.id,
       caseId: umRequest.id,
-      sourceCaseId: umRequest.id
+      sourceCaseId: umRequest.id,
+      auditRefs: {
+        pasClaimBundleId: umRequest.id,
+        pasClaimResponseBundleId: umRequest.id
+      }
     });
     await expect(store.getEvidence(umRequest.id)).resolves.toMatchObject({
       id: umRequest.id,

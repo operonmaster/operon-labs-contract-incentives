@@ -226,6 +226,41 @@ describe("evaluateProviderDocumentationEvent", () => {
       reasonCodes: ["DTR_NOT_REQUESTED"]
     });
   });
+
+  it("uses canonical dtrCompleted for the policy compatibility DTR field", () => {
+    const evidence = {
+      id: "PA-260524-2102-DTRCNFL",
+      umRequestId: "PA-260524-2102-DTRCNFL",
+      caseId: "PA-260524-2102-DTRCNFL",
+      planId: "acme-health-ppo",
+      submitter: { id: "lakeside-provider-admin" },
+      providerId: "lakeside-provider-admin",
+      requestType: "outpatient_service",
+      serviceCode: "knee_mri",
+      codingSystem: "CPT",
+      billingCode: "73721",
+      coveredBenefit: true,
+      dtrRequested: true,
+      dtrCompleted: false,
+      dtrTemplateCompleted: true
+    } as unknown as ProviderDocumentationEvidence;
+
+    const evaluation = evaluateProviderDocumentationEvent(
+      { eventType: "UM_REQUEST_CREATED", umRequestId: evidence.umRequestId },
+      { getEvidenceByUmRequestId: () => evidence, policy: createProviderDocumentationPolicy(5), monthToDateAmount: 0 }
+    );
+
+    expect(evaluation.request.requestObject).toMatchObject({
+      dtrCompleted: false,
+      dtrTemplateCompleted: false
+    });
+    expect(evaluation.result).toMatchObject({
+      decision: "blocked",
+      amount: 0,
+      walletId: null,
+      reasonCodes: ["DTR_TEMPLATE_INCOMPLETE"]
+    });
+  });
 });
 
 function createProviderDocumentationPolicy(

@@ -474,10 +474,8 @@ function canonicalizeStoredUmRequest(umRequest: UMRequest, fallbackCanonicalId: 
     sourceCaseId: canonicalId,
     auditRefs: {
       ...auditRefs,
-      pasClaimBundleId: canonicalizeLegacyCanonicalId(auditRefs.pasClaimBundleId),
-      pasClaimResponseBundleId: auditRefs.pasClaimResponseBundleId
-        ? canonicalizeLegacyCanonicalId(auditRefs.pasClaimResponseBundleId)
-        : null
+      pasClaimBundleId: canonicalId,
+      pasClaimResponseBundleId: auditRefs.pasClaimResponseBundleId ? canonicalId : null
     }
   };
 }

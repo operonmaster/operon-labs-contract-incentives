@@ -83,7 +83,7 @@ export function evaluateProviderDocumentationEvent(
       coveredBenefit: evidence.coveredBenefit,
       dtrRequested: evidence.dtrRequested,
       dtrCompleted: evidence.dtrCompleted,
-      dtrTemplateCompleted: evidence.dtrTemplateCompleted,
+      dtrTemplateCompleted: evidence.dtrCompleted,
       outcomeStatusUsedForPayment: false,
       containsPhi: false
     }
