@@ -4,7 +4,7 @@ import { buildPasFhirBundle, createInMemoryUmPlatform } from "../src/index";
 describe("PAS FHIR Bundle mapping", () => {
   it("maps an outpatient service prior authorization to a preauthorization Claim with CPT coding", () => {
     const platform = createInMemoryUmPlatform();
-    const record = platform.submitPriorAuth({
+    const umRequest = platform.submitPriorAuth({
       requestType: "outpatient_service",
       serviceCode: "knee_mri",
       dtr: {
@@ -14,21 +14,31 @@ describe("PAS FHIR Bundle mapping", () => {
         clinicalNoteAttached: true
       }
     });
-    const evidence = platform.getEvidence(record.caseId);
+    const evidence = platform.getEvidence(umRequest.id);
 
-    const bundle = buildPasFhirBundle(record, evidence!);
+    const bundle = buildPasFhirBundle(umRequest, evidence!);
     const claim = bundle.entry.find((entry) => entry.resource.resourceType === "Claim")?.resource;
 
     expect(bundle).toMatchObject({
       resourceType: "Bundle",
-      id: `pas-${record.caseId}`,
+      id: umRequest.id,
       type: "collection"
     });
     expect(claim).toMatchObject({
       resourceType: "Claim",
-      id: `claim-${record.caseId}`,
+      id: umRequest.id,
       status: "active",
       use: "preauthorization",
+      identifier: [
+        {
+          system: "https://operon.cloud/fhir/NamingSystem/prior-auth-case-id",
+          value: umRequest.id
+        },
+        {
+          system: "https://operon.cloud/fhir/NamingSystem/um-request-id",
+          value: umRequest.id
+        }
+      ],
       patient: { reference: "Patient/patient-maya-chen" },
       provider: { reference: "Organization/lakeside-provider-admin" },
       insurer: { reference: "Organization/acme-health-ppo" },
@@ -67,7 +77,7 @@ describe("PAS FHIR Bundle mapping", () => {
 
   it("maps a pharmacy benefit prior authorization to NDC-coded Claim item", () => {
     const platform = createInMemoryUmPlatform();
-    const record = platform.submitPriorAuth({
+    const umRequest = platform.submitPriorAuth({
       patientId: "patient-andre-williams",
       patientDisplay: "Andre Williams",
       planId: "summit-health-hmo",
@@ -81,9 +91,9 @@ describe("PAS FHIR Bundle mapping", () => {
         clinicalNoteAttached: true
       }
     });
-    const evidence = platform.getEvidence(record.caseId);
+    const evidence = platform.getEvidence(umRequest.id);
 
-    const bundle = buildPasFhirBundle(record, evidence!);
+    const bundle = buildPasFhirBundle(umRequest, evidence!);
     const claim = bundle.entry.find((entry) => entry.resource.resourceType === "Claim")?.resource;
 
     expect(claim).toMatchObject({

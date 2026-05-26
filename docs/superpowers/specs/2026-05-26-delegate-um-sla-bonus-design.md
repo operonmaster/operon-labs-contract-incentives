@@ -43,6 +43,8 @@ The current Provider Documentation implementation uses `PriorAuthRecord` as the 
 
 This design replaces that role with `UMRequest`. `PriorAuthRecord` should not remain the primary domain object. The implementation should rename and reshape the current domain usage into `UMRequest`. Raw PAS intake and audit storage should use a separate PAS-specific artifact such as `PasSubmissionRecord` when that distinction is needed.
 
+ID strategy: the PA case ID is the canonical UM request ID. `UMRequest.id`, event `caseId`, event `umRequestId`, FHIR PAS bundle IDs, persistence document IDs, incentive evaluation IDs, and payment attestation IDs all use the same `PA-*` value. Do not generate `UMR-*` IDs. If compatibility fields remain, they must carry the same value as `UMRequest.id`.
+
 ## Core Architecture
 
 Canonical data flow:
@@ -74,7 +76,6 @@ Logical boundaries:
 type UMRequest = {
   id: string;
   source: "pas_fhir";
-  sourceCaseId: string;
 
   planId: string;
   planDisplay: string;
@@ -183,8 +184,8 @@ Provider Documentation policy evidence:
   evaluationType: "provider_documentation_completeness",
   submitter: { id: "lakeside-provider-admin" },
   requestObject: {
-    umRequestId: "UMR-260526-0001",
-    sourceCaseId: "PA-260526-0001",
+    umRequestId: "PA-260526-0001",
+    id: "PA-260526-0001",
     planId: "acme-health-ppo",
     providerId: "lakeside-provider-admin",
     requestType: "outpatient_service",
@@ -228,7 +229,7 @@ Delegate SLA policy evidence:
   evaluationType: "delegate_um_sla_bonus",
   submitter: { id: "northstar-um" },
   requestObject: {
-    umRequestId: "UMR-260526-0001",
+    umRequestId: "PA-260526-0001",
     planId: "acme-health-ppo",
     delegateVendorId: "northstar-um",
     state: "determined",
@@ -261,7 +262,7 @@ Primary job: let the delegated UM vendor work pending `UMRequest` cases.
 View elements:
 
 - Workqueue for `UMRequest.state = "pend"` or `UMRequest.state = "in_clinical_review"`.
-- Columns: UM request ID, source PA ID, service, plan, submitted time, SLA deadline, time remaining, state.
+- Columns: canonical PA/UM request ID, service, plan, submitted time, SLA deadline, time remaining, state.
 - Row action to open review.
 - Review panel with request summary, documentation completeness summary, SLA clock, reviewer checklist, outcome selector, and submit determination action.
 - Outcome selector supports `Approved` and `Denied`.

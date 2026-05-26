@@ -1,4 +1,4 @@
-import type { PriorAuthRecord, ProviderDocumentationEvidence, RequestType } from "./index";
+import type { ProviderDocumentationEvidence, RequestType, UMRequest } from "./index";
 
 export type PasFhirResource =
   | PasFhirClaim
@@ -89,34 +89,38 @@ interface FhirCodeableConcept {
   text?: string;
 }
 
-export function buildPasFhirBundle(record: PriorAuthRecord, evidence: ProviderDocumentationEvidence): PasFhirBundle {
-  const patientReference = `Patient/${record.patientId}`;
-  const providerReference = `Organization/${record.providerGroupId}`;
-  const insurerReference = `Organization/${record.planId}`;
-  const coverageReference = `Coverage/coverage-${record.caseId}`;
+export function buildPasFhirBundle(umRequest: UMRequest, evidence: ProviderDocumentationEvidence): PasFhirBundle {
+  const patientReference = `Patient/${umRequest.patientId}`;
+  const providerReference = `Organization/${umRequest.providerId}`;
+  const insurerReference = `Organization/${umRequest.planId}`;
+  const coverageReference = `Coverage/coverage-${umRequest.id}`;
   const claim: PasFhirClaim = {
     resourceType: "Claim",
-    id: `claim-${record.caseId}`,
+    id: umRequest.id,
     status: "active",
     use: "preauthorization",
-    created: record.submittedAt,
+    created: umRequest.submittedAt,
     identifier: [
       {
         system: "https://operon.cloud/fhir/NamingSystem/prior-auth-case-id",
-        value: record.caseId
+        value: umRequest.id
+      },
+      {
+        system: "https://operon.cloud/fhir/NamingSystem/um-request-id",
+        value: umRequest.id
       }
     ],
     patient: {
       reference: patientReference,
-      display: record.patientDisplay
+      display: umRequest.patientDisplay
     },
     provider: {
       reference: providerReference,
-      display: record.providerGroupDisplay
+      display: umRequest.providerDisplay
     },
     insurer: {
       reference: insurerReference,
-      display: record.planDisplay
+      display: umRequest.planDisplay
     },
     insurance: [
       {
@@ -130,16 +134,16 @@ export function buildPasFhirBundle(record: PriorAuthRecord, evidence: ProviderDo
     item: [
       {
         sequence: 1,
-        category: requestTypeConcept(record.requestType),
+        category: requestTypeConcept(umRequest.requestType),
         productOrService: {
           coding: [
             {
-              system: codingSystemUri(record.codingSystem),
-              code: record.billingCode,
-              display: record.serviceLabel
+              system: codingSystemUri(umRequest.codingSystem),
+              code: umRequest.billingCode,
+              display: umRequest.serviceLabel
             }
           ],
-          text: record.serviceLabel
+          text: umRequest.serviceLabel
         }
       }
     ],
@@ -149,41 +153,58 @@ export function buildPasFhirBundle(record: PriorAuthRecord, evidence: ProviderDo
       booleanSupportingInfo(3, "dtr-template-completed", "DTR template completed", evidence.dtrTemplateCompleted),
       booleanSupportingInfo(4, "attachment-checklist-complete", "Attachment checklist complete", evidence.attachmentChecklistComplete),
       booleanSupportingInfo(5, "required-fhir-fields-present", "Required FHIR fields present", evidence.fhirFieldsPresent),
-      booleanSupportingInfo(6, "pas-submitted", "PAS submitted", evidence.pasSubmitted),
-      stringSupportingInfo(7, "pa-result", "PA result", record.paResult),
-      stringSupportingInfo(8, "denial-reason", "Denial reason", record.denialReason ?? "none")
+      booleanSupportingInfo(6, "pas-submitted", "PAS submitted", true),
+      stringSupportingInfo(7, "um-request-state", "UM request state", umRequest.state),
+      stringSupportingInfo(8, "outcome-status", "Outcome status", umRequest.outcomeStatus ?? "none")
     ]
   };
 
+  return {
+    resourceType: "Bundle",
+    id: umRequest.id,
+    type: "collection",
+    timestamp: umRequest.submittedAt,
+    entry: buildEntries(claim, umRequest, patientReference, providerReference, insurerReference, coverageReference)
+  };
+}
+
+function buildEntries(
+  claim: PasFhirClaim,
+  umRequest: UMRequest,
+  patientReference: string,
+  providerReference: string,
+  insurerReference: string,
+  coverageReference: string
+): PasFhirBundle["entry"] {
   const entries: PasFhirBundle["entry"] = [
     {
-      fullUrl: `urn:uuid:claim-${record.caseId}`,
+      fullUrl: `urn:uuid:claim-${umRequest.id}`,
       resource: claim
     },
     {
-      fullUrl: `urn:uuid:${record.patientId}`,
+      fullUrl: `urn:uuid:${umRequest.patientId}`,
       resource: {
         resourceType: "Patient",
-        id: record.patientId,
+        id: umRequest.patientId,
         identifier: [
           {
             system: "https://operon.cloud/fhir/NamingSystem/synthetic-patient-id",
-            value: record.patientId
+            value: umRequest.patientId
           }
         ],
         name: [
           {
-            text: record.patientDisplay
+            text: umRequest.patientDisplay
           }
         ]
       }
     },
     {
-      fullUrl: `urn:uuid:${record.providerGroupId}`,
+      fullUrl: `urn:uuid:${umRequest.providerId}`,
       resource: {
         resourceType: "Organization",
-        id: record.providerGroupId,
-        name: record.providerGroupDisplay,
+        id: umRequest.providerId,
+        name: umRequest.providerDisplay,
         type: [
           {
             text: "Provider administrative submitter"
@@ -192,11 +213,11 @@ export function buildPasFhirBundle(record: PriorAuthRecord, evidence: ProviderDo
       }
     },
     {
-      fullUrl: `urn:uuid:${record.planId}`,
+      fullUrl: `urn:uuid:${umRequest.planId}`,
       resource: {
         resourceType: "Organization",
-        id: record.planId,
-        name: record.planDisplay,
+        id: umRequest.planId,
+        name: umRequest.planDisplay,
         type: [
           {
             text: "Health plan"
@@ -205,10 +226,10 @@ export function buildPasFhirBundle(record: PriorAuthRecord, evidence: ProviderDo
       }
     },
     {
-      fullUrl: `urn:uuid:coverage-${record.caseId}`,
+      fullUrl: `urn:uuid:coverage-${umRequest.id}`,
       resource: {
         resourceType: "Coverage",
-        id: `coverage-${record.caseId}`,
+        id: `coverage-${umRequest.id}`,
         status: "active",
         beneficiary: {
           reference: patientReference
@@ -216,20 +237,14 @@ export function buildPasFhirBundle(record: PriorAuthRecord, evidence: ProviderDo
         payor: [
           {
             reference: insurerReference,
-            display: record.planDisplay
+            display: umRequest.planDisplay
           }
         ]
       }
     }
   ];
 
-  return {
-    resourceType: "Bundle",
-    id: `pas-${record.caseId}`,
-    type: "collection",
-    timestamp: record.submittedAt,
-    entry: entries
-  };
+  return entries;
 }
 
 function requestTypeConcept(requestType: RequestType): FhirCodeableConcept {
@@ -274,7 +289,7 @@ function supportingInfoCategory(code: string, display: string): FhirCodeableConc
   };
 }
 
-function codingSystemUri(codingSystem: PriorAuthRecord["codingSystem"]): string {
+function codingSystemUri(codingSystem: UMRequest["codingSystem"]): string {
   switch (codingSystem) {
     case "CPT":
       return "http://www.ama-assn.org/go/cpt";

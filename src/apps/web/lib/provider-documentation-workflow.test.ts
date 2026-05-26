@@ -104,7 +104,7 @@ describe("provider documentation workflow", () => {
     expect(executePolicyBoundPaymentMock).toHaveBeenCalledTimes(1);
     expect(executePolicyBoundPaymentMock.mock.calls[0]?.[0]).toMatchObject({
       caseId: submitted.caseId,
-      incentiveEvaluationId: submitted.caseId,
+      incentiveEvaluationId: submitted.id,
       planId: "acme-health-ppo",
       amount: 5,
       currency: "HBAR",
@@ -118,6 +118,19 @@ describe("provider documentation workflow", () => {
         paymentToken: "HBAR",
         maxPaymentAmount: 5
       })
+    });
+    const businessEvaluationStore = executePolicyBoundPaymentMock.mock.calls[0]![1]!.businessEvaluationStore;
+    expect(businessEvaluationStore).toBeDefined();
+    await expect(
+      businessEvaluationStore!.getAttestation({
+        incentiveEvaluationId: submitted.id,
+        caseId: submitted.caseId,
+        planId: "acme-health-ppo",
+        policyId: rows[0]!.policyId
+      })
+    ).resolves.toMatchObject({
+      incentiveEvaluationId: submitted.id,
+      caseId: submitted.caseId
     });
   });
 
@@ -286,7 +299,7 @@ describe("provider documentation workflow", () => {
     );
     expect(paymentPolicyEvidenceStore.saved).toHaveLength(1);
     expect(paymentPolicyEvidenceStore.saved[0]).toMatchObject({
-      incentiveEvaluationId: submitted.caseId,
+      incentiveEvaluationId: submitted.id,
       caseId: submitted.caseId,
       planId: "summit-health-hmo",
       paymentPolicyId: "summit-health-hmo",
@@ -336,6 +349,7 @@ describe("provider documentation workflow", () => {
 
   it("persists submitted prior authorizations as PAS FHIR bundles", async () => {
     const storedRequests: StoredPasRequest[] = [];
+    const storedRows: IncentiveWorklistRow[] = [];
     const workflow = createProviderDocumentationWorkflow(undefined, {
       backend: "firestore",
       async savePriorAuth(request) {
@@ -347,20 +361,24 @@ describe("provider documentation workflow", () => {
       async getPriorAuthRecord(caseId) {
         return storedRequests.find((request) => request.record.caseId === caseId)?.record ?? null;
       },
-      async getEvidence(caseId) {
-        return storedRequests.find((request) => request.evidence.caseId === caseId)?.evidence ?? null;
+      async getEvidence(umRequestId) {
+        return storedRequests.find((request) => request.record.id === umRequestId)?.evidence ?? null;
       },
       async listPasEvents() {
-        return storedRequests.map((request) => ({ eventType: "PAS_SUBMITTED", caseId: request.record.caseId }));
+        return storedRequests.map((request) => ({
+          eventType: "PAS_SUBMITTED",
+          caseId: request.record.caseId,
+          umRequestId: request.record.id
+        }));
       },
-      async saveIncentiveRow() {
-        return undefined;
+      async saveIncentiveRow(row) {
+        storedRows.push(row);
       },
       async listIncentiveRows() {
-        return [];
+        return storedRows;
       },
-      async getIncentiveRow() {
-        return null;
+      async getIncentiveRow(umRequestId) {
+        return storedRows.find((row) => row.umRequestId === umRequestId) ?? null;
       }
     });
 
@@ -377,6 +395,12 @@ describe("provider documentation workflow", () => {
 
     await expect(workflow.listPriorAuths()).resolves.toEqual([expect.objectContaining({ caseId: submitted.caseId })]);
     await expect(workflow.getEvidence(submitted.caseId)).resolves.toMatchObject({ caseId: submitted.caseId });
+    expect(storedRows).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        umRequestId: submitted.id,
+        caseId: submitted.caseId
+      })
+    ]));
     expect(storedRequests[0]).toMatchObject({
       record: { caseId: submitted.caseId },
       evidence: { caseId: submitted.caseId },
@@ -472,6 +496,7 @@ describe("provider documentation workflow", () => {
       fhirBundle: buildPasFhirBundle(record, evidence)
     };
     let incentiveRow: IncentiveWorklistRow | null = {
+      umRequestId: record.id,
       caseId: record.caseId,
       submittedAt: "2026-05-24T00:00:00.000Z",
       providerGroupDisplay: record.providerGroupDisplay,
@@ -515,11 +540,11 @@ describe("provider documentation workflow", () => {
       async getPriorAuthRecord(caseId) {
         return caseId === record.caseId ? storedRequest.record : null;
       },
-      async getEvidence(caseId) {
-        return caseId === record.caseId ? storedRequest.evidence : null;
+      async getEvidence(umRequestId) {
+        return umRequestId === record.id ? storedRequest.evidence : null;
       },
       async listPasEvents() {
-        return [{ eventType: "PAS_SUBMITTED", caseId: record.caseId }];
+        return [{ eventType: "PAS_SUBMITTED", caseId: record.caseId, umRequestId: record.id }];
       },
       async saveIncentiveRow(row) {
         incentiveRow = row;
@@ -527,8 +552,8 @@ describe("provider documentation workflow", () => {
       async listIncentiveRows() {
         return incentiveRow ? [incentiveRow] : [];
       },
-      async getIncentiveRow(caseId) {
-        return caseId === record.caseId ? incentiveRow : null;
+      async getIncentiveRow(umRequestId) {
+        return umRequestId === record.id ? incentiveRow : null;
       }
     });
 

@@ -41,6 +41,7 @@ export interface PolicyCriterionMatch {
 }
 
 export interface IncentiveWorklistRow {
+  umRequestId: string;
   caseId: string;
   planId?: string;
   planDisplay?: string;
@@ -103,7 +104,7 @@ export function createProviderDocumentationWorkflow(
       return null;
     }
 
-    const existing = rows.get(event.caseId) ?? (await persistence?.getIncentiveRow(event.caseId)) ?? null;
+    const existing = rows.get(event.caseId) ?? (await persistence?.getIncentiveRow(event.umRequestId)) ?? null;
     if (existing && isCurrentIncentiveRow(existing, record)) {
       rows.set(event.caseId, existing);
       return existing;
@@ -125,7 +126,7 @@ export function createProviderDocumentationWorkflow(
   }
 
   async function settleEvent(event: PasSubmittedEvent, record: PriorAuthRecord): Promise<IncentiveWorklistRow | null> {
-    const evidence = (await persistence?.getEvidence(event.caseId)) ?? platform.getEvidence(event.caseId);
+    const evidence = (await persistence?.getEvidence(event.umRequestId)) ?? platform.getEvidence(event.caseId);
     if (!evidence) {
       return null;
     }
@@ -157,6 +158,7 @@ export function createProviderDocumentationWorkflow(
       transactionId: null
     });
     const baseRow: IncentiveWorklistRow = {
+      umRequestId: record.id,
       caseId: record.caseId,
       planId: record.planId,
       planDisplay: record.planDisplay,
@@ -201,7 +203,7 @@ export function createProviderDocumentationWorkflow(
 
       const payment = await executePolicyBoundPayment({
         auditId: audit.id,
-        incentiveEvaluationId: event.caseId,
+        incentiveEvaluationId: event.umRequestId,
         planId: evidence.planId,
         amount: evaluation.result.amount,
         currency: evaluation.result.currency,
@@ -217,7 +219,11 @@ export function createProviderDocumentationWorkflow(
         businessEvaluationStore: createBusinessEvaluationAttestationStore(
           persistence ?? {
             async getIncentiveRow(incentiveEvaluationId) {
-              return rows.get(incentiveEvaluationId) ?? null;
+              return (
+                rows.get(incentiveEvaluationId) ??
+                [...rows.values()].find((row) => row.umRequestId === incentiveEvaluationId) ??
+                null
+              );
             }
           },
           policyStore
@@ -247,7 +253,7 @@ export function createProviderDocumentationWorkflow(
       );
       return paid;
     } catch (error) {
-      const existing = rows.get(event.caseId) ?? (await persistence?.getIncentiveRow(event.caseId)) ?? null;
+      const existing = rows.get(event.caseId) ?? (await persistence?.getIncentiveRow(event.umRequestId)) ?? null;
       if (existing && isCurrentIncentiveRow(existing, record) && existing.incentiveStatus === "paid" && existing.transactionId) {
         rows.set(event.caseId, existing);
         return existing;
@@ -544,7 +550,7 @@ function buildPaymentPolicyEvidence({
   const token = row.currency;
 
   return {
-    incentiveEvaluationId: row.caseId,
+    incentiveEvaluationId: row.umRequestId,
     caseId: row.caseId,
     planId: paymentPolicy.planId,
     paymentPolicyId: paymentPolicy.planId,

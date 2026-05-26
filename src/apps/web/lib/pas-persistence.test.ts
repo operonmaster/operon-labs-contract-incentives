@@ -44,7 +44,7 @@ describe("PAS persistence store selection", () => {
       firestore
     );
     const platform = createInMemoryUmPlatform();
-    const record = platform.submitPriorAuth({
+    const umRequest = platform.submitPriorAuth({
       requestType: "outpatient_service",
       serviceCode: "knee_mri",
       dtr: {
@@ -54,22 +54,23 @@ describe("PAS persistence store selection", () => {
         clinicalNoteAttached: true
       }
     });
-    const evidence = platform.getEvidence(record.caseId)!;
+    const evidence = platform.getEvidence(umRequest.id)!;
 
-    await store.savePriorAuth({
-      record,
+    await store.savePasSubmission({
+      umRequest,
       evidence,
-      fhirBundle: buildPasFhirBundle(record, evidence)
+      fhirBundle: buildPasFhirBundle(umRequest, evidence)
     });
     await store.saveIncentiveRow({
-      caseId: record.caseId,
-      submittedAt: record.submittedAt,
-      providerGroupDisplay: record.providerGroupDisplay,
-      requestType: record.requestType,
-      serviceLabel: record.serviceLabel,
-      serviceCode: record.serviceCode,
-      paResult: record.paResult,
-      denialReason: record.denialReason,
+      umRequestId: umRequest.id,
+      caseId: umRequest.id,
+      submittedAt: umRequest.submittedAt,
+      providerGroupDisplay: umRequest.providerGroupDisplay,
+      requestType: umRequest.requestType,
+      serviceLabel: umRequest.serviceLabel,
+      serviceCode: umRequest.serviceCode,
+      paResult: umRequest.paResult,
+      denialReason: umRequest.denialReason,
       incentiveStatus: "paid",
       paymentStatus: "auto_executed",
       incentiveValue: 5,
@@ -90,20 +91,50 @@ describe("PAS persistence store selection", () => {
         decision: "approved",
         reasonCodes: [],
         transactionId: "testnet-1",
-        createdAt: record.submittedAt
+        createdAt: umRequest.submittedAt
       },
       walletId: "0.0.9049549",
       paymentIntentId: "pi_test",
       transactionId: "testnet-1"
     });
 
-    await expect(store.getPriorAuthRecord(record.caseId)).resolves.toMatchObject({ caseId: record.caseId });
-    await expect(store.getEvidence(record.caseId)).resolves.toMatchObject({ caseId: record.caseId, fhirFieldsPresent: true });
-    await expect(store.listPasEvents()).resolves.toEqual([
-      { eventType: "PAS_SUBMITTED", caseId: record.caseId, umRequestId: record.id }
+    const snapshot = await firestore.collection("pasClaims").doc(umRequest.id).get();
+    expect(snapshot.data()).toMatchObject({
+      umRequest: {
+        id: umRequest.id
+      },
+      evidence: {
+        umRequestId: umRequest.id
+      },
+      fhirBundle: {
+        id: umRequest.id
+      }
+    });
+    await expect(store.getUmRequest(umRequest.id)).resolves.toMatchObject({
+      id: umRequest.id
+    });
+    await expect(store.getEvidence(umRequest.id)).resolves.toMatchObject({
+      umRequestId: umRequest.id,
+      fhirFieldsPresent: true
+    });
+    await expect(store.listUmEvents()).resolves.toEqual([
+      { eventType: "PAS_SUBMITTED", caseId: umRequest.id, umRequestId: umRequest.id },
+      { eventType: "UM_REQUEST_CREATED", caseId: umRequest.id, umRequestId: umRequest.id }
     ]);
+    await expect(firestore.collection("incentiveEvaluations").doc(umRequest.id).get()).resolves.toMatchObject({
+      exists: true
+    });
+    await expect(store.getIncentiveRow(umRequest.id)).resolves.toMatchObject({
+      umRequestId: umRequest.id,
+      caseId: umRequest.id,
+      paymentStatus: "auto_executed"
+    });
     await expect(store.listIncentiveRows()).resolves.toEqual([
-      expect.objectContaining({ caseId: record.caseId, paymentStatus: "auto_executed" })
+      expect.objectContaining({
+        umRequestId: umRequest.id,
+        caseId: umRequest.id,
+        paymentStatus: "auto_executed"
+      })
     ]);
     expect(firestore.collectionNames()).toEqual(
       expect.arrayContaining(["pasClaims", "auditEvents", "incentiveEvaluations"])
@@ -121,23 +152,84 @@ describe("PAS persistence store selection", () => {
       firestore
     );
     const platform = createInMemoryUmPlatform();
-    const record = platform.submitPriorAuth({
+    const umRequest = platform.submitPriorAuth({
       requestType: "outpatient_service",
       serviceCode: "knee_mri"
     });
-    const evidence = platform.getEvidence(record.caseId)!;
+    const evidence = platform.getEvidence(umRequest.id)!;
 
-    await store.savePriorAuth({
-      record,
+    await store.savePasSubmission({
+      umRequest,
       evidence,
-      fhirBundle: buildPasFhirBundle(record, evidence)
+      fhirBundle: buildPasFhirBundle(umRequest, evidence)
     });
 
     expect(firestore.batchCommits()).toBe(1);
-    await expect(store.getPriorAuthRecord(record.caseId)).resolves.toMatchObject({ caseId: record.caseId });
-    await expect(store.listPasEvents()).resolves.toEqual([
-      { eventType: "PAS_SUBMITTED", caseId: record.caseId, umRequestId: record.id }
+    await expect(store.getUmRequest(umRequest.id)).resolves.toMatchObject({
+      id: umRequest.id
+    });
+    await expect(store.listUmEvents()).resolves.toEqual([
+      { eventType: "PAS_SUBMITTED", caseId: umRequest.id, umRequestId: umRequest.id },
+      { eventType: "UM_REQUEST_CREATED", caseId: umRequest.id, umRequestId: umRequest.id }
     ]);
+  });
+
+  it("rejects incentive rows without a UM request id instead of falling back to another key", async () => {
+    const firestore = createFakeFirestore();
+    const store = createFirestorePasPersistenceStore(
+      {
+        projectId: "operon-labs-nonprod",
+        databaseId: "(default)"
+      },
+      firestore
+    );
+    const platform = createInMemoryUmPlatform();
+    const umRequest = platform.submitPriorAuth({
+      requestType: "outpatient_service",
+      serviceCode: "knee_mri"
+    });
+
+    await expect(
+      store.saveIncentiveRow({
+        caseId: umRequest.id,
+        submittedAt: umRequest.submittedAt,
+        providerGroupDisplay: umRequest.providerGroupDisplay,
+        requestType: umRequest.requestType,
+        serviceLabel: umRequest.serviceLabel,
+        serviceCode: umRequest.serviceCode,
+        paResult: umRequest.paResult,
+        denialReason: umRequest.denialReason,
+        incentiveStatus: "paid",
+        paymentStatus: "auto_executed",
+        incentiveValue: 5,
+        currency: "HBAR",
+        settlementToken: {
+          symbol: "HBAR"
+        },
+        reason: "Complete DTR + PAS before cutoff",
+        reasonCodes: [],
+        policyId: "provider-documentation-completeness-v1",
+        policyControls: [],
+        policyCriteria: [],
+        audit: {
+          id: "audit-1",
+          requestHash: "hash-1",
+          policyId: "provider-documentation-completeness-v1",
+          policyVersion: "2026-05-24",
+          decision: "approved",
+          reasonCodes: [],
+          transactionId: "testnet-1",
+          createdAt: umRequest.submittedAt
+        },
+        walletId: "0.0.9049549",
+        paymentIntentId: "pi_test",
+        transactionId: "testnet-1"
+      } as unknown as Parameters<typeof store.saveIncentiveRow>[0])
+    ).rejects.toThrow("UM_REQUEST_ID_REQUIRED");
+
+    await expect(firestore.collection("incentiveEvaluations").doc(umRequest.id).get()).resolves.toMatchObject({
+      exists: false
+    });
   });
 });
 

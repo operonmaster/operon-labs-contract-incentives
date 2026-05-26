@@ -162,7 +162,6 @@ export interface UmPlatform {
   submitPriorAuth(input: PriorAuthSubmissionInput): UMRequest;
   listUmRequests(): UMRequest[];
   getUmRequest(umRequestId: string): UMRequest | null;
-  findUmRequestBySourceCaseId(caseId: string): UMRequest | null;
   listEvents(): UMPlatformEvent[];
   getEvidence(umRequestId: string): ProviderDocumentationEvidence | null;
   startClinicalReview(umRequestId: string, reviewerId: string): UMRequest;
@@ -207,8 +206,8 @@ export function generatePriorAuthCaseId(date: Date = new Date()): string {
   return `PA-${yy}${month}${day}-${hour}${minute}-${generateCaseIdSalt()}`;
 }
 
-export function generateUmRequestId(sourceCaseId: string): string {
-  return sourceCaseId.replace(/^PA-/, "UMR-");
+export function generateUmRequestId(id: string): string {
+  return id;
 }
 
 function addHours(isoTimestamp: string, hours: number): string {
@@ -356,7 +355,7 @@ export function createInMemoryUmPlatform(options: UmPlatformOptions = {}): UmPla
           denialReasonCode: null
         },
         auditRefs: {
-          pasClaimBundleId: `pas-${caseId}`,
+          pasClaimBundleId: caseId,
           pasClaimResponseBundleId: null
         },
         pasSubmitted: true,
@@ -379,11 +378,6 @@ export function createInMemoryUmPlatform(options: UmPlatformOptions = {}): UmPla
 
       return request ? copyUmRequest(request) : null;
     },
-    findUmRequestBySourceCaseId(caseId) {
-      const request = findRequestBySourceCaseId(requests, caseId);
-
-      return request ? copyUmRequest(request) : null;
-    },
     listPriorAuths() {
       return [...requests.values()].map(copyPriorAuthRecord);
     },
@@ -391,7 +385,7 @@ export function createInMemoryUmPlatform(options: UmPlatformOptions = {}): UmPla
       return events.map(copyUmPlatformEvent);
     },
     getEvidence(umRequestId) {
-      const request = requests.get(umRequestId) ?? findRequestBySourceCaseId(requests, umRequestId);
+      const request = requests.get(umRequestId);
 
       if (!request) {
         return null;
@@ -410,7 +404,7 @@ export function createInMemoryUmPlatform(options: UmPlatformOptions = {}): UmPla
       requests.set(updated.id, updated);
       events.push({
         eventType: "UM_REQUEST_REVIEW_STARTED",
-        caseId: updated.sourceCaseId,
+        caseId: updated.id,
         umRequestId: updated.id
       });
 
@@ -427,7 +421,7 @@ export function createInMemoryUmPlatform(options: UmPlatformOptions = {}): UmPla
       requests.set(updated.id, updated);
       events.push({
         eventType: "UM_REQUEST_DETERMINED",
-        caseId: updated.sourceCaseId,
+        caseId: updated.id,
         umRequestId: updated.id
       });
 
@@ -442,7 +436,7 @@ export function buildProviderDocumentationEvidence(record: UMRequest): ProviderD
   const denialReason = record.coverage.reasonCode;
 
   return {
-    caseId: record.sourceCaseId,
+    caseId: record.id,
     planId: record.planId,
     submitter: {
       id: "lakeside-provider-admin"
@@ -494,7 +488,7 @@ function getUnusedCaseId(requests: Map<string, UMRequest>, generateCaseId: () =>
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const candidate = generateCaseId();
 
-    if (!findRequestBySourceCaseId(requests, candidate)) {
+    if (!requests.has(candidate)) {
       return candidate;
     }
   }
@@ -518,10 +512,6 @@ function generateCaseIdSalt(length = 8): string {
   }
 
   return Array.from({ length }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
-}
-
-function findRequestBySourceCaseId(requests: Map<string, UMRequest>, caseId: string): UMRequest | null {
-  return [...requests.values()].find((request) => request.sourceCaseId === caseId) ?? null;
 }
 
 function copyUmRequest(request: UMRequest): UMRequest {

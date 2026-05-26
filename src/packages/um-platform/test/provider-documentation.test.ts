@@ -192,6 +192,8 @@ describe("provider documentation UM Platform", () => {
       paResult: "submitted_pending"
     });
     expect(submitted.caseId).toMatch(PA_CASE_ID_PATTERN);
+    expect(submitted.id).toBe(submitted.caseId);
+    expect(submitted.sourceCaseId).toBe(submitted.id);
     expect(platform.listEvents()).toEqual([
       {
         eventType: "PAS_SUBMITTED",
@@ -423,7 +425,7 @@ describe("provider documentation UM Platform", () => {
     });
 
     expect(umRequest).toMatchObject({
-      id: "UMR-260526-0900-AAAA1111",
+      id: "PA-260526-0900-AAAA1111",
       source: "pas_fhir",
       sourceCaseId: "PA-260526-0900-AAAA1111",
       state: "pend",
@@ -445,7 +447,7 @@ describe("provider documentation UM Platform", () => {
         denialReasonCode: null
       },
       auditRefs: {
-        pasClaimBundleId: "pas-PA-260526-0900-AAAA1111",
+        pasClaimBundleId: "PA-260526-0900-AAAA1111",
         pasClaimResponseBundleId: null
       }
     });
@@ -456,12 +458,12 @@ describe("provider documentation UM Platform", () => {
       {
         eventType: "PAS_SUBMITTED",
         caseId: "PA-260526-0900-AAAA1111",
-        umRequestId: "UMR-260526-0900-AAAA1111"
+        umRequestId: "PA-260526-0900-AAAA1111"
       },
       {
         eventType: "UM_REQUEST_CREATED",
         caseId: "PA-260526-0900-AAAA1111",
-        umRequestId: "UMR-260526-0900-AAAA1111"
+        umRequestId: "PA-260526-0900-AAAA1111"
       }
     ]);
   });

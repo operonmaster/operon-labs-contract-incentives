@@ -1,7 +1,8 @@
 import type {
   PasFhirBundle,
   PasSubmittedEvent,
-  PriorAuthRecord,
+  UMPlatformEvent,
+  UMRequest,
   ProviderDocumentationEvidence
 } from "@operon-labs/um-platform";
 import { generateUmRequestId } from "@operon-labs/um-platform";
@@ -12,23 +13,46 @@ export type StoredPasSubmittedEvent = Omit<PasSubmittedEvent, "umRequestId"> & {
   umRequestId?: string;
 };
 
-export interface StoredPasRequest {
-  record: PriorAuthRecord;
+export type StoredProviderDocumentationEvidence = ProviderDocumentationEvidence & {
+  umRequestId: string;
+  sourceCaseId: string;
+};
+
+export interface StoredPasSubmission {
+  umRequest: UMRequest;
   evidence: ProviderDocumentationEvidence;
   fhirBundle: PasFhirBundle;
+}
+
+export interface StoredPasRequest {
+  record: UMRequest;
+  evidence: ProviderDocumentationEvidence;
+  fhirBundle: PasFhirBundle;
+}
+
+export interface PersistedIncentiveWorklistRow extends IncentiveWorklistRow {
+  umRequestId: string;
 }
 
 /* eslint-disable no-unused-vars -- TypeScript interface method signatures require parameter names. */
 export interface PasPersistenceStore {
   backend: PasStoreBackend;
   savePriorAuth(request: StoredPasRequest): Promise<void>;
-  listPriorAuthRecords(): Promise<PriorAuthRecord[]>;
-  getPriorAuthRecord(caseId: string): Promise<PriorAuthRecord | null>;
-  getEvidence(caseId: string): Promise<ProviderDocumentationEvidence | null>;
+  listPriorAuthRecords(): Promise<UMRequest[]>;
+  getPriorAuthRecord(caseId: string): Promise<UMRequest | null>;
+  getEvidence(umRequestId: string): Promise<ProviderDocumentationEvidence | null>;
   listPasEvents(): Promise<StoredPasSubmittedEvent[]>;
-  saveIncentiveRow(row: IncentiveWorklistRow): Promise<void>;
-  listIncentiveRows(): Promise<IncentiveWorklistRow[]>;
-  getIncentiveRow(caseId: string): Promise<IncentiveWorklistRow | null>;
+  saveIncentiveRow(row: PersistedIncentiveWorklistRow): Promise<void>;
+  listIncentiveRows(): Promise<PersistedIncentiveWorklistRow[]>;
+  getIncentiveRow(umRequestId: string): Promise<PersistedIncentiveWorklistRow | null>;
+}
+
+export interface UmPasPersistenceStore extends PasPersistenceStore {
+  savePasSubmission(request: StoredPasSubmission): Promise<void>;
+  saveUmRequest(umRequest: UMRequest): Promise<void>;
+  listUmRequests(): Promise<UMRequest[]>;
+  getUmRequest(umRequestId: string): Promise<UMRequest | null>;
+  listUmEvents(): Promise<UMPlatformEvent[]>;
 }
 
 interface PasPersistenceEnv {
@@ -89,7 +113,15 @@ export interface FirestoreDatabase {
 }
 /* eslint-enable no-unused-vars */
 
-export function createPasPersistenceStoreFromEnv(env: PasPersistenceEnv = process.env): PasPersistenceStore | undefined {
+interface StoredPasClaimDocument {
+  umRequest?: UMRequest;
+  record?: UMRequest;
+  evidence: ProviderDocumentationEvidence;
+  fhirBundle: PasFhirBundle;
+  storedAt?: string;
+}
+
+export function createPasPersistenceStoreFromEnv(env: PasPersistenceEnv = process.env): UmPasPersistenceStore | undefined {
   const backend = env.PAS_STORE_BACKEND?.trim().toLowerCase() || DEFAULT_PAS_STORE_BACKEND;
 
   if (backend === "memory") {
@@ -111,11 +143,14 @@ export function createPasPersistenceStoreFromEnv(env: PasPersistenceEnv = proces
   });
 }
 
-export function createFirestorePasPersistenceStore(config: FirestoreConfig, firestore?: FirestoreDatabase): PasPersistenceStore {
+export function createFirestorePasPersistenceStore(
+  config: FirestoreConfig,
+  firestore?: FirestoreDatabase
+): UmPasPersistenceStore {
   return new FirestorePasPersistenceStore(config, firestore);
 }
 
-class FirestorePasPersistenceStore implements PasPersistenceStore {
+class FirestorePasPersistenceStore implements UmPasPersistenceStore {
   readonly backend = "firestore" as const;
   private firestore: FirestoreDatabase | null = null;
   private readonly config: FirestoreConfig;
@@ -128,94 +163,157 @@ class FirestorePasPersistenceStore implements PasPersistenceStore {
     this.firestore = firestore ?? null;
   }
 
-  async savePriorAuth(request: StoredPasRequest): Promise<void> {
+  async savePasSubmission(request: StoredPasSubmission): Promise<void> {
     const storedAt = new Date().toISOString();
-    const event: PasSubmittedEvent = {
-      eventType: "PAS_SUBMITTED",
-      caseId: request.record.caseId,
-      umRequestId: request.record.id
-    };
+    const events: UMPlatformEvent[] = [
+      { eventType: "PAS_SUBMITTED", caseId: request.umRequest.id, umRequestId: request.umRequest.id },
+      { eventType: "UM_REQUEST_CREATED", caseId: request.umRequest.id, umRequestId: request.umRequest.id }
+    ];
 
     const firestore = await this.getFirestore();
-    const claimRef = firestore.collection(PAS_CLAIMS_COLLECTION).doc(request.record.caseId);
-    const eventRef = firestore.collection(AUDIT_EVENTS_COLLECTION).doc(`${request.record.caseId}-${event.eventType}`);
+    const claimRef = firestore.collection(PAS_CLAIMS_COLLECTION).doc(request.umRequest.id);
     const claimValue = {
-      ...request,
+      umRequest: request.umRequest,
+      evidence: buildStoredEvidence(request.evidence, request.umRequest),
+      fhirBundle: request.fhirBundle,
       storedAt
     };
-    const eventValue = {
+    const eventValues = events.map((event) => ({
       ...event,
-      submittedAt: request.record.submittedAt,
+      submittedAt: request.umRequest.submittedAt,
       storedAt
-    };
+    }));
 
     if (firestore.batch) {
-      await firestore.batch().set(claimRef, claimValue).set(eventRef, eventValue).commit();
+      let batch = firestore.batch().set(claimRef, claimValue);
+      for (const eventValue of eventValues) {
+        const eventRef = firestore.collection(AUDIT_EVENTS_COLLECTION).doc(
+          `${request.umRequest.id}-${eventValue.eventType}`
+        );
+        batch = batch.set(eventRef, eventValue);
+      }
+
+      await batch.commit();
       return;
     }
 
-    await Promise.all([claimRef.set(claimValue), eventRef.set(eventValue)]);
+    await Promise.all([
+      claimRef.set(claimValue),
+      ...eventValues.map((eventValue) =>
+        firestore
+          .collection(AUDIT_EVENTS_COLLECTION)
+          .doc(`${request.umRequest.id}-${eventValue.eventType}`)
+          .set(eventValue)
+      )
+    ]);
   }
 
-  async listPriorAuthRecords(): Promise<PriorAuthRecord[]> {
+  async saveUmRequest(umRequest: UMRequest): Promise<void> {
     const firestore = await this.getFirestore();
-    const snapshot = await firestore.collection(PAS_CLAIMS_COLLECTION).orderBy("record.submittedAt", "desc").get();
-    return snapshot.docs.map((doc) => (doc.data() as { record: PriorAuthRecord }).record);
-  }
-
-  async getPriorAuthRecord(caseId: string): Promise<PriorAuthRecord | null> {
-    const firestore = await this.getFirestore();
-    const snapshot = await firestore.collection(PAS_CLAIMS_COLLECTION).doc(caseId).get();
+    const ref = firestore.collection(PAS_CLAIMS_COLLECTION).doc(umRequest.id);
+    const snapshot = await ref.get();
 
     if (!snapshot.exists) {
-      return null;
+      throw new Error(`UM_REQUEST_NOT_FOUND:${umRequest.id}`);
     }
 
-    return (snapshot.data() as { record: PriorAuthRecord }).record;
-  }
-
-  async getEvidence(caseId: string): Promise<ProviderDocumentationEvidence | null> {
-    const firestore = await this.getFirestore();
-    const snapshot = await firestore.collection(PAS_CLAIMS_COLLECTION).doc(caseId).get();
-
-    if (!snapshot.exists) {
-      return null;
-    }
-
-    return (snapshot.data() as { evidence: ProviderDocumentationEvidence }).evidence;
-  }
-
-  async listPasEvents(): Promise<StoredPasSubmittedEvent[]> {
-    const firestore = await this.getFirestore();
-    const snapshot = await firestore.collection(AUDIT_EVENTS_COLLECTION).orderBy("submittedAt", "asc").get();
-    return snapshot.docs.map((doc) => {
-      return normalizeStoredPasEvent(doc.data() as StoredPasSubmittedEvent);
+    await ref.set({
+      ...(snapshot.data() as Record<string, unknown>),
+      umRequest,
+      storedAt: new Date().toISOString()
     });
   }
 
-  async saveIncentiveRow(row: IncentiveWorklistRow): Promise<void> {
+  async listUmRequests(): Promise<UMRequest[]> {
     const firestore = await this.getFirestore();
-    await firestore.collection(INCENTIVE_EVALUATIONS_COLLECTION).doc(row.caseId).set({
+    const snapshot = await firestore.collection(PAS_CLAIMS_COLLECTION).orderBy("umRequest.submittedAt", "desc").get();
+    return snapshot.docs
+      .map((doc) => extractStoredUmRequest(doc.data() as StoredPasClaimDocument))
+      .filter((umRequest): umRequest is UMRequest => Boolean(umRequest));
+  }
+
+  async getUmRequest(umRequestId: string): Promise<UMRequest | null> {
+    const data = await this.getStoredPasSubmissionDataByUmRequestId(umRequestId);
+
+    return data ? extractStoredUmRequest(data) : null;
+  }
+
+  async getEvidence(umRequestId: string): Promise<ProviderDocumentationEvidence | null> {
+    const data = await this.getStoredPasSubmissionDataByUmRequestId(umRequestId);
+
+    if (!data) {
+      return null;
+    }
+
+    return data.evidence;
+  }
+
+  async listUmEvents(): Promise<UMPlatformEvent[]> {
+    const firestore = await this.getFirestore();
+    const snapshot = await firestore.collection(AUDIT_EVENTS_COLLECTION).orderBy("submittedAt", "asc").get();
+    return snapshot.docs.map((doc) => normalizeStoredUmEvent(doc.data() as UMPlatformEvent));
+  }
+
+  async savePriorAuth(request: StoredPasRequest): Promise<void> {
+    await this.savePasSubmission({
+      umRequest: request.record,
+      evidence: request.evidence,
+      fhirBundle: request.fhirBundle
+    });
+  }
+
+  async listPriorAuthRecords(): Promise<UMRequest[]> {
+    return this.listUmRequests();
+  }
+
+  async getPriorAuthRecord(caseId: string): Promise<UMRequest | null> {
+    return this.getUmRequest(caseId);
+  }
+
+  async listPasEvents(): Promise<StoredPasSubmittedEvent[]> {
+    return (await this.listUmEvents())
+      .filter((event): event is PasSubmittedEvent => event.eventType === "PAS_SUBMITTED")
+      .map(toPasSubmittedEvent);
+  }
+
+  private async getStoredPasSubmissionDataByUmRequestId(umRequestId: string): Promise<StoredPasClaimDocument | null> {
+    const firestore = await this.getFirestore();
+    const snapshot = await firestore.collection(PAS_CLAIMS_COLLECTION).doc(umRequestId).get();
+
+    if (snapshot.exists) {
+      return snapshot.data() as StoredPasClaimDocument;
+    }
+
+    return null;
+  }
+
+  async saveIncentiveRow(row: PersistedIncentiveWorklistRow): Promise<void> {
+    if (!row.umRequestId) {
+      throw new Error("UM_REQUEST_ID_REQUIRED");
+    }
+
+    const firestore = await this.getFirestore();
+    await firestore.collection(INCENTIVE_EVALUATIONS_COLLECTION).doc(row.umRequestId).set({
       ...row,
       storedAt: new Date().toISOString()
     });
   }
 
-  async listIncentiveRows(): Promise<IncentiveWorklistRow[]> {
+  async listIncentiveRows(): Promise<PersistedIncentiveWorklistRow[]> {
     const firestore = await this.getFirestore();
     const snapshot = await firestore.collection(INCENTIVE_EVALUATIONS_COLLECTION).orderBy("submittedAt", "desc").get();
-    return snapshot.docs.map((doc) => stripStoredAt(doc.data() as IncentiveWorklistRow & { storedAt?: string }));
+    return snapshot.docs.map((doc) => stripStoredAt(doc.data() as PersistedIncentiveWorklistRow & { storedAt?: string }));
   }
 
-  async getIncentiveRow(caseId: string): Promise<IncentiveWorklistRow | null> {
+  async getIncentiveRow(umRequestId: string): Promise<PersistedIncentiveWorklistRow | null> {
     const firestore = await this.getFirestore();
-    const snapshot = await firestore.collection(INCENTIVE_EVALUATIONS_COLLECTION).doc(caseId).get();
+    const snapshot = await firestore.collection(INCENTIVE_EVALUATIONS_COLLECTION).doc(umRequestId).get();
 
-    if (!snapshot.exists) {
-      return null;
+    if (snapshot.exists) {
+      return stripStoredAt(snapshot.data() as PersistedIncentiveWorklistRow & { storedAt?: string });
     }
 
-    return stripStoredAt(snapshot.data() as IncentiveWorklistRow & { storedAt?: string });
+    return null;
   }
 
   private async getFirestore(): Promise<FirestoreDatabase> {
@@ -239,13 +337,34 @@ export function toPasSubmittedEvent(event: StoredPasSubmittedEvent): PasSubmitte
   };
 }
 
-function normalizeStoredPasEvent(event: StoredPasSubmittedEvent): StoredPasSubmittedEvent {
-  return toPasSubmittedEvent(event);
+function buildStoredEvidence(
+  evidence: ProviderDocumentationEvidence,
+  umRequest: UMRequest
+): StoredProviderDocumentationEvidence {
+  return {
+    ...evidence,
+    umRequestId: umRequest.id,
+    sourceCaseId: umRequest.id
+  };
 }
 
-function stripStoredAt(row: IncentiveWorklistRow & { storedAt?: string }): IncentiveWorklistRow {
+function extractStoredUmRequest(data: StoredPasClaimDocument): UMRequest | null {
+  return data.umRequest ?? data.record ?? null;
+}
+
+function normalizeStoredUmEvent(event: UMPlatformEvent): UMPlatformEvent {
+  return {
+    eventType: event.eventType,
+    caseId: event.caseId,
+    umRequestId: event.umRequestId ?? generateUmRequestId(event.caseId)
+  };
+}
+
+function stripStoredAt(
+  row: PersistedIncentiveWorklistRow & { storedAt?: string }
+): PersistedIncentiveWorklistRow {
   const incentiveRow = { ...row };
-  delete (incentiveRow as IncentiveWorklistRow & { storedAt?: string }).storedAt;
+  delete (incentiveRow as PersistedIncentiveWorklistRow & { storedAt?: string }).storedAt;
   return {
     ...incentiveRow,
     paymentIntentId: incentiveRow.paymentIntentId ?? null,

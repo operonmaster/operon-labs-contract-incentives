@@ -6,6 +6,8 @@
 
 **Architecture:** PAS submissions remain the intake and audit boundary, but `@operon-labs/um-platform` normalizes accepted submissions into `UMRequest`. Provider Documentation and Delegate UM both derive policy-safe evidence from `UMRequest`; the incentive agent receives event metadata and pulls evidence by `umRequestId`. Delegate UM adds review state transitions, a 24-hour SLA clock, and policy-bound payment for timely audit-ready determinations, independent of approved or denied outcome.
 
+**ID Strategy:** Use the generated PA case ID as the canonical UM request ID everywhere. `UMRequest.id`, event `caseId`, event `umRequestId`, FHIR bundle/Claim IDs, Firestore document IDs, incentive evaluation IDs, and payment attestation IDs all use the same `PA-*` value. Do not generate `UMR-*` IDs. If compatibility fields remain temporarily, they must equal `UMRequest.id` and must not introduce a second lookup key.
+
 **Tech Stack:** TypeScript, npm workspaces, Vitest, Next.js App Router, React client components, existing `@operon-labs/um-platform`, `@operon-labs/policy-engine`, `@operon-labs/incentive-agent`, `@operon-labs/hedera-executor`, Firestore-backed stores with memory-test doubles.
 
 ---
@@ -21,11 +23,11 @@ Do not split these into separate implementation branches. If Delegate UM is buil
 
 ## File Structure
 
-- Modify `src/packages/um-platform/src/index.ts`: define `UMRequest`, source PAS IDs, state transitions, SLA fields, review methods, and evidence builders.
-- Modify `src/packages/um-platform/src/pas-fhir.ts`: generate PAS `Claim` bundles from `UMRequest` using `sourceCaseId`.
+- Modify `src/packages/um-platform/src/index.ts`: define `UMRequest`, canonical PA/UM IDs, state transitions, SLA fields, review methods, and evidence builders.
+- Modify `src/packages/um-platform/src/pas-fhir.ts`: generate PAS `Claim` bundles from `UMRequest` using `umRequest.id`.
 - Modify `src/packages/um-platform/test/provider-documentation.test.ts`: migrate existing tests from `PriorAuthRecord` to `UMRequest` and add state/SLA tests.
-- Modify `src/packages/um-platform/test/pas-fhir.test.ts`: verify PAS bundle identity uses `sourceCaseId` while internal workflows use `umRequest.id`.
-- Modify `src/apps/web/lib/pas-persistence.ts`: persist `UMRequest`, policy-safe evidence, PAS bundle, and audit events with both source PA ID and UM request ID.
+- Modify `src/packages/um-platform/test/pas-fhir.test.ts`: verify PAS bundle identity uses `umRequest.id`.
+- Modify `src/apps/web/lib/pas-persistence.ts`: persist `UMRequest`, policy-safe evidence, PAS bundle, and audit events with the canonical PA/UM request ID.
 - Modify `src/apps/web/lib/pas-persistence.test.ts`: verify persistence reads/writes `UMRequest`.
 - Modify `src/packages/policy-engine/src/index.ts`: add deterministic Delegate UM SLA policy checks while keeping Provider Documentation checks intact.
 - Modify `src/packages/policy-engine/test/evaluate-policy.test.ts`: add delegate SLA policy approval/blocking tests.
@@ -36,11 +38,11 @@ Do not split these into separate implementation branches. If Delegate UM is buil
 - Modify `src/packages/incentive-agent/test/provider-documentation-event.test.ts`: migrate provider evidence tests.
 - Create `src/packages/incentive-agent/test/delegate-um-event.test.ts`: verify delegate event evidence and outcome neutrality.
 - Modify `src/apps/web/lib/provider-documentation-workflow.ts`: use `UMRequest` and `UM_REQUEST_CREATED`.
-- Modify `src/apps/web/lib/provider-documentation-workflow.test.ts`: migrate rows to `umRequestId` and `sourceCaseId`.
+- Modify `src/apps/web/lib/provider-documentation-workflow.test.ts`: migrate rows to `umRequestId` and `id`.
 - Create `src/apps/web/lib/delegate-um-workflow.ts`: workflow facade for workqueue, review start, determination, policy evaluation, and settlement.
 - Create `src/apps/web/lib/delegate-um-workflow.test.ts`: workflow and settlement tests.
 - Modify `src/apps/web/app/api/um/prior-auths/route.ts`: return `UMRequest` for the existing provider intake route.
-- Modify `src/apps/web/app/api/um/prior-auths/[caseId]/evidence/route.ts`: accept a path parameter that can be either `umRequestId` or `sourceCaseId`.
+- Modify `src/apps/web/app/api/um/prior-auths/[caseId]/evidence/route.ts`: accept a path parameter that can be the canonical id.
 - Create `src/apps/web/app/api/delegate-um/workqueue/route.ts`.
 - Create `src/apps/web/app/api/delegate-um/requests/[umRequestId]/start-review/route.ts`.
 - Create `src/apps/web/app/api/delegate-um/requests/[umRequestId]/determination/route.ts`.
@@ -52,8 +54,8 @@ Do not split these into separate implementation branches. If Delegate UM is buil
 - Create `src/apps/web/components/delegate-um/DelegateVendorConsole.tsx`.
 - Create `src/apps/web/components/delegate-um/DelegatePlanConsole.tsx`.
 - Create `src/apps/web/components/delegate-um/DelegateReviewModal.tsx`.
-- Modify `src/apps/web/components/provider-documentation/ProviderDocumentationWizard.tsx`: display UM request and source PA IDs.
-- Modify `src/apps/web/components/provider-documentation/PlanIncentivesConsole.tsx`: display UM request ID and source PA ID.
+- Modify `src/apps/web/components/provider-documentation/ProviderDocumentationWizard.tsx`: display the canonical PA/UM request ID.
+- Modify `src/apps/web/components/provider-documentation/PlanIncentivesConsole.tsx`: display the canonical PA/UM request ID.
 - Modify `src/apps/web/components/provider-documentation/PlanAuditDetailsModal.tsx`: use `umRequestId`.
 - Modify `src/apps/web/components/demo-catalog.ts`: mark Delegate UM active.
 - Modify `src/apps/web/app/styles.css`: add delegate console styles without disrupting existing provider views.
@@ -86,9 +88,8 @@ it("creates a UMRequest from an accepted PAS submission and emits intake events"
   });
 
   expect(umRequest).toMatchObject({
-    id: "UMR-260526-0900-AAAA1111",
+    id: "PA-260526-0900-AAAA1111",
     source: "pas_fhir",
-    sourceCaseId: "PA-260526-0900-AAAA1111",
     state: "pend",
     outcomeStatus: null,
     slaHours: 24,
@@ -108,7 +109,7 @@ it("creates a UMRequest from an accepted PAS submission and emits intake events"
       denialReasonCode: null
     },
     auditRefs: {
-      pasClaimBundleId: "pas-PA-260526-0900-AAAA1111",
+      pasClaimBundleId: "PA-260526-0900-AAAA1111",
       pasClaimResponseBundleId: null
     }
   });
@@ -117,12 +118,12 @@ it("creates a UMRequest from an accepted PAS submission and emits intake events"
     {
       eventType: "PAS_SUBMITTED",
       caseId: "PA-260526-0900-AAAA1111",
-      umRequestId: "UMR-260526-0900-AAAA1111"
+      umRequestId: "PA-260526-0900-AAAA1111"
     },
     {
       eventType: "UM_REQUEST_CREATED",
       caseId: "PA-260526-0900-AAAA1111",
-      umRequestId: "UMR-260526-0900-AAAA1111"
+      umRequestId: "PA-260526-0900-AAAA1111"
     }
   ]);
 });
@@ -209,7 +210,6 @@ export type UMRequestEventType = "UM_REQUEST_CREATED" | "UM_REQUEST_REVIEW_START
 export interface UMRequest {
   id: string;
   source: "pas_fhir";
-  sourceCaseId: string;
   patientId: string;
   patientDisplay: string;
   planId: PlanId;
@@ -280,7 +280,6 @@ export interface UmPlatform {
   submitPriorAuth(input: PriorAuthSubmissionInput): UMRequest;
   listUmRequests(): UMRequest[];
   getUmRequest(umRequestId: string): UMRequest | null;
-  findUmRequestBySourceCaseId(caseId: string): UMRequest | null;
   listEvents(): UMPlatformEvent[];
   getEvidence(umRequestId: string): ProviderDocumentationEvidence | null;
   startClinicalReview(umRequestId: string, reviewerId: string): UMRequest;
@@ -294,8 +293,8 @@ Use these helper functions in the same file. The pure transition helpers let the
 const DEFAULT_DELEGATE_VENDOR_ID = "northstar-um" as const;
 const DEFAULT_SLA_HOURS = 24 as const;
 
-export function generateUmRequestId(sourceCaseId: string): string {
-  return sourceCaseId.replace(/^PA-/, "UMR-");
+export function generateUmRequestId(id: string): string {
+  return id;
 }
 
 function addHours(isoTimestamp: string, hours: number): string {
@@ -420,7 +419,7 @@ git commit -m "feat: add um request domain model"
 
 - [ ] **Step 1: Write failing PAS and persistence tests**
 
-In `src/packages/um-platform/test/pas-fhir.test.ts`, update the first test so it asserts source PA identity and internal UM identity are separated:
+In `src/packages/um-platform/test/pas-fhir.test.ts`, update the first test so it asserts canonical PA/UM identity are single-valued:
 
 ```ts
 const bundle = buildPasFhirBundle(umRequest, evidence!);
@@ -428,15 +427,15 @@ const claim = bundle.entry.find((entry) => entry.resource.resourceType === "Clai
 
 expect(bundle).toMatchObject({
   resourceType: "Bundle",
-  id: `pas-${umRequest.sourceCaseId}`,
+  id: umRequest.id,
   type: "collection"
 });
 expect(claim).toMatchObject({
-  id: `claim-${umRequest.sourceCaseId}`,
+  id: umRequest.id,
   identifier: [
     {
       system: "https://operon.cloud/fhir/NamingSystem/prior-auth-case-id",
-      value: umRequest.sourceCaseId
+      value: umRequest.id
     },
     {
       system: "https://operon.cloud/fhir/NamingSystem/um-request-id",
@@ -451,15 +450,13 @@ In `src/apps/web/lib/pas-persistence.test.ts`, change stored request expectation
 ```ts
 expect(snapshot.data()).toMatchObject({
   umRequest: {
-    id: umRequest.id,
-    sourceCaseId: umRequest.sourceCaseId
+    id: umRequest.id
   },
   evidence: {
-    umRequestId: umRequest.id,
-    sourceCaseId: umRequest.sourceCaseId
+    umRequestId: umRequest.id
   },
   fhirBundle: {
-    id: `pas-${umRequest.sourceCaseId}`
+    id: umRequest.id
   }
 });
 ```
@@ -485,17 +482,17 @@ export function buildPasFhirBundle(umRequest: UMRequest, evidence: ProviderDocum
   const patientReference = `Patient/${umRequest.patientId}`;
   const providerReference = `Organization/${umRequest.providerId}`;
   const insurerReference = `Organization/${umRequest.planId}`;
-  const coverageReference = `Coverage/coverage-${umRequest.sourceCaseId}`;
+  const coverageReference = `Coverage/coverage-${umRequest.id}`;
   const claim: PasFhirClaim = {
     resourceType: "Claim",
-    id: `claim-${umRequest.sourceCaseId}`,
+    id: umRequest.id,
     status: "active",
     use: "preauthorization",
     created: umRequest.submittedAt,
     identifier: [
       {
         system: "https://operon.cloud/fhir/NamingSystem/prior-auth-case-id",
-        value: umRequest.sourceCaseId
+        value: umRequest.id
       },
       {
         system: "https://operon.cloud/fhir/NamingSystem/um-request-id",
@@ -551,7 +548,7 @@ export function buildPasFhirBundle(umRequest: UMRequest, evidence: ProviderDocum
 
   return {
     resourceType: "Bundle",
-    id: `pas-${umRequest.sourceCaseId}`,
+    id: umRequest.id,
     type: "collection",
     timestamp: umRequest.submittedAt,
     entry: buildEntries(claim, umRequest, patientReference, providerReference, insurerReference, coverageReference)
@@ -585,7 +582,6 @@ export interface PasPersistenceStore {
   saveUmRequest(umRequest: UMRequest): Promise<void>;
   listUmRequests(): Promise<UMRequest[]>;
   getUmRequest(umRequestId: string): Promise<UMRequest | null>;
-  findUmRequestBySourceCaseId(caseId: string): Promise<UMRequest | null>;
   getEvidence(umRequestId: string): Promise<ProviderDocumentationEvidence | null>;
   listUmEvents(): Promise<UMPlatformEvent[]>;
   saveIncentiveRow(row: IncentiveWorklistRow): Promise<void>;
@@ -594,12 +590,12 @@ export interface PasPersistenceStore {
 }
 ```
 
-Keep Firestore collection names unchanged for continuity, but store documents under `umRequest.id` and include `sourceCaseId` in the document value. For audit events, write one document per event:
+Keep Firestore collection names unchanged for continuity, but store documents under `umRequest.id` and include `id` in the document value. For audit events, write one document per event:
 
 ```ts
 const events: UMPlatformEvent[] = [
-  { eventType: "PAS_SUBMITTED", caseId: request.umRequest.sourceCaseId, umRequestId: request.umRequest.id },
-  { eventType: "UM_REQUEST_CREATED", caseId: request.umRequest.sourceCaseId, umRequestId: request.umRequest.id }
+  { eventType: "PAS_SUBMITTED", caseId: request.umRequest.id, umRequestId: request.umRequest.id },
+  { eventType: "UM_REQUEST_CREATED", caseId: request.umRequest.id, umRequestId: request.umRequest.id }
 ];
 ```
 
@@ -664,7 +660,7 @@ const evaluation = evaluateProviderDocumentationEvent(
 expect(getEvidence).toHaveBeenCalledWith(umRequest.id);
 expect(evaluation.request.requestObject).toMatchObject({
   umRequestId: umRequest.id,
-  sourceCaseId: umRequest.sourceCaseId,
+  id: umRequest.id,
   planId: "acme-health-ppo",
   providerId: "lakeside-provider-admin",
   requestType: "outpatient_service",
@@ -684,7 +680,7 @@ In `src/apps/web/lib/provider-documentation-workflow.test.ts`, update the happy 
 ```ts
 expect(rows[0]).toMatchObject({
   umRequestId: submitted.id,
-  sourceCaseId: submitted.sourceCaseId,
+  id: submitted.id,
   serviceLabel: "Knee MRI after injury",
   incentiveStatus: "paid",
   paymentStatus: "auto_executed",
@@ -733,7 +729,7 @@ export function evaluateProviderDocumentationEvent(
     submitter: evidence.submitter,
     requestObject: {
       umRequestId: evidence.umRequestId,
-      sourceCaseId: evidence.sourceCaseId,
+      id: evidence.id,
       planId: evidence.planId,
       providerId: evidence.providerId,
       requestType: evidence.requestType,
@@ -775,7 +771,7 @@ In `src/apps/web/lib/provider-documentation-workflow.ts`, rename row identity fi
 ```ts
 export interface IncentiveWorklistRow {
   umRequestId: string;
-  sourceCaseId: string;
+  id: string;
   planId?: string;
   planDisplay?: string;
   submittedAt: string;
@@ -858,7 +854,7 @@ export async function GET(_request: Request, context: { params: Promise<{ caseId
 }
 ```
 
-The workflow `getEvidence(id)` must first try `umRequestId`, then fall back to `sourceCaseId`.
+The workflow `getEvidence(id)` must first try `umRequestId`, then fall back to `id`.
 
 - [ ] **Step 6: Run provider documentation tests and verify they pass**
 
@@ -930,7 +926,7 @@ const approvedDelegateRequest: EvaluationRequest = {
   evaluationType: "delegate_um_sla_bonus",
   submitter: { id: "northstar-um" },
   requestObject: {
-    umRequestId: "UMR-260526-0900-AAAA1111",
+    umRequestId: "PA-260526-0900-AAAA1111",
     planId: "acme-health-ppo",
     delegateVendorId: "northstar-um",
     requestType: "outpatient_service",
@@ -1205,8 +1201,8 @@ const policy: IncentivePolicy = {
 };
 
 const evidence: DelegateUmSlaEvidence = {
-  umRequestId: "UMR-260526-0900-AAAA1111",
-  sourceCaseId: "PA-260526-0900-AAAA1111",
+  umRequestId: "PA-260526-0900-AAAA1111",
+  id: "PA-260526-0900-AAAA1111",
   planId: "acme-health-ppo",
   delegateVendorId: "northstar-um",
   requestType: "outpatient_service",
@@ -1283,7 +1279,7 @@ In `src/packages/incentive-agent/src/index.ts`, add:
 ```ts
 export interface DelegateUmSlaEvidence {
   umRequestId: string;
-  sourceCaseId: string;
+  id: string;
   planId: string;
   delegateVendorId: string;
   requestType: string;
@@ -1325,7 +1321,7 @@ export function evaluateDelegateUmSlaEvent(
     submitter: { id: evidence.delegateVendorId },
     requestObject: {
       umRequestId: evidence.umRequestId,
-      sourceCaseId: evidence.sourceCaseId,
+      id: evidence.id,
       planId: evidence.planId,
       delegateVendorId: evidence.delegateVendorId,
       requestType: evidence.requestType,
@@ -1418,7 +1414,7 @@ describe("delegate UM workflow", () => {
     await expect(workflow.listWorkqueue()).resolves.toEqual([
       expect.objectContaining({
         umRequestId: umRequest.id,
-        sourceCaseId: umRequest.sourceCaseId,
+        id: umRequest.id,
         state: "pend",
         slaStatus: "pending"
       })
@@ -1457,7 +1453,7 @@ describe("delegate UM workflow", () => {
 
     expect(row).toMatchObject({
       umRequestId: umRequest.id,
-      sourceCaseId: umRequest.sourceCaseId,
+      id: umRequest.id,
       outcomeStatus: "denied",
       incentiveStatus: "paid",
       paymentStatus: "auto_executed",
@@ -1517,7 +1513,7 @@ export type DelegateSlaStatus = "pending" | "within_sla" | "breached";
 
 export interface DelegateUmRow {
   umRequestId: string;
-  sourceCaseId: string;
+  id: string;
   planId: string;
   planDisplay: string;
   delegateVendorId: string;
@@ -1619,7 +1615,7 @@ function buildDelegateEvidence(request: UMRequest): DelegateUmSlaEvidence {
 
   return {
     umRequestId: request.id,
-    sourceCaseId: request.sourceCaseId,
+    id: request.id,
     planId: request.planId,
     delegateVendorId: request.delegateVendorId ?? "northstar-um",
     requestType: request.requestType,
@@ -1643,7 +1639,7 @@ function buildDelegateEvidence(request: UMRequest): DelegateUmSlaEvidence {
 function buildPendingRow(request: UMRequest): DelegateUmRow {
   return {
     umRequestId: request.id,
-    sourceCaseId: request.sourceCaseId,
+    id: request.id,
     planId: request.planId,
     planDisplay: request.planDisplay,
     delegateVendorId: request.delegateVendorId ?? "northstar-um",
@@ -1726,7 +1722,7 @@ describe("delegate UM API routes", () => {
         })
       })
     );
-    const submitted = (await submittedResponse.json()) as { id: string; sourceCaseId: string };
+    const submitted = (await submittedResponse.json()) as { id: string };
 
     const workqueueResponse = await listWorkqueue();
     const workqueue = (await workqueueResponse.json()) as { rows: Array<{ umRequestId: string }> };
@@ -1757,10 +1753,10 @@ describe("delegate UM API routes", () => {
     expect(row).toMatchObject({ umRequestId: submitted.id, incentiveStatus: "paid" });
 
     const planResponse = await listPlanRows();
-    const planRows = (await planResponse.json()) as { rows: Array<{ umRequestId: string; sourceCaseId: string }> };
+    const planRows = (await planResponse.json()) as { rows: Array<{ umRequestId: string; id: string }> };
     expect(planRows.rows).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ umRequestId: submitted.id, sourceCaseId: submitted.sourceCaseId })
+        expect.objectContaining({ umRequestId: submitted.id, id: submitted.id })
       ])
     );
   });
@@ -1969,7 +1965,7 @@ Create the plan page using the same metadata pattern and `DelegatePlanConsole`. 
 Create `DelegateVendorConsole.tsx` as a client component that:
 
 - fetches `/api/delegate-um/workqueue`
-- renders rows with UM request ID, source PA ID, service, plan, SLA deadline, time remaining, and state
+- renders rows with canonical PA/UM request ID, service, plan, SLA deadline, time remaining, and state
 - opens `DelegateReviewModal`
 - refreshes after start review and determination
 
@@ -1978,7 +1974,7 @@ Use this row type:
 ```ts
 interface DelegateUmRow {
   umRequestId: string;
-  sourceCaseId: string;
+  id: string;
   planDisplay: string;
   serviceLabel: string;
   submittedAt: string;
@@ -2008,7 +2004,7 @@ Disable submit unless all three checklist values are true and, for denied outcom
 Create `DelegatePlanConsole.tsx` as a client component that fetches `/api/delegate-um/plan` and renders:
 
 - UM request ID
-- source PA ID
+- canonical PA/UM request ID
 - plan
 - state
 - outcome status
@@ -2202,7 +2198,7 @@ git commit -m "feat: show delegate um policies"
 Update existing provider documentation component tests so source checks assert:
 
 ```ts
-expect(source).toContain("sourceCaseId");
+expect(source).toContain("id");
 expect(source).toContain("umRequestId");
 expect(source).not.toContain("submitted.caseId");
 ```
@@ -2211,7 +2207,7 @@ For `PlanAuditDetailsModal.test.ts`, assert the modal labels both IDs:
 
 ```ts
 expect(source).toContain("UM request ID");
-expect(source).toContain("Source PA ID");
+expect(source).toContain("Canonical PA/UM request ID");
 ```
 
 - [ ] **Step 2: Run provider component tests and verify failure**
@@ -2240,8 +2236,8 @@ In the submission confirmation, display:
   <dd>{submitted.id}</dd>
 </div>
 <div>
-  <dt>Source PA ID</dt>
-  <dd>{submitted.sourceCaseId}</dd>
+  <dt>Canonical PA/UM request ID</dt>
+  <dd>{submitted.id}</dd>
 </div>
 ```
 
@@ -2249,7 +2245,7 @@ When linking to health plan view, use `submitted.id` as the query parameter.
 
 - [ ] **Step 4: Update plan console and modal**
 
-In `PlanIncentivesConsole.tsx`, display `row.umRequestId` and `row.sourceCaseId` in separate columns. Rename `selectedCaseId` to `selectedUmRequestId` and `detailsCaseId` to `detailsUmRequestId`.
+In `PlanIncentivesConsole.tsx`, display the canonical row ID using `row.umRequestId`. Rename `selectedCaseId` to `selectedUmRequestId` and `detailsCaseId` to `detailsUmRequestId`.
 
 In `PlanAuditDetailsModal.tsx`, replace PA result display with:
 
@@ -2259,8 +2255,8 @@ In `PlanAuditDetailsModal.tsx`, replace PA result display with:
   <dd className="mono-cell">{row.umRequestId}</dd>
 </div>
 <div>
-  <dt>Source PA ID</dt>
-  <dd className="mono-cell">{row.sourceCaseId}</dd>
+  <dt>Canonical PA/UM request ID</dt>
+  <dd className="mono-cell">{row.id}</dd>
 </div>
 ```
 
@@ -2333,7 +2329,7 @@ Expected: Next.js starts and prints a local URL, normally `http://localhost:3000
 
 Open the local URL and verify:
 
-- `/provider-documentation`: submit a knee MRI PA and see both UM request ID and source PA ID.
+- `/provider-documentation`: submit a knee MRI PA and see the canonical PA/UM request ID.
 - `/provider-documentation/incentives`: see provider documentation incentive row tied to the UM request.
 - `/delegate-um`: see the same UM request in the delegate workqueue, start review, complete approved determination.
 - `/delegate-um/plan`: see paid delegate SLA bonus with `within_sla`.
