@@ -123,6 +123,8 @@ describe("provider documentation API routes", () => {
       incentiveStatus: "paid",
       paymentStatus: "auto_executed"
     });
+    expect(row).not.toHaveProperty("paResult");
+    expect(row).not.toHaveProperty("denialReason");
     expect(row?.transactionId).toContain("testnet-");
   });
 

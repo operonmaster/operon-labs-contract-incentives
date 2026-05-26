@@ -55,6 +55,8 @@ describe("provider documentation workflow", () => {
       currency: "HBAR",
       reason: "Completed requested DTR"
     });
+    expect(rows[0]).not.toHaveProperty("paResult");
+    expect(rows[0]).not.toHaveProperty("denialReason");
     expect(rows[0]!.transactionId).toContain("testnet-");
     expect(executePolicyBoundPaymentMock.mock.calls[0]?.[1]).toMatchObject({
       paymentIntentStore: expect.objectContaining({
@@ -567,8 +569,6 @@ describe("provider documentation workflow", () => {
       serviceCode: record.serviceCode,
       state: record.state,
       outcomeStatus: null,
-      paResult: "submitted_pending",
-      denialReason: null,
       incentiveStatus: "not_eligible",
       paymentStatus: "blocked_by_policy",
       incentiveValue: 0,
@@ -691,7 +691,6 @@ describe("provider documentation workflow", () => {
 
     expect(rows[0]).toMatchObject({
       serviceLabel: "Full-body wellness MRI screening",
-      paResult: "denied_not_covered",
       incentiveStatus: "not_eligible",
       paymentStatus: "blocked_by_policy",
       incentiveValue: 0,
@@ -808,7 +807,6 @@ describe("provider documentation workflow", () => {
     expect(rows[0]).toMatchObject({
       caseId: submitted.caseId,
       serviceLabel: "Knee MRI after injury",
-      paResult: "submitted_pending",
       incentiveStatus: "not_eligible",
       paymentStatus: "blocked_by_policy",
       incentiveValue: 0,

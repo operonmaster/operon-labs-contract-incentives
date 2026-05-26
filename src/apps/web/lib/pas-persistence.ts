@@ -482,21 +482,25 @@ function canonicalizeStoredEvidence(
   fallbackCanonicalId: string
 ): StoredProviderDocumentationEvidence {
   const storedEvidence = evidence as ProviderDocumentationEvidence & {
+    id?: string;
     umRequestId?: string;
     sourceCaseId?: string;
+    dtrCompleted?: boolean;
   };
   const canonicalId = getStoredCanonicalPaId(
-    storedEvidence.caseId,
-    storedEvidence.sourceCaseId,
     storedEvidence.umRequestId,
-    fallbackCanonicalId
+    storedEvidence.id,
+    fallbackCanonicalId,
+    storedEvidence.caseId
   );
 
   return {
     ...evidence,
+    id: canonicalId,
     caseId: canonicalId,
     umRequestId: canonicalId,
-    sourceCaseId: canonicalId
+    sourceCaseId: canonicalId,
+    dtrCompleted: storedEvidence.dtrCompleted ?? Boolean(storedEvidence.dtrTemplateCompleted)
   };
 }
 

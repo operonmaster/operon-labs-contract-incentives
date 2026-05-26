@@ -53,8 +53,6 @@ export interface IncentiveWorklistRow {
   serviceCode: ServiceCode;
   state: UMRequest["state"];
   outcomeStatus: UMRequest["outcomeStatus"];
-  paResult: PriorAuthRecord["paResult"];
-  denialReason: PriorAuthRecord["denialReason"];
   incentiveStatus: IncentiveStatus;
   paymentStatus: PaymentStatus;
   incentiveValue: number;
@@ -178,14 +176,12 @@ export function createProviderDocumentationWorkflow(
       serviceCode: record.serviceCode,
       state: record.state,
       outcomeStatus: record.outcomeStatus,
-      paResult: record.paResult,
-      denialReason: record.denialReason,
       incentiveStatus: evaluation.result.decision === "approved" ? "paid" : "not_eligible",
       paymentStatus: evaluation.result.decision === "approved" ? "auto_executed" : "blocked_by_policy",
       incentiveValue: evaluation.result.amount,
       currency: evaluation.result.currency,
       settlementToken: evaluation.result.settlementToken,
-      reason: summarizeReason(record, evaluation.result.reasonCodes),
+      reason: summarizeReason(evidence, evaluation.result.reasonCodes),
       reasonCodes: evaluation.result.reasonCodes,
       policyId: evaluation.result.policyId,
       policyControls,
@@ -378,8 +374,8 @@ function isCurrentIncentiveRow(row: IncentiveWorklistRow, record: PriorAuthRecor
   return row.submittedAt === record.submittedAt;
 }
 
-function summarizeReason(record: PriorAuthRecord, reasonCodes: string[]): string {
-  if (record.denialReason === "BENEFIT_NOT_COVERED") {
+function summarizeReason(evidence: ProviderDocumentationEvidence, reasonCodes: string[]): string {
+  if (!evidence.coveredBenefit || reasonCodes.includes("BENEFIT_NOT_COVERED")) {
     return "Non-covered benefit";
   }
 

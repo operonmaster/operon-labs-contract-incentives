@@ -74,8 +74,6 @@ describe("PAS persistence store selection", () => {
       serviceCode: umRequest.serviceCode,
       state: umRequest.state,
       outcomeStatus: umRequest.outcomeStatus,
-      paResult: umRequest.paResult,
-      denialReason: umRequest.denialReason,
       incentiveStatus: "paid",
       paymentStatus: "auto_executed",
       incentiveValue: 5,
@@ -250,6 +248,56 @@ describe("PAS persistence store selection", () => {
       eventType: "PAS_SUBMITTED",
       caseId: umRequest.id,
       umRequestId: umRequest.id
+    });
+  });
+
+  it("canonicalizes legacy stored evidence to the full UM evidence shape without using sourceCaseId as identity", async () => {
+    const firestore = createFakeFirestore();
+    const store = createFirestorePasPersistenceStore(
+      {
+        projectId: "operon-labs-nonprod",
+        databaseId: "(default)"
+      },
+      firestore
+    );
+    const platform = createInMemoryUmPlatform({
+      generateCaseId: () => "PA-260526-0900-EVID001"
+    });
+    const umRequest = platform.submitPriorAuth({
+      requestType: "outpatient_service",
+      serviceCode: "knee_mri",
+      dtr: {
+        symptomDurationConfirmed: true,
+        conservativeTherapyConfirmed: true,
+        examFindingsConfirmed: true,
+        clinicalNoteAttached: true
+      }
+    });
+    const currentEvidence = platform.getEvidence(umRequest.id)!;
+    const legacyEvidence = {
+      ...currentEvidence,
+      id: undefined,
+      umRequestId: undefined,
+      caseId: undefined,
+      sourceCaseId: "PA-260526-0900-WRONG99",
+      dtrCompleted: undefined,
+      dtrTemplateCompleted: true
+    };
+
+    await firestore.collection("pasClaims").doc(umRequest.id).set({
+      umRequest,
+      evidence: legacyEvidence,
+      fhirBundle: buildPasFhirBundle(umRequest, currentEvidence),
+      storedAt: umRequest.submittedAt
+    });
+
+    await expect(store.getEvidence(umRequest.id)).resolves.toMatchObject({
+      id: umRequest.id,
+      umRequestId: umRequest.id,
+      caseId: umRequest.id,
+      sourceCaseId: umRequest.id,
+      dtrCompleted: true,
+      dtrTemplateCompleted: true
     });
   });
 
@@ -501,8 +549,6 @@ describe("PAS persistence store selection", () => {
         requestType: umRequest.requestType,
         serviceLabel: umRequest.serviceLabel,
         serviceCode: umRequest.serviceCode,
-        paResult: umRequest.paResult,
-        denialReason: umRequest.denialReason,
         incentiveStatus: "paid",
         paymentStatus: "auto_executed",
         incentiveValue: 5,
@@ -632,8 +678,6 @@ function buildPersistedIncentiveRow(
     serviceCode: umRequest.serviceCode,
     state: umRequest.state,
     outcomeStatus: umRequest.outcomeStatus,
-    paResult: umRequest.paResult,
-    denialReason: umRequest.denialReason,
     incentiveStatus: "paid",
     paymentStatus: "auto_executed",
     incentiveValue: 5,

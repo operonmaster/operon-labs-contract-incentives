@@ -47,8 +47,8 @@ export function PlanAuditDetailsModal({ row, onClose }: PlanAuditDetailsModalPro
             <dd>{row.serviceLabel}</dd>
           </div>
           <div>
-            <dt>PA result</dt>
-            <dd>{formatPaResult(row.paResult)}</dd>
+            <dt>UM status</dt>
+            <dd>{formatUmStatus(row)}</dd>
           </div>
           <div>
             <dt>Business policy ID</dt>
@@ -176,8 +176,19 @@ export function formatStatus(status: IncentiveWorklistRow["incentiveStatus"]) {
   }
 }
 
-export function formatPaResult(paResult: IncentiveWorklistRow["paResult"]) {
-  return paResult === "denied_not_covered" ? "Denied - not covered" : "Submitted / pending";
+export function formatUmStatus(row: IncentiveWorklistRow) {
+  if (row.outcomeStatus) {
+    return `Determined - ${row.outcomeStatus === "approved" ? "Approved" : "Denied"}`;
+  }
+
+  switch (row.state) {
+    case "pend":
+      return "Pended";
+    case "in_clinical_review":
+      return "In clinical review";
+    case "determined":
+      return "Determined";
+  }
 }
 
 export function formatRequestType(requestType: IncentiveWorklistRow["requestType"]) {
