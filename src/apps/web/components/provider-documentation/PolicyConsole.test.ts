@@ -87,16 +87,16 @@ describe("provider documentation policy console", () => {
     expect(delegatePageSource).toContain('activeView="policies"');
     expect(delegatePageSource).toContain("delegateUmSlaBonusBusinessPolicyType");
     expect(delegatePageSource).toContain("buildBusinessPolicyCards");
-    expect(delegatePageSource).toContain("Business contract policies define delegate SLA bonus criteria");
+    expect(delegatePageSource).toContain("Business contract policies define delegate SLA bonus criteria by plan and request type");
     expect(delegatePageSource).toContain("Payment policies remain plan-level Hedera Agent Kit settlement controls");
   });
 
   it("renders delegate policy navigation, business policy cards, and payment policy cards", () => {
     const markup = renderToStaticMarkup(
       createElement(PolicyConsole, {
-        businessPolicies: [delegateBusinessPolicy],
-        businessPolicyDescription: "Business contract policies define delegate SLA bonus criteria for pharmacy prior authorization determinations.",
-        boundaryStatement: "Delegate UM policies describe plan/delegate SLA bonus agreements for delegated pharmacy prior authorizations.",
+        businessPolicies: [delegateBusinessPolicy, delegateOutpatientBusinessPolicy],
+        businessPolicyDescription: "Business contract policies define delegate SLA bonus criteria by plan and request type.",
+        boundaryStatement: "Delegate UM policies describe plan/delegate SLA bonus agreements for delegated UM determinations.",
         eyebrow: "Delegate policy catalog",
         paymentPolicies: [paymentPolicy],
         paymentPolicyDescription: "Payment policies remain plan-level Hedera Agent Kit settlement controls.",
@@ -116,6 +116,7 @@ describe("provider documentation policy console", () => {
     expect(markup).toContain("/delegate-um/plan?umRequestId=PA-260526-0900-DELEGATE");
     expect(markup).toContain("/delegate-um/policies");
     expect(markup).toContain("Pharmacy Benefit");
+    expect(markup).toContain("Outpatient Service");
     expect(markup).toContain("24 hours");
     expect(markup).toContain("Acme Health PPO Agent Kit Settlement Policy");
     expect(markup).not.toContain("Provider Documentation Completeness Policies");
@@ -223,6 +224,26 @@ const delegateBusinessPolicy: PolicySummary = {
     { label: "Plan", value: "Acme Health PPO" },
     { label: "Delegate", value: "Northstar UM" },
     { label: "Eligible request types", value: "Pharmacy Benefit" },
+    { label: "SLA", value: "24 hours" },
+    { label: "Payout", value: "5 HBAR" }
+  ],
+  detailSections: []
+};
+
+const delegateOutpatientBusinessPolicy: PolicySummary = {
+  id: "delegate-um-acme-outpatient-sla-bonus-v1",
+  title: "Delegate UM SLA Bonus",
+  category: "business",
+  source: "Plan/delegate contract policy",
+  appliesTo: "Delegate UM SLA Bonus",
+  payoutOrControl: "5 HBAR per eligible UM request",
+  status: "Active",
+  summary: "Delegate UM SLA bonus incentive for eligible determinations completed within the configured review window.",
+  previewItems: [
+    { label: "Policy ID", value: "delegate-um-acme-outpatient-sla-bonus-v1" },
+    { label: "Plan", value: "Acme Health PPO" },
+    { label: "Delegate", value: "Northstar UM" },
+    { label: "Eligible request types", value: "Outpatient Service" },
     { label: "SLA", value: "24 hours" },
     { label: "Payout", value: "5 HBAR" }
   ],

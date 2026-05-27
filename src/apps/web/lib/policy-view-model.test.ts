@@ -4,6 +4,7 @@ import { defaultPaymentPlanPolicies } from "./payment-policy-store";
 import { defaultIncentivePolicies } from "./policy-store";
 import {
   buildBusinessPolicyCards,
+  delegateUmSlaBonusBusinessPolicyType,
   buildHederaAgentKitPlanPolicyCards,
   buildProviderDocumentationBusinessPolicyCards,
   policyBoundaryStatement,
@@ -128,35 +129,55 @@ describe("policy view model", () => {
   });
 
   it("builds delegate UM SLA business policy cards", () => {
-    const policy = defaultIncentivePolicies.delegate_um_acme_sla_bonus;
-    const cards = buildBusinessPolicyCards(policy);
+    const cards = Object.values(defaultIncentivePolicies)
+      .filter((policy) => policy.evaluationType === delegateUmSlaBonusBusinessPolicyType)
+      .flatMap(buildBusinessPolicyCards);
 
-    expect(cards).toEqual([
-      expect.objectContaining({
-        id: "delegate-um-sla-bonus-v1",
-        title: "Delegate UM SLA Bonus",
-        appliesTo: "Delegate UM SLA Bonus",
-        payoutOrControl: "5 HBAR per eligible UM request",
-        previewItems: expect.arrayContaining([
-          { label: "Plan", value: "Acme Health PPO" },
-          { label: "Delegate", value: "Northstar UM" },
-          { label: "Eligible request types", value: "Pharmacy Benefit" },
-          { label: "SLA", value: "24 hours" }
-        ])
-      })
+    expect(cards).toHaveLength(4);
+    expect(cards.map((card) => card.id).sort()).toEqual([
+      "delegate-um-acme-outpatient-sla-bonus-v1",
+      "delegate-um-sla-bonus-v1",
+      "delegate-um-summit-outpatient-sla-bonus-v1",
+      "delegate-um-summit-pharmacy-sla-bonus-v1"
     ]);
-    expect(cards[0]!.detailSections.flatMap((section) => section.items)).toEqual(
+    expect(cards).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "delegate-um-sla-bonus-v1",
+          title: "Delegate UM SLA Bonus",
+          appliesTo: "Delegate UM SLA Bonus",
+          payoutOrControl: "5 HBAR per eligible UM request",
+          previewItems: expect.arrayContaining([
+            { label: "Plan", value: "Acme Health PPO" },
+            { label: "Delegate", value: "Northstar UM" },
+            { label: "Eligible request types", value: "Pharmacy Benefit" },
+            { label: "SLA", value: "24 hours" }
+          ])
+        }),
+        expect.objectContaining({
+          id: "delegate-um-summit-outpatient-sla-bonus-v1",
+          previewItems: expect.arrayContaining([
+            { label: "Plan", value: "Summit Health HMO" },
+            { label: "Delegate", value: "Northstar UM" },
+            { label: "Eligible request types", value: "Outpatient Service" }
+          ])
+        })
+      ])
+    );
+    const pharmacyCard = cards.find((card) => card.id === "delegate-um-sla-bonus-v1")!;
+    expect(pharmacyCard.detailSections.flatMap((section) => section.items)).toEqual(
       expect.arrayContaining([
         "UM request is determined: Yes",
         "Outcome status is present: Yes",
         "Outcome value affects payment: No",
         "Clinical review checklist complete: Yes",
         "Completed within SLA: 24 hours",
-        "PHI in payment metadata: No"
+        "PHI in payment metadata: No",
+        "Eligible request types: Pharmacy Benefit (pharmacy_benefit)"
       ])
     );
-    expect(cards[0]!.detailSections.flatMap((section) => section.items)).toContain("Eligible request types: Pharmacy Benefit (pharmacy_benefit)");
-    expect(cards[0]!.detailSections.flatMap((section) => section.items).join(" ")).not.toContain("outpatient_service");
+    const outpatientCard = cards.find((card) => card.id === "delegate-um-acme-outpatient-sla-bonus-v1")!;
+    expect(outpatientCard.detailSections.flatMap((section) => section.items)).toContain("Eligible request types: Outpatient Service (outpatient_service)");
   });
 
   it("lists plan-level payment policies separately from business eligibility", () => {

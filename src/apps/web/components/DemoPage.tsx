@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { evaluateDemoScenario } from "@operon-labs/incentive-agent";
 import { createAuditRecord } from "@operon-labs/audit-log";
+import { findDemoPolicy } from "../lib/demo-policy";
 import { policyStore } from "../lib/policy-store";
 import { getScenario } from "./demo-catalog";
 import { LabsBadge, LabsHero, LabsPageShell, LabsPanel, LabsProductFrame } from "./labs-ui";
 
 export async function DemoPage({ slug }: Readonly<{ slug: string }>) {
   const scenario = getScenario(slug);
-  const policy = await policyStore.getPolicy(scenario.evaluationType);
+  const policy = await findDemoPolicy(scenario.evaluationType, policyStore);
   if (!policy) {
     throw new Error(`POLICY_NOT_FOUND:${scenario.evaluationType}`);
   }

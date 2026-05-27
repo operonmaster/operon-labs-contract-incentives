@@ -21,30 +21,52 @@ describe("policy store", () => {
     const delegatePolicies = await store.listPolicies("delegate_um_sla_bonus");
 
     expect(policies).toHaveLength(4);
-    expect(delegatePolicies).toHaveLength(1);
-    expect(delegatePolicies[0]).toMatchObject({
-      policyId: "delegate-um-sla-bonus-v1",
-      evaluationType: "delegate_um_sla_bonus",
-      contractPair: {
-        planId: "acme-health-ppo",
-        planName: "Acme Health PPO",
-        providerId: "northstar-um",
-        providerName: "Northstar UM"
-      },
-      incentiveScope: {
-        eligibleRequestTypes: ["pharmacy_benefit"]
-      },
-      payout: {
-        token: "HBAR",
-        amountPerEligibleRequest: 5,
-        monthlyCap: 500
-      },
-      settlement: {
-        mode: "auto",
-        recipientWalletId: "0.0.9049550",
-        requiresHumanApproval: false
-      }
-    });
+    expect(delegatePolicies).toHaveLength(4);
+    expect(delegatePolicies.map((policy) => policy.policyId).sort()).toEqual([
+      "delegate-um-acme-outpatient-sla-bonus-v1",
+      "delegate-um-sla-bonus-v1",
+      "delegate-um-summit-outpatient-sla-bonus-v1",
+      "delegate-um-summit-pharmacy-sla-bonus-v1"
+    ]);
+    expect(delegatePolicies).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          policyId: "delegate-um-sla-bonus-v1",
+          evaluationType: "delegate_um_sla_bonus",
+          contractPair: {
+            planId: "acme-health-ppo",
+            planName: "Acme Health PPO",
+            providerId: "northstar-um",
+            providerName: "Northstar UM"
+          },
+          incentiveScope: {
+            eligibleRequestTypes: ["pharmacy_benefit"]
+          },
+          payout: {
+            token: "HBAR",
+            amountPerEligibleRequest: 5,
+            monthlyCap: 500
+          },
+          settlement: {
+            mode: "auto",
+            recipientWalletId: "0.0.9049550",
+            requiresHumanApproval: false
+          }
+        }),
+        expect.objectContaining({
+          policyId: "delegate-um-summit-outpatient-sla-bonus-v1",
+          contractPair: {
+            planId: "summit-health-hmo",
+            planName: "Summit Health HMO",
+            providerId: "northstar-um",
+            providerName: "Northstar UM"
+          },
+          incentiveScope: {
+            eligibleRequestTypes: ["outpatient_service"]
+          }
+        })
+      ])
+    );
     expect(policies.map((policy) => policy.policyId).sort()).toEqual([
       "plcy_2N7P5R8T0V4X6Z1B3D9F",
       "plcy_5R1T8W3Y6B0D9F2H4K7M",
@@ -98,7 +120,7 @@ describe("policy store", () => {
       ])
     );
     expect(policies.every((policy) => !("displayName" in policy))).toBe(true);
-    expect((await firestore.collection("incentivePolicies").get()).docs).toHaveLength(5);
+    expect((await firestore.collection("incentivePolicies").get()).docs).toHaveLength(8);
     expect(firestore.collectionNames()).toEqual(expect.arrayContaining(["incentivePolicies"]));
     expect(firestore.collectionNames()).not.toEqual(expect.arrayContaining(["policies", "policyYaml"]));
   });
@@ -146,9 +168,23 @@ describe("policy store", () => {
       requestType: "pharmacy_benefit",
       submittedAt: "2026-05-25T12:00:00.000Z"
     });
-    const outpatientDelegate = await store.findPolicy({
+    const acmeOutpatientDelegate = await store.findPolicy({
       evaluationType: "delegate_um_sla_bonus",
       planId: "acme-health-ppo",
+      providerId: "northstar-um",
+      requestType: "outpatient_service",
+      submittedAt: "2026-05-25T12:00:00.000Z"
+    });
+    const summitPharmacyDelegate = await store.findPolicy({
+      evaluationType: "delegate_um_sla_bonus",
+      planId: "summit-health-hmo",
+      providerId: "northstar-um",
+      requestType: "pharmacy_benefit",
+      submittedAt: "2026-05-25T12:00:00.000Z"
+    });
+    const summitOutpatientDelegate = await store.findPolicy({
+      evaluationType: "delegate_um_sla_bonus",
+      planId: "summit-health-hmo",
       providerId: "northstar-um",
       requestType: "outpatient_service",
       submittedAt: "2026-05-25T12:00:00.000Z"
@@ -161,7 +197,9 @@ describe("policy store", () => {
     expect(outpatientPolicies.map((policy) => policy.policyId)).toEqual(["plcy_8K2M4Q6R9T1V3X5Z7B0C"]);
     expect(pharmacyPolicies.map((policy) => policy.policyId)).toEqual(["plcy_5R1T8W3Y6B0D9F2H4K7M"]);
     expect(delegate?.policyId).toBe("delegate-um-sla-bonus-v1");
-    expect(outpatientDelegate).toBeNull();
+    expect(acmeOutpatientDelegate?.policyId).toBe("delegate-um-acme-outpatient-sla-bonus-v1");
+    expect(summitPharmacyDelegate?.policyId).toBe("delegate-um-summit-pharmacy-sla-bonus-v1");
+    expect(summitOutpatientDelegate?.policyId).toBe("delegate-um-summit-outpatient-sla-bonus-v1");
     expect(missing).toBeNull();
   });
 
@@ -283,7 +321,7 @@ describe("policy store", () => {
     });
   });
 
-  it("migrates old delegate SLA policy scopes to delegated pharmacy prior authorizations only", async () => {
+  it("migrates old delegate SLA policy scopes to delegated prior authorization request types only", async () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePolicyStore(
       {
@@ -303,12 +341,14 @@ describe("policy store", () => {
     const policies = await store.listPolicies("delegate_um_sla_bonus");
     const normalized = await store.getPolicyById("delegate-um-sla-bonus-v1");
 
-    expect(policies).toHaveLength(1);
-    expect(policies[0]?.incentiveScope).toEqual({
-      eligibleRequestTypes: ["pharmacy_benefit"]
+    expect(policies).toHaveLength(4);
+    expect(policies.find((policy) => policy.policyId === "delegate-um-sla-bonus-v1")?.incentiveScope).toEqual({
+      eligibleRequestTypes: ["outpatient_service", "pharmacy_benefit"],
+      excludedRequestTypes: ["outpatient_service"]
     });
     expect(normalized?.incentiveScope).toEqual({
-      eligibleRequestTypes: ["pharmacy_benefit"]
+      eligibleRequestTypes: ["outpatient_service", "pharmacy_benefit"],
+      excludedRequestTypes: ["outpatient_service"]
     });
   });
 
@@ -374,7 +414,7 @@ describe("policy store", () => {
         }
       })
     ]));
-    expect(docs).toHaveLength(5);
+    expect(docs).toHaveLength(8);
   });
 
   it("stores either included or excluded scope lists, not both, for request types and service codes", async () => {

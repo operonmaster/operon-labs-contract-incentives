@@ -3,7 +3,7 @@ import { executePolicyBoundPayment } from "@operon-labs/hedera-executor";
 import { buildProviderDocumentationEvidence, createInMemoryUmPlatform, type UMPlatformEvent, type UMRequest } from "@operon-labs/um-platform";
 import { createDelegateUmWorkflow, type DelegateUmRow } from "./delegate-um-workflow";
 import type { PersistedIncentiveWorklistRow, StoredPasSubmission, UmPasPersistenceStore } from "./pas-persistence";
-import { createInMemoryPolicyStore, defaultIncentivePolicies } from "./policy-store";
+import { createInMemoryPolicyStore, defaultIncentivePolicies, type PolicyStore } from "./policy-store";
 
 vi.mock("@operon-labs/hedera-executor", () => ({
   executePolicyBoundPayment: vi.fn(async (request: { auditId: string; currency: string }) => ({
@@ -268,7 +268,7 @@ describe("delegate UM workflow", () => {
     const workflow = createDelegateUmWorkflow(
       platform,
       undefined,
-      createInMemoryPolicyStore({})
+      createPolicyStoreWithoutMatches()
     );
     const umRequest = platform.submitPriorAuth({
       planId: "summit-health-hmo",
@@ -492,4 +492,17 @@ class FakeDelegatePersistenceStore implements UmPasPersistenceStore {
     const row = this.rows.get(umRequestId);
     return row ? structuredClone(row) as unknown as PersistedIncentiveWorklistRow : null;
   }
+}
+
+function createPolicyStoreWithoutMatches(): PolicyStore {
+  return {
+    backend: "memory",
+    seedDefaults: async () => {},
+    getPolicy: async () => null,
+    getPolicyById: async () => null,
+    findPolicy: async () => null,
+    findPolicies: async () => [],
+    listPolicies: async () => [],
+    savePolicy: async () => {}
+  };
 }

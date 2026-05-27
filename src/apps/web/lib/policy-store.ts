@@ -119,42 +119,26 @@ export const defaultIncentivePolicies: Record<string, IncentivePolicy> = {
       ndc: ["0169-4525-14", "0074-0554-02"]
     }
   }),
-  delegate_um_acme_sla_bonus: {
+  delegate_um_acme_sla_bonus: delegateUmSlaBonusPolicy({
     policyId: "delegate-um-sla-bonus-v1",
-    version: "v1",
-    status: "active",
-    evaluationType: "delegate_um_sla_bonus",
-    contractPair: {
-      planId: "acme-health-ppo",
-      planName: "Acme Health PPO",
-      providerId: DELEGATE_VENDOR_ID,
-      providerName: "Northstar UM"
-    },
-    effectivePeriod: {
-      startsOn: "2026-05-01",
-      endsOn: null
-    },
-    incentiveScope: {
-      eligibleRequestTypes: ["pharmacy_benefit"]
-    },
-    eligibilityCriteria: {
-      appliesOnlyToCoveredBenefits: false,
-      requiresDtrCompletionWhenRequested: false,
-      requiresDeterminationWithinSla: true,
-      requiresClinicalReviewCompletion: true,
-      prohibitsOutcomeBasedPayment: true
-    },
-    payout: {
-      token: "HBAR",
-      amountPerEligibleRequest: 5,
-      monthlyCap: 500
-    },
-    settlement: {
-      mode: "auto",
-      recipientWalletId: DELEGATE_VENDOR_WALLET_ID,
-      requiresHumanApproval: false
-    }
-  }
+    planId: "acme-health-ppo",
+    requestType: "pharmacy_benefit"
+  }),
+  delegate_um_acme_outpatient_sla_bonus: delegateUmSlaBonusPolicy({
+    policyId: "delegate-um-acme-outpatient-sla-bonus-v1",
+    planId: "acme-health-ppo",
+    requestType: "outpatient_service"
+  }),
+  delegate_um_summit_pharmacy_sla_bonus: delegateUmSlaBonusPolicy({
+    policyId: "delegate-um-summit-pharmacy-sla-bonus-v1",
+    planId: "summit-health-hmo",
+    requestType: "pharmacy_benefit"
+  }),
+  delegate_um_summit_outpatient_sla_bonus: delegateUmSlaBonusPolicy({
+    policyId: "delegate-um-summit-outpatient-sla-bonus-v1",
+    planId: "summit-health-hmo",
+    requestType: "outpatient_service"
+  })
 };
 
 export function createPolicyStoreFromEnv(env: PolicyStoreEnv = process.env): PolicyStore {
@@ -606,6 +590,55 @@ function providerDocumentationPolicy({
   };
 }
 
+function delegateUmSlaBonusPolicy({
+  amountPerEligibleRequest = 5,
+  planId,
+  policyId,
+  requestType
+}: {
+  policyId: string;
+  planId: string;
+  requestType: "outpatient_service" | "pharmacy_benefit";
+  amountPerEligibleRequest?: number;
+}): IncentivePolicy {
+  return {
+    policyId,
+    version: "v1",
+    status: "active",
+    evaluationType: "delegate_um_sla_bonus",
+    contractPair: {
+      planId,
+      planName: planNameForId(planId),
+      providerId: DELEGATE_VENDOR_ID,
+      providerName: providerNameForId(DELEGATE_VENDOR_ID)
+    },
+    effectivePeriod: {
+      startsOn: "2026-05-01",
+      endsOn: null
+    },
+    incentiveScope: {
+      eligibleRequestTypes: [requestType]
+    },
+    eligibilityCriteria: {
+      appliesOnlyToCoveredBenefits: false,
+      requiresDtrCompletionWhenRequested: false,
+      requiresDeterminationWithinSla: true,
+      requiresClinicalReviewCompletion: true,
+      prohibitsOutcomeBasedPayment: true
+    },
+    payout: {
+      token: "HBAR",
+      amountPerEligibleRequest,
+      monthlyCap: 500
+    },
+    settlement: {
+      mode: "auto",
+      recipientWalletId: DELEGATE_VENDOR_WALLET_ID,
+      requiresHumanApproval: false
+    }
+  };
+}
+
 function requestTypeScope(policy: IncentivePolicy): IncentivePolicy["incentiveScope"] {
   const scope = policy.incentiveScope;
 
@@ -634,7 +667,7 @@ function requestTypeScope(policy: IncentivePolicy): IncentivePolicy["incentiveSc
 }
 
 function isDelegateUmRequestType(requestType: string): boolean {
-  return requestType === "pharmacy_benefit";
+  return requestType === "outpatient_service" || requestType === "pharmacy_benefit";
 }
 
 function serviceCodeScope(scope: IncentivePolicy["incentiveScope"]): IncentivePolicy["incentiveScope"] {
