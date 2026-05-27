@@ -54,13 +54,19 @@ export function LabsPanel({
 export function LabsBadge({
   children,
   className,
+  id,
   variant = "neutral"
 }: Readonly<{
   children: ReactNode;
   className?: string;
+  id?: string;
   variant?: "success" | "warning" | "info" | "neutral";
 }>) {
-  return <span className={cx("op-badge", `op-badge-${variant}`, className)}>{children}</span>;
+  return (
+    <span className={cx("op-badge", `op-badge-${variant}`, className)} id={id}>
+      {children}
+    </span>
+  );
 }
 
 export function LabsProductFrame({

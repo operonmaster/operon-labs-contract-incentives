@@ -36,12 +36,14 @@ describe("DelegateVendorConsole source", () => {
     expect(modalSource).toContain("Medical necessity supported");
     expect(modalSource).toContain("Prior therapy confirmed");
     expect(modalSource).toContain("approvalReasonCode: outcomeStatus === \"approved\" ? approvalReasonCode : null");
+    expect(modalSource).toContain('<LabsBadge className="delegate-guidance" id={outcomeGuidanceId} variant="warning">');
     expect(modalSource).not.toContain("<select");
 
     const stylesSource = readFileSync(path.join(process.cwd(), "src/apps/web/app/styles.css"), "utf8");
     expect(stylesSource).toContain(".delegate-field > span");
     expect(stylesSource).not.toContain(".delegate-field span");
     expect(stylesSource).toMatch(/\.delegate-review-modal\s*\{[^}]*overflow:\s*visible;/s);
+    expect(stylesSource).toMatch(/\.delegate-guidance\s*\{[^}]*font-size:\s*14px;/s);
   });
 
   it("renders review modal with shared checklist, radio, and dropdown primitives", () => {
@@ -78,7 +80,8 @@ describe("DelegateVendorConsole source", () => {
       })
     );
 
-    expect(markup).toContain("Complete the clinical checklist before choosing an outcome.");
+    expect(markup).toContain("Complete the clinical checklist before choosing an outcome");
+    expect(markup).toContain('class="op-badge op-badge-warning delegate-guidance"');
     expect(markup).toContain('aria-describedby="delegate-outcome-guidance"');
     expect(markup).toContain('id="delegate-outcome-guidance"');
     expect(markup).toMatch(/<input[^>]*(disabled=""[^>]*value="approved"|value="approved"[^>]*disabled="")[^>]*\/>Approve/);
@@ -110,7 +113,7 @@ describe("DelegateVendorConsole source", () => {
       expect(checklistInputs).toHaveLength(3);
       expect(outcomeInputs).toHaveLength(2);
       expect(outcomeInputs.every((input) => input.disabled)).toBe(true);
-      expect(container.textContent).toContain("Complete the clinical checklist before choosing an outcome.");
+      expect(container.textContent).toContain("Complete the clinical checklist before choosing an outcome");
 
       for (const input of checklistInputs) {
         await act(async () => {

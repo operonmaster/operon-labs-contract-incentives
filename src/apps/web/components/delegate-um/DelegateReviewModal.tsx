@@ -257,9 +257,9 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, row 
               ))}
             </div>
             {!canChooseOutcome ? (
-              <p className="delegate-guidance" id={outcomeGuidanceId}>
-                Complete the clinical checklist before choosing an outcome.
-              </p>
+              <LabsBadge className="delegate-guidance" id={outcomeGuidanceId} variant="warning">
+                Complete the clinical checklist before choosing an outcome
+              </LabsBadge>
             ) : null}
             {outcomeStatus ? (
               <div className="form-row delegate-field">

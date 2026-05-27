@@ -2213,10 +2213,16 @@ body {
 }
 
 .delegate-guidance {
-  color: var(--op-muted);
-  font-size: 13px;
-  line-height: 1.4;
+  color: var(--op-amber-2);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.25;
   margin: 0;
+  max-width: 100%;
+  text-transform: none;
+  white-space: normal;
 }
 
 .delegate-modal-actions {
