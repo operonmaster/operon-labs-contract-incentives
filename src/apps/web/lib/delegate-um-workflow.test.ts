@@ -247,7 +247,165 @@ describe("delegate UM workflow", () => {
     });
     expect(executePolicyBoundPaymentMock).not.toHaveBeenCalled();
   });
+
+  it("blocks payment when no delegate SLA policy matches the request", async () => {
+    const platform = createInMemoryUmPlatform({ generateCaseId: () => "PA-260526-0900-NNNN9999" });
+    const workflow = createDelegateUmWorkflow(
+      platform,
+      undefined,
+      createInMemoryPolicyStore({})
+    );
+    const umRequest = platform.submitPriorAuth({
+      planId: "summit-health-hmo",
+      requestType: "outpatient_service",
+      serviceCode: "knee_mri"
+    });
+    await workflow.startReview(umRequest.id, "reviewer-ana");
+
+    const row = await workflow.completeDetermination(umRequest.id, {
+      outcomeStatus: "approved",
+      medicalNecessityReviewed: true,
+      policyCriteriaChecked: true,
+      rationaleCaptured: true
+    });
+
+    expect(row).toMatchObject({
+      umRequestId: umRequest.id,
+      incentiveStatus: "not_eligible",
+      paymentStatus: "blocked_by_policy",
+      reasonCodes: ["POLICY_NOT_FOUND"],
+      transactionId: null
+    });
+    expect(executePolicyBoundPaymentMock).not.toHaveBeenCalled();
+  });
+
+  it("excludes non-delegated UM requests and rejects determination without defaulting to Northstar", async () => {
+    const platform = createInMemoryUmPlatform({ generateCaseId: () => "PA-260526-0900-GGGG7777" });
+    const persistence = new FakeDelegatePersistenceStore();
+    const workflow = createDelegateUmWorkflow(
+      platform,
+      persistence,
+      createInMemoryPolicyStore({
+        delegate_um_acme_sla_bonus: defaultIncentivePolicies.delegate_um_acme_sla_bonus
+      })
+    );
+    const umRequest = platform.submitPriorAuth({
+      requestType: "outpatient_service",
+      serviceCode: "knee_mri"
+    });
+    const started = platform.startClinicalReview(umRequest.id, "reviewer-ana");
+    await persistence.saveUmRequest({
+      ...started,
+      delegateVendorId: null
+    });
+
+    await expect(workflow.listWorkqueue()).resolves.toEqual([]);
+    await expect(workflow.listPlanRows()).resolves.toEqual([]);
+    await expect(
+      workflow.completeDetermination(umRequest.id, {
+        outcomeStatus: "approved",
+        medicalNecessityReviewed: true,
+        policyCriteriaChecked: true,
+        rationaleCaptured: true
+      })
+    ).rejects.toThrow(`UM_REQUEST_NOT_DELEGATED:${umRequest.id}`);
+    expect(executePolicyBoundPaymentMock).not.toHaveBeenCalled();
+  });
+
+  it("returns a concurrently persisted paid row when payment execution fails after another instance settled", async () => {
+    const platform = createInMemoryUmPlatform({ generateCaseId: () => "PA-260526-0900-HHHH8888" });
+    const persistence = new FakeDelegatePersistenceStore();
+    const workflow = createDelegateUmWorkflow(
+      platform,
+      persistence,
+      createInMemoryPolicyStore({
+        delegate_um_acme_sla_bonus: defaultIncentivePolicies.delegate_um_acme_sla_bonus
+      })
+    );
+    const umRequest = platform.submitPriorAuth({
+      requestType: "outpatient_service",
+      serviceCode: "knee_mri"
+    });
+    await persistence.saveUmRequest(umRequest);
+    await workflow.startReview(umRequest.id, "reviewer-ana");
+    const persistedReview = await persistence.getUmRequest(umRequest.id);
+    if (!persistedReview) {
+      throw new Error("TEST_PERSISTED_REVIEW_MISSING");
+    }
+    const concurrentPaidRow = buildPaidDelegateRow(persistedReview);
+    executePolicyBoundPaymentMock.mockImplementationOnce(async () => {
+      await persistence.saveIncentiveRow(concurrentPaidRow as unknown as PersistedIncentiveWorklistRow);
+      throw new Error("DUPLICATE_PAYMENT_BLOCKED");
+    });
+
+    const row = await workflow.completeDetermination(umRequest.id, {
+      outcomeStatus: "approved",
+      medicalNecessityReviewed: true,
+      policyCriteriaChecked: true,
+      rationaleCaptured: true
+    });
+
+    expect(row).toMatchObject({
+      umRequestId: umRequest.id,
+      incentiveStatus: "paid",
+      paymentStatus: "auto_executed",
+      transactionId: concurrentPaidRow.transactionId
+    });
+    await expect(persistence.getIncentiveRow(umRequest.id)).resolves.toMatchObject({
+      incentiveStatus: "paid",
+      transactionId: concurrentPaidRow.transactionId
+    });
+  });
 });
+
+function buildPaidDelegateRow(request: UMRequest): DelegateUmRow {
+  return {
+    umRequestId: request.id,
+    id: request.id,
+    planId: request.planId,
+    planDisplay: request.planDisplay,
+    delegateVendorId: requireTestDelegateVendorId(request),
+    requestType: request.requestType,
+    serviceLabel: request.serviceLabel,
+    submittedAt: request.submittedAt,
+    pendStartedAt: request.pendStartedAt,
+    slaDeadlineAt: request.slaDeadlineAt,
+    determinedAt: new Date().toISOString(),
+    timeRemainingMs: 0,
+    state: "determined",
+    outcomeStatus: "approved",
+    slaStatus: "within_sla",
+    incentiveStatus: "paid",
+    paymentStatus: "auto_executed",
+    incentiveValue: 5,
+    currency: "HBAR",
+    settlementToken: { symbol: "HBAR" },
+    reason: "Concurrent payment already settled",
+    reasonCodes: [],
+    policyId: "delegate-um-sla-bonus-v1",
+    audit: {
+      id: `audit-test-${request.id}`,
+      requestHash: `hash-${request.id}`,
+      policyId: "delegate-um-sla-bonus-v1",
+      policyVersion: "v1",
+      decision: "approved",
+      reasonCodes: [],
+      transactionId: `testnet-concurrent-${request.id}`,
+      createdAt: new Date().toISOString()
+    },
+    walletId: "0.0.9049550",
+    paymentIntentId: request.id,
+    transactionId: `testnet-concurrent-${request.id}`
+  };
+}
+
+function requireTestDelegateVendorId(request: UMRequest): string {
+  if (!request.delegateVendorId) {
+    throw new Error(`TEST_DELEGATE_VENDOR_REQUIRED:${request.id}`);
+  }
+
+  return request.delegateVendorId;
+}
 
 class FakeDelegatePersistenceStore implements UmPasPersistenceStore {
   readonly backend = "firestore" as const;

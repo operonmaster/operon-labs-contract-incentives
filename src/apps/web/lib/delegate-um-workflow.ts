@@ -106,6 +106,7 @@ export function createDelegateUmWorkflow(
       await loadPersistedDelegateRows(persistence, rows);
 
       return (await listRequests())
+        .filter((request) => Boolean(request.delegateVendorId))
         .map((request) => rows.get(request.id) ?? buildPendingRow(request))
         .sort((left, right) => right.submittedAt.localeCompare(left.submittedAt));
     },
@@ -190,6 +191,10 @@ async function completeAndSettleDetermination({
     throw new Error(`UM_REQUEST_NOT_FOUND:${umRequestId}`);
   }
 
+  if (!persisted.delegateVendorId) {
+    throw new Error(`UM_REQUEST_NOT_DELEGATED:${umRequestId}`);
+  }
+
   const request = persistence
     ? completeClinicalReviewForRequest(persisted, input)
     : platform.completeClinicalReview(umRequestId, input);
@@ -197,6 +202,7 @@ async function completeAndSettleDetermination({
 
   const row = await settleDetermination(request, {
     rows,
+    persistence,
     policyStore,
     paymentIntentStore,
     paymentPolicyStore
@@ -216,7 +222,7 @@ function buildDelegateEvidence(request: UMRequest): DelegateUmSlaEvidence {
     umRequestId: request.id,
     id: request.id,
     planId: request.planId,
-    delegateVendorId: request.delegateVendorId ?? "northstar-um",
+    delegateVendorId: requireDelegateVendorId(request),
     requestType: request.requestType,
     state: request.state,
     outcomeStatus: request.outcomeStatus ?? "approved",
@@ -241,7 +247,7 @@ function buildPendingRow(request: UMRequest): DelegateUmRow {
     id: request.id,
     planId: request.planId,
     planDisplay: request.planDisplay,
-    delegateVendorId: request.delegateVendorId ?? "northstar-um",
+    delegateVendorId: requireDelegateVendorId(request),
     requestType: request.requestType,
     serviceLabel: request.serviceLabel,
     submittedAt: request.submittedAt,
@@ -267,10 +273,19 @@ function buildPendingRow(request: UMRequest): DelegateUmRow {
   };
 }
 
+function requireDelegateVendorId(request: UMRequest): string {
+  if (!request.delegateVendorId) {
+    throw new Error(`UM_REQUEST_NOT_DELEGATED:${request.id}`);
+  }
+
+  return request.delegateVendorId;
+}
+
 async function settleDetermination(
   request: UMRequest,
   dependencies: {
     rows: Map<string, DelegateUmRow>;
+    persistence: UmPasPersistenceStore | undefined;
     policyStore: PolicyStore;
     paymentIntentStore: PaymentIntentStore | undefined;
     paymentPolicyStore: PaymentPolicyStore;
@@ -425,6 +440,11 @@ async function settleDetermination(
       }
     };
   } catch {
+    const paidRow = normalizePersistedDelegateRow(await dependencies.persistence?.getIncentiveRow(request.id));
+    if (paidRow && isImmutablePaidDelegateRow(paidRow)) {
+      return paidRow;
+    }
+
     return {
       ...baseRow,
       incentiveStatus: "payment_failed",
