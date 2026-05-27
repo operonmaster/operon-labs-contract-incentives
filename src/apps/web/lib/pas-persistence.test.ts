@@ -232,7 +232,7 @@ describe("PAS persistence store selection", () => {
     ]);
   });
 
-  it("canonicalizes legacy stored UMR request and event ids to the PA id", async () => {
+  it("canonicalizes stored UMR request and event ids to the PA id", async () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(
       {
@@ -248,23 +248,13 @@ describe("PAS persistence store selection", () => {
       requestType: "outpatient_service",
       serviceCode: "knee_mri"
     });
-    const evidence = platform.getEvidence(umRequest.id)!;
     const legacyUmRequest = {
       ...umRequest,
       id: "UMR-260526-0900-LEGACY1",
       sourceCaseId: umRequest.id
     };
 
-    await firestore.collection("pasClaims").doc(umRequest.id).set({
-      umRequest: legacyUmRequest,
-      evidence: {
-        ...evidence,
-        umRequestId: "UMR-260526-0900-LEGACY1",
-        sourceCaseId: umRequest.id
-      },
-      fhirBundle: buildPasFhirBundle(umRequest, evidence),
-      storedAt: umRequest.submittedAt
-    });
+    await firestore.collection("umRequests").doc(umRequest.id).set(legacyUmRequest);
     await firestore.collection("auditEvents").doc(`${umRequest.id}-PAS_SUBMITTED`).set({
       eventType: "PAS_SUBMITTED",
       caseId: umRequest.id,
@@ -285,11 +275,6 @@ describe("PAS persistence store selection", () => {
         sourceCaseId: umRequest.id
       })
     ]);
-    expect((await firestore.collection("umRequests").doc(umRequest.id).get()).data()).toMatchObject({
-      id: umRequest.id,
-      caseId: umRequest.id,
-      sourceCaseId: umRequest.id
-    });
     await expect(store.getEvidence(umRequest.id)).resolves.toMatchObject({
       caseId: umRequest.id,
       umRequestId: umRequest.id,
@@ -308,6 +293,39 @@ describe("PAS persistence store selection", () => {
       eventType: "PAS_SUBMITTED",
       caseId: umRequest.id,
       umRequestId: umRequest.id
+    });
+  });
+
+  it("does not use legacy pasClaims as a workflow source when umRequests is empty", async () => {
+    const firestore = createFakeFirestore();
+    const store = createFirestorePasPersistenceStore(
+      {
+        projectId: "operon-labs-nonprod",
+        databaseId: "(default)"
+      },
+      firestore
+    );
+    const platform = createInMemoryUmPlatform({
+      generateCaseId: () => "PA-260526-0900-AUDITONLY"
+    });
+    const umRequest = platform.submitPriorAuth({
+      requestType: "pharmacy_benefit",
+      serviceCode: "wegovy_semaglutide"
+    });
+    const evidence = platform.getEvidence(umRequest.id)!;
+
+    await firestore.collection("pasClaims").doc(umRequest.id).set({
+      umRequest,
+      evidence,
+      fhirBundle: buildPasFhirBundle(umRequest, evidence),
+      storedAt: umRequest.submittedAt
+    });
+
+    await expect(store.listUmRequests()).resolves.toEqual([]);
+    await expect(store.getUmRequest(umRequest.id)).resolves.toBeNull();
+    await expect(store.getEvidence(umRequest.id)).resolves.toBeNull();
+    await expect(firestore.collection("umRequests").doc(umRequest.id).get()).resolves.toMatchObject({
+      exists: false
     });
   });
 
@@ -437,7 +455,7 @@ describe("PAS persistence store selection", () => {
     await expect(store.listUmEvents()).resolves.toEqual([]);
   });
 
-  it("canonicalizes legacy UM requests from doc id instead of sourceCaseId", async () => {
+  it("canonicalizes native UM requests from doc id instead of sourceCaseId", async () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(
       {
@@ -453,7 +471,6 @@ describe("PAS persistence store selection", () => {
       requestType: "outpatient_service",
       serviceCode: "knee_mri"
     });
-    const evidence = platform.getEvidence(umRequest.id)!;
     const legacyUmRequest = {
       ...umRequest,
       id: "UMR-260526-0900-REQDOC1",
@@ -461,12 +478,7 @@ describe("PAS persistence store selection", () => {
       sourceCaseId: "PA-260526-0900-WRONG99"
     };
 
-    await firestore.collection("pasClaims").doc(umRequest.id).set({
-      umRequest: legacyUmRequest,
-      evidence,
-      fhirBundle: buildPasFhirBundle(umRequest, evidence),
-      storedAt: umRequest.submittedAt
-    });
+    await firestore.collection("umRequests").doc(umRequest.id).set(legacyUmRequest);
 
     await expect(store.getUmRequest(umRequest.id)).resolves.toMatchObject({
       id: umRequest.id,
@@ -488,7 +500,7 @@ describe("PAS persistence store selection", () => {
     });
   });
 
-  it("uses the lookup id over stale embedded UM request and evidence ids on read", async () => {
+  it("uses the lookup id over stale native UM request ids on read", async () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(
       {
@@ -504,29 +516,17 @@ describe("PAS persistence store selection", () => {
       requestType: "outpatient_service",
       serviceCode: "knee_mri"
     });
-    const evidence = platform.getEvidence(umRequest.id)!;
 
-    await firestore.collection("pasClaims").doc(umRequest.id).set({
-      umRequest: {
-        ...umRequest,
-        id: "PA-260526-0900-STALE99",
-        caseId: "PA-260526-0900-STALE99",
-        sourceCaseId: "PA-260526-0900-STALE99",
-        auditRefs: {
-          pasClaimBundleId: "PA-260526-0900-STALE99",
-          pasClaimResponseBundleId: "PA-260526-0900-STALE99",
-          staleNestedCaseId: "PA-260526-0900-STALE99"
-        }
-      },
-      evidence: {
-        ...evidence,
-        id: "PA-260526-0900-STALE99",
-        umRequestId: "PA-260526-0900-STALE99",
-        caseId: "PA-260526-0900-STALE99",
-        sourceCaseId: "PA-260526-0900-STALE99"
-      },
-      fhirBundle: buildPasFhirBundle(umRequest, evidence),
-      storedAt: umRequest.submittedAt
+    await firestore.collection("umRequests").doc(umRequest.id).set({
+      ...umRequest,
+      id: "PA-260526-0900-STALE99",
+      caseId: "PA-260526-0900-STALE99",
+      sourceCaseId: "PA-260526-0900-STALE99",
+      auditRefs: {
+        pasClaimBundleId: "PA-260526-0900-STALE99",
+        pasClaimResponseBundleId: "PA-260526-0900-STALE99",
+        staleNestedCaseId: "PA-260526-0900-STALE99"
+      }
     });
 
     await expect(store.getUmRequest(umRequest.id)).resolves.toMatchObject({
@@ -547,7 +547,7 @@ describe("PAS persistence store selection", () => {
     });
   });
 
-  it("canonicalizes legacy stored evidence to the full UM evidence shape without using sourceCaseId as identity", async () => {
+  it("builds evidence from native UM requests without using sourceCaseId as identity", async () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(
       {
@@ -569,22 +569,9 @@ describe("PAS persistence store selection", () => {
         clinicalNoteAttached: true
       }
     });
-    const currentEvidence = platform.getEvidence(umRequest.id)!;
-    const legacyEvidence = {
-      ...currentEvidence,
-      id: undefined,
-      umRequestId: undefined,
-      caseId: undefined,
-      sourceCaseId: "PA-260526-0900-WRONG99",
-      dtrCompleted: undefined,
-      dtrTemplateCompleted: true
-    };
-
-    await firestore.collection("pasClaims").doc(umRequest.id).set({
-      umRequest,
-      evidence: legacyEvidence,
-      fhirBundle: buildPasFhirBundle(umRequest, currentEvidence),
-      storedAt: umRequest.submittedAt
+    await firestore.collection("umRequests").doc(umRequest.id).set({
+      ...umRequest,
+      sourceCaseId: "PA-260526-0900-WRONG99"
     });
 
     await expect(store.getEvidence(umRequest.id)).resolves.toMatchObject({
@@ -597,7 +584,7 @@ describe("PAS persistence store selection", () => {
     });
   });
 
-  it("rebuilds provider documentation evidence from the canonical UM request when stored evidence is stale", async () => {
+  it("rebuilds provider documentation evidence from the canonical UM request", async () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(
       {
@@ -614,25 +601,7 @@ describe("PAS persistence store selection", () => {
       serviceCode: "full_body_wellness_mri",
       acknowledgedNotCovered: true
     });
-    const staleApprovedEvidence = {
-      ...platform.getEvidence(umRequest.id)!,
-      serviceCode: "knee_mri",
-      billingCode: "73721",
-      coveredBenefit: true,
-      crdCoveredBenefit: true,
-      dtrRequested: true,
-      dtrCompleted: true,
-      dtrTemplateCompleted: true,
-      attachmentChecklistComplete: true,
-      fhirFieldsPresent: true
-    };
-
-    await firestore.collection("pasClaims").doc(umRequest.id).set({
-      umRequest,
-      evidence: staleApprovedEvidence,
-      fhirBundle: buildPasFhirBundle(umRequest, platform.getEvidence(umRequest.id)!),
-      storedAt: umRequest.submittedAt
-    });
+    await firestore.collection("umRequests").doc(umRequest.id).set(umRequest);
 
     await expect(store.getEvidence(umRequest.id)).resolves.toMatchObject({
       id: umRequest.id,
@@ -647,7 +616,7 @@ describe("PAS persistence store selection", () => {
     });
   });
 
-  it("lists legacy record-only PAS docs through the canonical PA id", async () => {
+  it("lists record-wrapped native UM request docs through the canonical PA id", async () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(
       {
@@ -663,7 +632,6 @@ describe("PAS persistence store selection", () => {
       requestType: "outpatient_service",
       serviceCode: "knee_mri"
     });
-    const evidence = platform.getEvidence(umRequest.id)!;
     const legacyRecord = {
       ...umRequest,
       id: "UMR-260526-0900-RECORD1",
@@ -675,10 +643,8 @@ describe("PAS persistence store selection", () => {
       }
     };
 
-    await firestore.collection("pasClaims").doc(umRequest.id).set({
+    await firestore.collection("umRequests").doc(umRequest.id).set({
       record: legacyRecord,
-      evidence,
-      fhirBundle: buildPasFhirBundle(umRequest, evidence),
       storedAt: umRequest.submittedAt
     });
 

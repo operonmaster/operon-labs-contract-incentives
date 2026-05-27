@@ -114,14 +114,6 @@ export interface FirestoreDatabase {
 }
 /* eslint-enable no-unused-vars */
 
-interface StoredPasClaimDocument extends Partial<PasFhirBundle> {
-  umRequest?: UMRequest;
-  record?: UMRequest;
-  evidence?: ProviderDocumentationEvidence;
-  fhirBundle?: PasFhirBundle;
-  storedAt?: string;
-}
-
 type StoredUmRequestDocument = UMRequest & {
   umRequest?: UMRequest;
   record?: UMRequest;
@@ -232,45 +224,14 @@ class FirestorePasPersistenceStore implements UmPasPersistenceStore {
   async listUmRequests(): Promise<UMRequest[]> {
     const firestore = await this.getFirestore();
     const nativeSnapshot = await firestore.collection(UM_REQUESTS_COLLECTION).get();
-    const requestsById = new Map<string, UMRequest>();
-
-    for (const doc of nativeSnapshot.docs) {
-      const umRequest = extractStoredNativeUmRequest(doc.data() as StoredUmRequestDocument, doc.id);
-      if (umRequest) {
-        requestsById.set(umRequest.id, umRequest);
-      }
-    }
-
-    const legacySnapshot = await firestore.collection(PAS_CLAIMS_COLLECTION).get();
-    for (const doc of legacySnapshot.docs) {
-      const legacyUmRequest = extractStoredUmRequest(doc.data() as StoredPasClaimDocument, doc.id);
-      if (legacyUmRequest && !requestsById.has(legacyUmRequest.id)) {
-        await this.saveMigratedNativeUmRequest(legacyUmRequest);
-        requestsById.set(legacyUmRequest.id, legacyUmRequest);
-      }
-    }
-
-    return [...requestsById.values()]
+    return nativeSnapshot.docs
+      .map((doc) => extractStoredNativeUmRequest(doc.data() as StoredUmRequestDocument, doc.id))
+      .filter((umRequest): umRequest is UMRequest => Boolean(umRequest))
       .sort((left, right) => right.submittedAt.localeCompare(left.submittedAt));
   }
 
   async getUmRequest(umRequestId: string): Promise<UMRequest | null> {
-    const nativeUmRequest = await this.getStoredNativeUmRequestById(umRequestId);
-    if (nativeUmRequest) {
-      return nativeUmRequest;
-    }
-
-    const data = await this.getStoredPasSubmissionDataByUmRequestId(umRequestId);
-    if (!data) {
-      return null;
-    }
-
-    const legacyUmRequest = extractStoredUmRequest(data, umRequestId);
-    if (legacyUmRequest) {
-      await this.saveMigratedNativeUmRequest(legacyUmRequest);
-    }
-
-    return legacyUmRequest;
+    return this.getStoredNativeUmRequestById(umRequestId);
   }
 
   async getEvidence(umRequestId: string): Promise<ProviderDocumentationEvidence | null> {
@@ -279,18 +240,7 @@ class FirestorePasPersistenceStore implements UmPasPersistenceStore {
       return canonicalizeStoredEvidence(buildProviderDocumentationEvidence(nativeUmRequest), nativeUmRequest.id);
     }
 
-    const data = await this.getStoredPasSubmissionDataByUmRequestId(umRequestId);
-
-    if (!data) {
-      return null;
-    }
-
-    const umRequest = extractStoredUmRequest(data, umRequestId);
-    if (umRequest) {
-      return canonicalizeStoredEvidence(buildProviderDocumentationEvidence(umRequest), umRequest.id);
-    }
-
-    return data.evidence ? canonicalizeStoredEvidence(data.evidence, umRequestId) : null;
+    return null;
   }
 
   async listUmEvents(): Promise<UMPlatformEvent[]> {
@@ -323,17 +273,6 @@ class FirestorePasPersistenceStore implements UmPasPersistenceStore {
       .map(toPasSubmittedEvent);
   }
 
-  private async getStoredPasSubmissionDataByUmRequestId(umRequestId: string): Promise<StoredPasClaimDocument | null> {
-    const firestore = await this.getFirestore();
-    const snapshot = await firestore.collection(PAS_CLAIMS_COLLECTION).doc(umRequestId).get();
-
-    if (snapshot.exists) {
-      return snapshot.data() as StoredPasClaimDocument;
-    }
-
-    return null;
-  }
-
   private async getStoredNativeUmRequestById(umRequestId: string): Promise<UMRequest | null> {
     const firestore = await this.getFirestore();
     const snapshot = await firestore.collection(UM_REQUESTS_COLLECTION).doc(umRequestId).get();
@@ -343,11 +282,6 @@ class FirestorePasPersistenceStore implements UmPasPersistenceStore {
     }
 
     return null;
-  }
-
-  private async saveMigratedNativeUmRequest(umRequest: UMRequest): Promise<void> {
-    const firestore = await this.getFirestore();
-    await firestore.collection(UM_REQUESTS_COLLECTION).doc(umRequest.id).set(umRequest);
   }
 
   async saveIncentiveRow(row: PersistedIncentiveWorklistRow): Promise<void> {
@@ -498,12 +432,6 @@ function isCanonicalPaIdentifierSystem(system: string): boolean {
 
 function getCanonicalPaIdentifierSystemName(system: string): "prior-auth-case-id" | "um-request-id" {
   return system.endsWith("/prior-auth-case-id") ? "prior-auth-case-id" : "um-request-id";
-}
-
-function extractStoredUmRequest(data: StoredPasClaimDocument, fallbackCanonicalId: string | undefined): UMRequest | null {
-  const umRequest = data.umRequest ?? data.record ?? null;
-
-  return umRequest ? canonicalizeStoredUmRequest(umRequest, fallbackCanonicalId) : null;
 }
 
 function extractStoredNativeUmRequest(
