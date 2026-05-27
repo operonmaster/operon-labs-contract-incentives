@@ -24,28 +24,40 @@ describe("DelegateVendorConsole source", () => {
     expect(modalSource).toContain("useState(false)");
     expect(modalSource).toContain("const canSubmit = reviewStarted && checklistComplete && !submitting");
     expect(modalSource).toContain("disabled={!canSubmit}");
+    expect(modalSource).toContain("LabsSelect");
+    expect(modalSource).not.toContain("<select");
+
+    const stylesSource = readFileSync(path.join(process.cwd(), "src/apps/web/app/styles.css"), "utf8");
+    expect(stylesSource).toContain(".delegate-field > span");
+    expect(stylesSource).not.toContain(".delegate-field span");
   });
 
-  it("renders review modal with determination disabled before review and checklist completion", () => {
+  it("renders review modal with shared checklist, radio, and dropdown primitives", () => {
     const markup = renderToStaticMarkup(
       createElement(DelegateReviewModal, {
         requestApiBase: "/api/delegate-um/requests/",
-        row: buildDelegateRow(),
+        row: buildDelegateRow("in_clinical_review", "denied"),
         onClose: () => undefined,
         onCompleted: () => undefined
       })
     );
 
-    expect(markup).toContain("Start review");
     expect(markup).toContain("Medical necessity reviewed");
     expect(markup).toContain("Policy criteria checked");
     expect(markup).toContain("Rationale captured");
+    expect(markup).toContain("Outcome status");
+    expect(markup).toContain("labs-select");
+    expect(markup).toContain("Not medically necessary");
     expect(markup).toContain("Submit determination");
     expect(markup).toMatch(/<button class="primary-button" disabled="" type="button">Submit determination<\/button>/);
+    expect(markup).not.toContain("<select");
   });
 });
 
-function buildDelegateRow(): DelegateUmRow {
+function buildDelegateRow(
+  state: DelegateUmRow["state"] = "pend",
+  outcomeStatus: DelegateUmRow["outcomeStatus"] = null
+): DelegateUmRow {
   return {
     evaluationType: "delegate_um_sla_bonus",
     umRequestId: "PA-260526-0900-REVIEW1",
@@ -60,8 +72,8 @@ function buildDelegateRow(): DelegateUmRow {
     slaDeadlineAt: "2026-05-27T09:00:00.000Z",
     determinedAt: null,
     timeRemainingMs: 86_400_000,
-    state: "pend",
-    outcomeStatus: null,
+    state,
+    outcomeStatus,
     slaStatus: "pending",
     incentiveStatus: "pending",
     paymentStatus: "pending",

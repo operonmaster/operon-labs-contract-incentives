@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { DelegateUmRow } from "../../lib/delegate-um-workflow";
-import { LabsBadge } from "../labs-ui";
+import { LabsBadge, LabsSelect, type LabsSelectOption } from "../labs-ui";
 import { formatRequestType, formatSlaStatus, formatUmState } from "./delegate-formatters";
 
 interface DelegateReviewModalProps {
@@ -13,10 +13,28 @@ interface DelegateReviewModalProps {
   onCompleted: (row: DelegateUmRow) => void;
 }
 
+const denialReasonOptions: LabsSelectOption[] = [
+  {
+    value: "NOT_MEDICALLY_NECESSARY",
+    label: "Not medically necessary",
+    description: "Clinical evidence does not support the requested pharmacy benefit."
+  },
+  {
+    value: "POLICY_CRITERIA_NOT_MET",
+    label: "Policy criteria not met",
+    description: "Plan criteria were reviewed and not satisfied."
+  },
+  {
+    value: "MISSING_CLINICAL_INFORMATION",
+    label: "Missing clinical information",
+    description: "Required review evidence is not available for the determination."
+  }
+];
+
 export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, row }: DelegateReviewModalProps) {
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const [reviewStarted, setReviewStarted] = useState(row.state === "in_clinical_review");
-  const [outcomeStatus, setOutcomeStatus] = useState<"approved" | "denied">("approved");
+  const [outcomeStatus, setOutcomeStatus] = useState<"approved" | "denied">(row.outcomeStatus ?? "approved");
   const [medicalNecessityReviewed, setMedicalNecessityReviewed] = useState(false);
   const [policyCriteriaChecked, setPolicyCriteriaChecked] = useState(false);
   const [rationaleCaptured, setRationaleCaptured] = useState(false);
@@ -200,14 +218,16 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, row 
               ))}
             </div>
             {outcomeStatus === "denied" ? (
-              <label className="delegate-field">
+              <div className="form-row delegate-field">
                 <span>Denial reason</span>
-                <select value={denialReasonCode} onChange={(event) => setDenialReasonCode(event.currentTarget.value)}>
-                  <option value="NOT_MEDICALLY_NECESSARY">Not medically necessary</option>
-                  <option value="POLICY_CRITERIA_NOT_MET">Policy criteria not met</option>
-                  <option value="MISSING_CLINICAL_INFORMATION">Missing clinical information</option>
-                </select>
-              </label>
+                <LabsSelect
+                  id="delegate-denial-reason"
+                  options={denialReasonOptions}
+                  placeholder="Select denial reason"
+                  value={denialReasonCode}
+                  onChange={setDenialReasonCode}
+                />
+              </div>
             ) : null}
           </section>
         </div>
