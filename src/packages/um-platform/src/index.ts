@@ -41,6 +41,7 @@ export interface PriorAuthSubmissionInput {
   planDisplay?: string;
   requestType: RequestType;
   serviceCode: ServiceCode;
+  delegateVendorId?: "northstar-um" | null;
   dtr?: DtrAnswers;
   dtrQuestionnaireResponse?: DtrQuestionnaireResponse;
   acknowledgedNotCovered?: boolean;
@@ -187,7 +188,6 @@ const defaultPatientByPlanId: Record<PlanId, { patientId: string; patientDisplay
   }
 };
 
-const DEFAULT_DELEGATE_VENDOR_ID = "northstar-um" as const;
 const DEFAULT_SLA_HOURS = 24 as const;
 
 export function getCoverageRequirements(serviceCode: ServiceCode): CoverageRequirements {
@@ -327,7 +327,7 @@ export function createInMemoryUmPlatform(options: UmPlatformOptions = {}): UmPla
         providerDisplay: "Lakeside Provider Admin",
         providerGroupId: "lakeside-provider-admin",
         providerGroupDisplay: "Lakeside Provider Admin",
-        delegateVendorId: DEFAULT_DELEGATE_VENDOR_ID,
+        delegateVendorId: input.delegateVendorId ?? null,
         requestType: input.requestType,
         serviceCode: input.serviceCode,
         serviceLabel: coverage.serviceLabel,

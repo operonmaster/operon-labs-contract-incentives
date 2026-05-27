@@ -158,6 +158,31 @@ describe("provider documentation UM Platform", () => {
     expect(platform.getEvidence(submitted.id)).not.toHaveProperty("denialReason");
   });
 
+  it("does not delegate PAS-created UM requests unless explicitly requested", () => {
+    const caseIds = ["PA-260526-0900-DELEGATE1", "PA-260526-0900-DELEGATE2"];
+    const platform = createInMemoryUmPlatform({
+      generateCaseId: () => caseIds.shift() ?? "PA-260526-0900-DELEGATE3"
+    });
+
+    const ordinary = platform.submitPriorAuth({
+      requestType: "outpatient_service",
+      serviceCode: "knee_mri"
+    });
+    const delegated = platform.submitPriorAuth({
+      delegateVendorId: "northstar-um",
+      requestType: "outpatient_service",
+      serviceCode: "knee_mri"
+    });
+
+    expect(ordinary).toMatchObject({
+      id: "PA-260526-0900-DELEGATE1",
+      delegateVendorId: null
+    });
+    expect(delegated).toMatchObject({
+      delegateVendorId: "northstar-um"
+    });
+  });
+
   it("stores incomplete knee MRI assessment as incomplete evidence instead of blocking submission", () => {
     const platform = createInMemoryUmPlatform();
 

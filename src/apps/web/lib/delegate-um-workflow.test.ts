@@ -24,6 +24,7 @@ describe("delegate UM workflow", () => {
     const platform = createInMemoryUmPlatform({ generateCaseId: () => "PA-260526-0900-AAAA1111" });
     const workflow = createDelegateUmWorkflow(platform);
     const umRequest = platform.submitPriorAuth({
+      delegateVendorId: "northstar-um",
       requestType: "outpatient_service",
       serviceCode: "knee_mri"
     });
@@ -55,6 +56,7 @@ describe("delegate UM workflow", () => {
       })
     );
     const umRequest = platform.submitPriorAuth({
+      delegateVendorId: "northstar-um",
       requestType: "outpatient_service",
       serviceCode: "knee_mri"
     });
@@ -100,6 +102,7 @@ describe("delegate UM workflow", () => {
       })
     );
     const umRequest = platform.submitPriorAuth({
+      delegateVendorId: "northstar-um",
       requestType: "outpatient_service",
       serviceCode: "knee_mri"
     });
@@ -146,6 +149,7 @@ describe("delegate UM workflow", () => {
       })
     );
     const umRequest = platform.submitPriorAuth({
+      delegateVendorId: "northstar-um",
       requestType: "outpatient_service",
       serviceCode: "knee_mri"
     });
@@ -187,6 +191,7 @@ describe("delegate UM workflow", () => {
       })
     );
     const umRequest = platform.submitPriorAuth({
+      delegateVendorId: "northstar-um",
       requestType: "outpatient_service",
       serviceCode: "knee_mri"
     });
@@ -220,6 +225,7 @@ describe("delegate UM workflow", () => {
       })
     );
     const umRequest = platform.submitPriorAuth({
+      delegateVendorId: "northstar-um",
       requestType: "outpatient_service",
       serviceCode: "knee_mri"
     });
@@ -262,6 +268,7 @@ describe("delegate UM workflow", () => {
       createInMemoryPolicyStore({})
     );
     const umRequest = platform.submitPriorAuth({
+      delegateVendorId: "northstar-um",
       planId: "summit-health-hmo",
       requestType: "outpatient_service",
       serviceCode: "knee_mri"
@@ -336,6 +343,7 @@ describe("delegate UM workflow", () => {
       })
     );
     const umRequest = platform.submitPriorAuth({
+      delegateVendorId: "northstar-um",
       requestType: "outpatient_service",
       serviceCode: "knee_mri"
     });
