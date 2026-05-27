@@ -16,6 +16,7 @@ import {
   type UMPlatformEvent,
   type UmPlatform
 } from "@operon-labs/um-platform";
+import { umPlatform } from "./um-platform-singleton";
 import { createPasPersistenceStoreFromEnv, type UmPasPersistenceStore } from "./pas-persistence";
 import { createPaymentIntentStoreFromEnv } from "./payment-intent-store";
 import { createPolicyStoreFromEnv, type PolicyStore } from "./policy-store";
@@ -408,7 +409,7 @@ function isUmRequestCreatedEvent(event: UMPlatformEvent): event is UMPlatformEve
   return event.eventType === "UM_REQUEST_CREATED";
 }
 
-export const providerDocumentationWorkflow = createProviderDocumentationWorkflow();
+export const providerDocumentationWorkflow = createProviderDocumentationWorkflow(umPlatform);
 
 function isProviderDocumentationIncentiveRow(row: IncentiveWorklistRow & { evaluationType?: string }): row is IncentiveWorklistRow {
   return row.evaluationType === undefined || row.evaluationType === "provider_documentation_completeness";

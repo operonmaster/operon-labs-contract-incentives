@@ -15,6 +15,7 @@ import { createPasPersistenceStoreFromEnv, type UmPasPersistenceStore } from "./
 import { createPaymentIntentStoreFromEnv } from "./payment-intent-store";
 import { createPaymentPolicyStoreFromEnv, type PaymentPolicyStore } from "./payment-policy-store";
 import { createPolicyStoreFromEnv, type PolicyStore } from "./policy-store";
+import { umPlatform } from "./um-platform-singleton";
 
 export type DelegateIncentiveStatus = "pending" | "not_eligible" | "paid" | "payment_failed";
 export type DelegatePaymentStatus = "pending" | "auto_executed" | "blocked_by_policy" | "execution_failed";
@@ -158,7 +159,7 @@ export function createDelegateUmWorkflow(
   };
 }
 
-export const delegateUmWorkflow = createDelegateUmWorkflow();
+export const delegateUmWorkflow = createDelegateUmWorkflow(umPlatform);
 
 /* eslint-disable no-unused-vars -- TypeScript function signatures require parameter names. */
 interface CompleteAndSettleDependencies {
