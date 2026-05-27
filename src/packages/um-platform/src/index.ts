@@ -41,7 +41,6 @@ export interface PriorAuthSubmissionInput {
   planDisplay?: string;
   requestType: RequestType;
   serviceCode: ServiceCode;
-  delegateVendorId?: "northstar-um" | null;
   dtr?: DtrAnswers;
   dtrQuestionnaireResponse?: DtrQuestionnaireResponse;
   acknowledgedNotCovered?: boolean;
@@ -188,6 +187,7 @@ const defaultPatientByPlanId: Record<PlanId, { patientId: string; patientDisplay
   }
 };
 
+const DEFAULT_DELEGATE_VENDOR_ID = "northstar-um" as const;
 const DEFAULT_SLA_HOURS = 24 as const;
 
 export function getCoverageRequirements(serviceCode: ServiceCode): CoverageRequirements {
@@ -327,7 +327,7 @@ export function createInMemoryUmPlatform(options: UmPlatformOptions = {}): UmPla
         providerDisplay: "Lakeside Provider Admin",
         providerGroupId: "lakeside-provider-admin",
         providerGroupDisplay: "Lakeside Provider Admin",
-        delegateVendorId: input.delegateVendorId ?? null,
+        delegateVendorId: resolveDelegateVendorId(input.requestType),
         requestType: input.requestType,
         serviceCode: input.serviceCode,
         serviceLabel: coverage.serviceLabel,
@@ -489,6 +489,10 @@ function getUnusedCaseId(requests: Map<string, UMRequest>, generateCaseId: () =>
   }
 
   throw new Error("PAS_CASE_ID_GENERATION_LIMIT_EXCEEDED");
+}
+
+function resolveDelegateVendorId(requestType: RequestType): UMRequest["delegateVendorId"] {
+  return requestType === "pharmacy_benefit" ? DEFAULT_DELEGATE_VENDOR_ID : null;
 }
 
 function formatDatePart(value: number): string {

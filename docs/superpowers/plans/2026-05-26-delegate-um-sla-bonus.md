@@ -6,6 +6,8 @@
 
 **Architecture:** PAS submissions remain the intake and audit boundary, but `@operon-labs/um-platform` normalizes accepted submissions into `UMRequest`. Provider Documentation and Delegate UM both derive policy-safe evidence from `UMRequest`; the incentive agent receives event metadata and pulls evidence by `umRequestId`. Delegate UM adds review state transitions, a 24-hour SLA clock, and policy-bound payment for timely audit-ready determinations, independent of approved or denied outcome.
 
+**Delegate demo scope:** pharmacy prior authorizations are delegated by `UMRequest.requestType === "pharmacy_benefit"`. Do not key delegation off service code, and do not require the PAS submitter to pass a delegate vendor override. Non-pharmacy requests stay out of the Delegate UM workqueue for this demo scope.
+
 **ID Strategy:** Use the generated PA case ID as the canonical UM request ID everywhere. `UMRequest.id`, event `caseId`, event `umRequestId`, FHIR bundle/Claim IDs, Firestore document IDs, incentive evaluation IDs, and payment attestation IDs all use the same `PA-*` value. Do not generate `UMR-*` IDs. If compatibility fields remain temporarily, they must equal `UMRequest.id` and must not introduce a second lookup key.
 
 **Tech Stack:** TypeScript, npm workspaces, Vitest, Next.js App Router, React client components, existing `@operon-labs/um-platform`, `@operon-labs/policy-engine`, `@operon-labs/incentive-agent`, `@operon-labs/hedera-executor`, Firestore-backed stores with memory-test doubles.
@@ -929,7 +931,7 @@ const approvedDelegateRequest: EvaluationRequest = {
     umRequestId: "PA-260526-0900-AAAA1111",
     planId: "acme-health-ppo",
     delegateVendorId: "northstar-um",
-    requestType: "outpatient_service",
+    requestType: "pharmacy_benefit",
     state: "determined",
     outcomeStatusPresent: true,
     outcomeStatus: "approved",
@@ -1205,7 +1207,7 @@ const evidence: DelegateUmSlaEvidence = {
   id: "PA-260526-0900-AAAA1111",
   planId: "acme-health-ppo",
   delegateVendorId: "northstar-um",
-  requestType: "outpatient_service",
+  requestType: "pharmacy_benefit",
   state: "determined",
   outcomeStatus: "denied",
   outcomeStatusPresent: true,
@@ -1617,7 +1619,7 @@ function buildDelegateEvidence(request: UMRequest): DelegateUmSlaEvidence {
     umRequestId: request.id,
     id: request.id,
     planId: request.planId,
-    delegateVendorId: request.delegateVendorId ?? "northstar-um",
+    delegateVendorId: requireDelegateVendorId(request),
     requestType: request.requestType,
     state: request.state,
     outcomeStatus: request.outcomeStatus ?? "approved",
@@ -1642,7 +1644,7 @@ function buildPendingRow(request: UMRequest): DelegateUmRow {
     id: request.id,
     planId: request.planId,
     planDisplay: request.planDisplay,
-    delegateVendorId: request.delegateVendorId ?? "northstar-um",
+    delegateVendorId: requireDelegateVendorId(request),
     requestType: request.requestType,
     serviceLabel: request.serviceLabel,
     submittedAt: request.submittedAt,

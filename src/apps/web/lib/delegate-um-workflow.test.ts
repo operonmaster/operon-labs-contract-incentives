@@ -20,19 +20,27 @@ describe("delegate UM workflow", () => {
     executePolicyBoundPaymentMock.mockClear();
   });
 
-  it("lists pending UMRequests in the delegate workqueue and starts review", async () => {
-    const platform = createInMemoryUmPlatform({ generateCaseId: () => "PA-260526-0900-AAAA1111" });
+  it("lists pharmacy benefit UMRequests in the delegate workqueue by request type and starts review", async () => {
+    const caseIds = ["PA-260526-0900-AAAA1111", "PA-260526-0900-AAAA2222"];
+    const platform = createInMemoryUmPlatform({
+      generateCaseId: () => caseIds.shift() ?? "PA-260526-0900-AAAA3333"
+    });
     const workflow = createDelegateUmWorkflow(platform);
-    const umRequest = platform.submitPriorAuth({
-      delegateVendorId: "northstar-um",
+    const outpatient = platform.submitPriorAuth({
       requestType: "outpatient_service",
       serviceCode: "knee_mri"
     });
+    const umRequest = platform.submitPriorAuth({
+      requestType: "pharmacy_benefit",
+      serviceCode: "wegovy_semaglutide"
+    });
 
+    expect(outpatient.delegateVendorId).toBeNull();
     await expect(workflow.listWorkqueue()).resolves.toEqual([
       expect.objectContaining({
         umRequestId: umRequest.id,
         id: umRequest.id,
+        requestType: "pharmacy_benefit",
         state: "pend",
         slaStatus: "pending"
       })
@@ -56,9 +64,8 @@ describe("delegate UM workflow", () => {
       })
     );
     const umRequest = platform.submitPriorAuth({
-      delegateVendorId: "northstar-um",
-      requestType: "outpatient_service",
-      serviceCode: "knee_mri"
+      requestType: "pharmacy_benefit",
+      serviceCode: "wegovy_semaglutide"
     });
     await workflow.startReview(umRequest.id, "reviewer-ana");
 
@@ -102,9 +109,8 @@ describe("delegate UM workflow", () => {
       })
     );
     const umRequest = platform.submitPriorAuth({
-      delegateVendorId: "northstar-um",
-      requestType: "outpatient_service",
-      serviceCode: "knee_mri"
+      requestType: "pharmacy_benefit",
+      serviceCode: "wegovy_semaglutide"
     });
     await persistence.saveUmRequest(umRequest);
     await workflow.startReview(umRequest.id, "reviewer-ana");
@@ -149,9 +155,8 @@ describe("delegate UM workflow", () => {
       })
     );
     const umRequest = platform.submitPriorAuth({
-      delegateVendorId: "northstar-um",
-      requestType: "outpatient_service",
-      serviceCode: "knee_mri"
+      requestType: "pharmacy_benefit",
+      serviceCode: "wegovy_semaglutide"
     });
     await persistence.saveUmRequest(umRequest);
     await workflow.startReview(umRequest.id, "reviewer-ana");
@@ -191,9 +196,8 @@ describe("delegate UM workflow", () => {
       })
     );
     const umRequest = platform.submitPriorAuth({
-      delegateVendorId: "northstar-um",
-      requestType: "outpatient_service",
-      serviceCode: "knee_mri"
+      requestType: "pharmacy_benefit",
+      serviceCode: "wegovy_semaglutide"
     });
     await workflow.startReview(umRequest.id, "reviewer-ana");
 
@@ -225,9 +229,8 @@ describe("delegate UM workflow", () => {
       })
     );
     const umRequest = platform.submitPriorAuth({
-      delegateVendorId: "northstar-um",
-      requestType: "outpatient_service",
-      serviceCode: "knee_mri"
+      requestType: "pharmacy_benefit",
+      serviceCode: "wegovy_semaglutide"
     });
     await persistence.saveUmRequest({
       ...umRequest,
@@ -268,10 +271,9 @@ describe("delegate UM workflow", () => {
       createInMemoryPolicyStore({})
     );
     const umRequest = platform.submitPriorAuth({
-      delegateVendorId: "northstar-um",
       planId: "summit-health-hmo",
-      requestType: "outpatient_service",
-      serviceCode: "knee_mri"
+      requestType: "pharmacy_benefit",
+      serviceCode: "wegovy_semaglutide"
     });
     await workflow.startReview(umRequest.id, "reviewer-ana");
 
@@ -343,9 +345,8 @@ describe("delegate UM workflow", () => {
       })
     );
     const umRequest = platform.submitPriorAuth({
-      delegateVendorId: "northstar-um",
-      requestType: "outpatient_service",
-      serviceCode: "knee_mri"
+      requestType: "pharmacy_benefit",
+      serviceCode: "wegovy_semaglutide"
     });
     await persistence.saveUmRequest(umRequest);
     await workflow.startReview(umRequest.id, "reviewer-ana");

@@ -158,27 +158,39 @@ describe("provider documentation UM Platform", () => {
     expect(platform.getEvidence(submitted.id)).not.toHaveProperty("denialReason");
   });
 
-  it("does not delegate PAS-created UM requests unless explicitly requested", () => {
-    const caseIds = ["PA-260526-0900-DELEGATE1", "PA-260526-0900-DELEGATE2"];
+  it("delegates PAS-created pharmacy benefit UM requests by request type", () => {
+    const caseIds = ["PA-260526-0900-DELEGATE1", "PA-260526-0900-DELEGATE2", "PA-260526-0900-DELEGATE3"];
     const platform = createInMemoryUmPlatform({
-      generateCaseId: () => caseIds.shift() ?? "PA-260526-0900-DELEGATE3"
+      generateCaseId: () => caseIds.shift() ?? "PA-260526-0900-DELEGATE4"
     });
 
-    const ordinary = platform.submitPriorAuth({
+    const outpatient = platform.submitPriorAuth({
       requestType: "outpatient_service",
       serviceCode: "knee_mri"
     });
-    const delegated = platform.submitPriorAuth({
-      delegateVendorId: "northstar-um",
-      requestType: "outpatient_service",
-      serviceCode: "knee_mri"
+    const wegovy = platform.submitPriorAuth({
+      requestType: "pharmacy_benefit",
+      serviceCode: "wegovy_semaglutide"
+    });
+    const humira = platform.submitPriorAuth({
+      requestType: "pharmacy_benefit",
+      serviceCode: "humira_adalimumab"
     });
 
-    expect(ordinary).toMatchObject({
+    expect(outpatient).toMatchObject({
       id: "PA-260526-0900-DELEGATE1",
       delegateVendorId: null
     });
-    expect(delegated).toMatchObject({
+    expect(wegovy).toMatchObject({
+      id: "PA-260526-0900-DELEGATE2",
+      requestType: "pharmacy_benefit",
+      serviceCode: "wegovy_semaglutide",
+      delegateVendorId: "northstar-um"
+    });
+    expect(humira).toMatchObject({
+      id: "PA-260526-0900-DELEGATE3",
+      requestType: "pharmacy_benefit",
+      serviceCode: "humira_adalimumab",
       delegateVendorId: "northstar-um"
     });
   });

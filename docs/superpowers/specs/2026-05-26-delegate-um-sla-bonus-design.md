@@ -208,6 +208,8 @@ The existing Provider Documentation UX keeps its basic two-tab demo story. The d
 
 Delegate UM starts from `UMRequest`, not from raw PAS records.
 
+Demo scope: pharmacy prior authorizations are delegated when `UMRequest.requestType === "pharmacy_benefit"`. This is intentionally a request-type adoption rule, not a service-code rule and not a provider-submitted delegation override. Outpatient service requests remain Provider Documentation cases unless a future scope explicitly adds outpatient delegation.
+
 Flow:
 
 ```text
@@ -232,6 +234,7 @@ Delegate SLA policy evidence:
     umRequestId: "PA-260526-0001",
     planId: "acme-health-ppo",
     delegateVendorId: "northstar-um",
+    requestType: "pharmacy_benefit",
     state: "determined",
     outcomeStatusPresent: true,
     outcomeStatusUsedForPayment: false,
@@ -257,7 +260,7 @@ Policy stance:
 
 Route: `/delegate-um`
 
-Primary job: let the delegated UM vendor work pending `UMRequest` cases.
+Primary job: let the delegated UM vendor work pending pharmacy benefit `UMRequest` cases.
 
 View elements:
 
