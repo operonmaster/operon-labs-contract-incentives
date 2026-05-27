@@ -32,7 +32,7 @@ describe("policy store", () => {
         providerName: "Northstar UM"
       },
       incentiveScope: {
-        eligibleRequestTypes: ["outpatient_service", "pharmacy_benefit"]
+        eligibleRequestTypes: ["pharmacy_benefit"]
       },
       payout: {
         token: "HBAR",
@@ -146,6 +146,13 @@ describe("policy store", () => {
       requestType: "pharmacy_benefit",
       submittedAt: "2026-05-25T12:00:00.000Z"
     });
+    const outpatientDelegate = await store.findPolicy({
+      evaluationType: "delegate_um_sla_bonus",
+      planId: "acme-health-ppo",
+      providerId: "northstar-um",
+      requestType: "outpatient_service",
+      submittedAt: "2026-05-25T12:00:00.000Z"
+    });
 
     expect(pairPolicies.map((policy) => policy.policyId).sort()).toEqual([
       "plcy_2N7P5R8T0V4X6Z1B3D9F",
@@ -154,6 +161,7 @@ describe("policy store", () => {
     expect(outpatientPolicies.map((policy) => policy.policyId)).toEqual(["plcy_8K2M4Q6R9T1V3X5Z7B0C"]);
     expect(pharmacyPolicies.map((policy) => policy.policyId)).toEqual(["plcy_5R1T8W3Y6B0D9F2H4K7M"]);
     expect(delegate?.policyId).toBe("delegate-um-sla-bonus-v1");
+    expect(outpatientDelegate).toBeNull();
     expect(missing).toBeNull();
   });
 
@@ -255,7 +263,7 @@ describe("policy store", () => {
     await firestore.collection("incentivePolicies").doc("delegate-um-sla-bonus-v1").set({
       ...defaultIncentivePolicies.delegate_um_acme_sla_bonus,
       incentiveScope: {
-        eligibleRequestTypes: ["outpatient_service", "pharmacy_benefit"],
+        eligibleRequestTypes: ["pharmacy_benefit"],
         excludedRequestTypes: ["pharmacy_benefit"]
       }
     });
@@ -266,25 +274,41 @@ describe("policy store", () => {
       providerId: "northstar-um",
       requestType: "pharmacy_benefit"
     });
-    const eligible = await store.findPolicy({
-      evaluationType: "delegate_um_sla_bonus",
-      planId: "acme-health-ppo",
-      providerId: "northstar-um",
-      requestType: "outpatient_service"
-    });
     const normalized = await store.getPolicyById("delegate-um-sla-bonus-v1");
 
     expect(excluded).toBeNull();
-    expect(eligible).toMatchObject({
-      policyId: "delegate-um-sla-bonus-v1",
+    expect(normalized?.incentiveScope).toMatchObject({
+      eligibleRequestTypes: ["pharmacy_benefit"],
+      excludedRequestTypes: ["pharmacy_benefit"]
+    });
+  });
+
+  it("migrates old delegate SLA policy scopes to delegated pharmacy prior authorizations only", async () => {
+    const firestore = createFakeFirestore();
+    const store = createFirestorePolicyStore(
+      {
+        projectId: "operon-labs-nonprod",
+        databaseId: "(default)"
+      },
+      firestore
+    );
+    await firestore.collection("incentivePolicies").doc("delegate-um-sla-bonus-v1").set({
+      ...defaultIncentivePolicies.delegate_um_acme_sla_bonus,
       incentiveScope: {
         eligibleRequestTypes: ["outpatient_service", "pharmacy_benefit"],
-        excludedRequestTypes: ["pharmacy_benefit"]
+        excludedRequestTypes: ["outpatient_service"]
       }
     });
-    expect(normalized?.incentiveScope).toMatchObject({
-      eligibleRequestTypes: ["outpatient_service", "pharmacy_benefit"],
-      excludedRequestTypes: ["pharmacy_benefit"]
+
+    const policies = await store.listPolicies("delegate_um_sla_bonus");
+    const normalized = await store.getPolicyById("delegate-um-sla-bonus-v1");
+
+    expect(policies).toHaveLength(1);
+    expect(policies[0]?.incentiveScope).toEqual({
+      eligibleRequestTypes: ["pharmacy_benefit"]
+    });
+    expect(normalized?.incentiveScope).toEqual({
+      eligibleRequestTypes: ["pharmacy_benefit"]
     });
   });
 

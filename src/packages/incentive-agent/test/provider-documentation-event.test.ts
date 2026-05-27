@@ -28,7 +28,7 @@ describe("evaluateProviderDocumentationEvent", () => {
       umRequestId: "PA-260526-0900-DELEGATE",
       planId: "acme-health-ppo",
       delegateVendorId: "northstar-um",
-      requestType: "outpatient_service",
+      requestType: "pharmacy_benefit",
       state: "determined",
       outcomeStatusPresent: true,
       outcomeStatus: "approved",
@@ -416,7 +416,7 @@ function createDelegateUmPolicy(amount: number): IncentivePolicy {
       endsOn: null
     },
     incentiveScope: {
-      eligibleRequestTypes: ["outpatient_service", "pharmacy_benefit"]
+      eligibleRequestTypes: ["pharmacy_benefit"]
     },
     eligibilityCriteria: {
       appliesOnlyToCoveredBenefits: false,

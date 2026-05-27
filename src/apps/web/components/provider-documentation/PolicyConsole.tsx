@@ -9,11 +9,31 @@ import { UseCaseNavigation } from "./UseCaseNavigation";
 
 interface PolicyConsoleProps {
   businessPolicies: PolicySummary[];
+  businessPolicyDescription?: string;
+  businessPolicyEmptyMessage?: string;
+  boundaryStatement?: string;
+  eyebrow?: string;
   paymentPolicies: PolicySummary[];
+  paymentPolicyDescription?: string;
+  paymentPolicyEmptyMessage?: string;
   initialUmRequestId?: string | null;
+  title?: string;
+  useCaseNavigation?: ReactNode;
 }
 
-export function PolicyConsole({ businessPolicies, paymentPolicies, initialUmRequestId = null }: PolicyConsoleProps) {
+export function PolicyConsole({
+  businessPolicies,
+  businessPolicyDescription = "Each business card is one complete plan/provider/request-type incentive policy. Coverage determinations stay in the UM workflow; this view shows incentive structure only.",
+  businessPolicyEmptyMessage = "No active business policies are available.",
+  boundaryStatement = policyBoundaryStatement,
+  eyebrow = "Policy catalog",
+  paymentPolicies,
+  paymentPolicyDescription = "Plan-level Hedera Agent Kit settlement controls selected from centrally maintained payment policy blocks.",
+  paymentPolicyEmptyMessage = "No active payment policy controls are available.",
+  initialUmRequestId = null,
+  title = "Provider Documentation Completeness Policies",
+  useCaseNavigation
+}: PolicyConsoleProps) {
   const [selectedPolicy, setSelectedPolicy] = useState<PolicySummary | null>(null);
 
   return (
@@ -22,18 +42,18 @@ export function PolicyConsole({ businessPolicies, paymentPolicies, initialUmRequ
         <Link className="back" href="/">
           Back to demos
         </Link>
-        <UseCaseNavigation activeView="policies" umRequestId={initialUmRequestId} />
+        {useCaseNavigation ?? <UseCaseNavigation activeView="policies" umRequestId={initialUmRequestId} />}
       </div>
 
-      <LabsHero compact eyebrow="Policy catalog" title="Provider Documentation Completeness Policies">
-        <p>{policyBoundaryStatement}</p>
+      <LabsHero compact eyebrow={eyebrow} title={title}>
+        <p>{boundaryStatement}</p>
       </LabsHero>
 
       <div className="policy-section-grid">
         <PolicySection
           title="Business policies"
-          description="Each business card is one complete plan/provider/request-type incentive policy. Coverage determinations stay in the UM workflow; this view shows incentive structure only."
-          emptyMessage="No active business policies are available."
+          description={businessPolicyDescription}
+          emptyMessage={businessPolicyEmptyMessage}
         >
           {businessPolicies.map((policy) => (
             <PolicyCard key={policy.id} policy={policy} onSelect={(policy) => setSelectedPolicy(policy)} />
@@ -42,8 +62,8 @@ export function PolicyConsole({ businessPolicies, paymentPolicies, initialUmRequ
 
         <PolicySection
           title="Payment policies"
-          description="Plan-level Hedera Agent Kit settlement controls selected from centrally maintained payment policy blocks."
-          emptyMessage="No active payment policy controls are available."
+          description={paymentPolicyDescription}
+          emptyMessage={paymentPolicyEmptyMessage}
           variant="payment"
         >
           {paymentPolicies.map((policy) => (
@@ -164,13 +184,13 @@ function policyStatusBadgeVariant(status: string): "success" | "warning" | "neut
 }
 
 function PolicyDetailsModal({ onClose, policy }: { onClose: () => void; policy: PolicySummary }) {
-  const isPaymentPolicy = policy.category === "hedera";
-  const modalClassName = isPaymentPolicy
-    ? "modal plan-audit-modal policy-details-modal payment-policy-details-modal"
-    : "modal plan-audit-modal policy-details-modal";
-  const sectionsClassName = isPaymentPolicy
-    ? "policy-modal-sections payment-policy-modal-sections"
-    : "policy-modal-sections";
+  const isBusinessPolicy = policy.category === "business";
+  const modalClassName = `modal plan-audit-modal policy-details-modal ${
+    isBusinessPolicy ? "business-policy-details-modal" : "payment-policy-details-modal"
+  }`;
+  const sectionsClassName = `policy-modal-sections ${
+    isBusinessPolicy ? "business-policy-modal-sections" : "payment-policy-modal-sections"
+  }`;
 
   return (
     <div className="modal-backdrop audit-modal-backdrop" role="presentation" onClick={onClose}>
@@ -219,7 +239,11 @@ function PolicyDetailsModal({ onClose, policy }: { onClose: () => void; policy: 
               <h3>{section.title}</h3>
               <ul>
                 {section.items.map((item) => (
-                  <li key={item}>{item}</li>
+                  shouldRenderPolicyDetailBadges(policy, section.title, item) ? (
+                    <PolicyDetailBadgeItem item={item} key={item} />
+                  ) : (
+                    <li key={item}>{item}</li>
+                  )
                 ))}
               </ul>
             </section>
@@ -228,4 +252,77 @@ function PolicyDetailsModal({ onClose, policy }: { onClose: () => void; policy: 
       </section>
     </div>
   );
+}
+
+function shouldRenderPolicyDetailBadges(policy: PolicySummary, sectionTitle: string, item: string) {
+  return (
+    (policy.category === "business" &&
+      (sectionTitle === "Incentive scope" ||
+        sectionTitle === "Eligibility criteria" ||
+        (sectionTitle === "Contract pair" && isContractPairBadgeItem(item)))) ||
+    (policy.category === "hedera" &&
+      (sectionTitle === "Enabled Agent Kit blocks" ||
+        (sectionTitle === "Policy identity" && isPaymentPolicyIdentityBadgeItem(item))))
+  );
+}
+
+function isContractPairBadgeItem(item: string) {
+  return item.startsWith("Plan: ") || item.startsWith("Provider: ") || item.startsWith("Delegate: ");
+}
+
+function isPaymentPolicyIdentityBadgeItem(item: string) {
+  return item.startsWith("Plan: ");
+}
+
+function PolicyDetailBadgeItem({ item }: { item: string }) {
+  const detailItem = parsePolicyDetailItem(item);
+
+  return (
+    <li className="policy-detail-badged-item">
+      <span className="policy-detail-inline-content">
+        <span className="policy-detail-item-label">{detailItem.label}:</span>
+        <span className="policy-detail-value-badges">
+          {detailItem.values.map((value) => (
+            <LabsBadge className="policy-detail-value-badge" key={value} variant={policyDetailValueBadgeVariant(value)}>
+              {value}
+            </LabsBadge>
+          ))}
+        </span>
+      </span>
+    </li>
+  );
+}
+
+function parsePolicyDetailItem(item: string) {
+  const separatorIndex = item.indexOf(": ");
+  if (separatorIndex === -1) {
+    return {
+      label: "Value",
+      values: splitPolicyDetailValues(item)
+    };
+  }
+
+  return {
+    label: item.slice(0, separatorIndex),
+    values: splitPolicyDetailValues(item.slice(separatorIndex + 2))
+  };
+}
+
+function splitPolicyDetailValues(value: string) {
+  return value
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function policyDetailValueBadgeVariant(value: string): "success" | "warning" | "neutral" {
+  if (value === "Yes" || value === "Enabled") {
+    return "success";
+  }
+
+  if (value === "No" || value === "Disabled") {
+    return "warning";
+  }
+
+  return "neutral";
 }

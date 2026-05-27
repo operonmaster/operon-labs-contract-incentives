@@ -14,7 +14,7 @@ const policy: IncentivePolicy = {
     providerName: "Northstar UM"
   },
   effectivePeriod: { startsOn: "2026-05-01", endsOn: null },
-  incentiveScope: { eligibleRequestTypes: ["outpatient_service"] },
+  incentiveScope: { eligibleRequestTypes: ["pharmacy_benefit"] },
   eligibilityCriteria: {
     appliesOnlyToCoveredBenefits: false,
     requiresDtrCompletionWhenRequested: false,
@@ -31,7 +31,7 @@ const evidence: DelegateUmSlaEvidence = {
   id: "PA-260526-0900-AAAA1111",
   planId: "acme-health-ppo",
   delegateVendorId: "northstar-um",
-  requestType: "outpatient_service",
+  requestType: "pharmacy_benefit",
   state: "determined",
   outcomeStatus: "denied",
   outcomeStatusPresent: true,
@@ -64,7 +64,7 @@ describe("evaluateDelegateUmSlaEvent", () => {
         id: evidence.id,
         planId: "acme-health-ppo",
         delegateVendorId: "northstar-um",
-        requestType: "outpatient_service",
+        requestType: "pharmacy_benefit",
         state: "determined",
         outcomeStatus: "denied",
         outcomeStatusPresent: true,

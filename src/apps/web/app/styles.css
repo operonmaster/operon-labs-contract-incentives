@@ -1399,6 +1399,39 @@ main {
   line-height: 1.45;
 }
 
+.policy-detail-badged-item {
+  color: var(--op-muted);
+}
+
+.policy-detail-inline-content {
+  align-items: center;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.policy-detail-item-label {
+  color: inherit;
+}
+
+.policy-detail-value-badges {
+  align-items: center;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.policy-detail-value-badge {
+  font-family: inherit;
+  font-size: 12px;
+  font-style: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  line-height: 1;
+  text-transform: inherit;
+}
+
+.business-policy-details-modal,
 .payment-policy-details-modal {
   gap: 12px;
   max-height: min(760px, calc(100vh - 32px));
@@ -1407,48 +1440,58 @@ main {
   width: min(100%, 1080px);
 }
 
+.business-policy-details-modal .modal-toolbar,
 .payment-policy-details-modal .modal-toolbar {
   gap: 12px;
 }
 
+.business-policy-details-modal .modal-toolbar > div,
 .payment-policy-details-modal .modal-toolbar > div {
   gap: 6px;
 }
 
+.business-policy-details-modal .modal-toolbar h2,
 .payment-policy-details-modal .modal-toolbar h2 {
   font-size: clamp(28px, 3vw, 38px);
   line-height: 1.08;
 }
 
+.business-policy-details-modal .modal-toolbar p,
 .payment-policy-details-modal .modal-toolbar p {
   font-size: 16px;
   line-height: 1.38;
 }
 
+.business-policy-details-modal .policy-detail-grid,
 .payment-policy-details-modal .policy-detail-grid {
   gap: 10px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.business-policy-details-modal .policy-modal-sections,
 .payment-policy-details-modal .policy-modal-sections {
   gap: 10px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.business-policy-details-modal .policy-modal-section,
 .payment-policy-details-modal .policy-modal-section {
   align-content: start;
   gap: 8px;
   padding: 12px;
 }
 
+.business-policy-details-modal .policy-modal-section h3,
 .payment-policy-details-modal .policy-modal-section h3 {
   font-size: 15px;
 }
 
+.business-policy-details-modal .policy-modal-section ul,
 .payment-policy-details-modal .policy-modal-section ul {
   gap: 5px;
 }
 
+.business-policy-details-modal .policy-modal-section li,
 .payment-policy-details-modal .policy-modal-section li {
   line-height: 1.35;
 }
@@ -1570,6 +1613,8 @@ main {
     grid-template-columns: 1fr;
   }
 
+  .business-policy-details-modal .policy-detail-grid,
+  .business-policy-details-modal .policy-modal-sections,
   .payment-policy-details-modal .policy-detail-grid,
   .payment-policy-details-modal .policy-modal-sections {
     grid-template-columns: 1fr;

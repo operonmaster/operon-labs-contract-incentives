@@ -135,7 +135,7 @@ export const defaultIncentivePolicies: Record<string, IncentivePolicy> = {
       endsOn: null
     },
     incentiveScope: {
-      eligibleRequestTypes: ["outpatient_service", "pharmacy_benefit"]
+      eligibleRequestTypes: ["pharmacy_benefit"]
     },
     eligibilityCriteria: {
       appliesOnlyToCoveredBenefits: false,
@@ -608,15 +608,19 @@ function providerDocumentationPolicy({
 
 function requestTypeScope(policy: IncentivePolicy): IncentivePolicy["incentiveScope"] {
   const scope = policy.incentiveScope;
-  const eligibleRequestTypes = scope.eligibleRequestTypes?.length ? { eligibleRequestTypes: [...scope.eligibleRequestTypes] } : {};
-  const excludedRequestTypes = scope.excludedRequestTypes?.length ? { excludedRequestTypes: [...scope.excludedRequestTypes] } : {};
 
   if (policy.evaluationType === "delegate_um_sla_bonus") {
+    const eligibleDelegateRequestTypes = (scope.eligibleRequestTypes ?? []).filter(isDelegateUmRequestType);
+    const excludedDelegateRequestTypes = (scope.excludedRequestTypes ?? []).filter(isDelegateUmRequestType);
+
     return {
-      ...eligibleRequestTypes,
-      ...excludedRequestTypes
+      eligibleRequestTypes: eligibleDelegateRequestTypes.length ? eligibleDelegateRequestTypes : ["pharmacy_benefit"],
+      ...(excludedDelegateRequestTypes.length ? { excludedRequestTypes: excludedDelegateRequestTypes } : {})
     };
   }
+
+  const eligibleRequestTypes = scope.eligibleRequestTypes?.length ? { eligibleRequestTypes: [...scope.eligibleRequestTypes] } : {};
+  const excludedRequestTypes = scope.excludedRequestTypes?.length ? { excludedRequestTypes: [...scope.excludedRequestTypes] } : {};
 
   if (scope.eligibleRequestTypes?.length) {
     return eligibleRequestTypes;
@@ -627,6 +631,10 @@ function requestTypeScope(policy: IncentivePolicy): IncentivePolicy["incentiveSc
   }
 
   return {};
+}
+
+function isDelegateUmRequestType(requestType: string): boolean {
+  return requestType === "pharmacy_benefit";
 }
 
 function serviceCodeScope(scope: IncentivePolicy["incentiveScope"]): IncentivePolicy["incentiveScope"] {

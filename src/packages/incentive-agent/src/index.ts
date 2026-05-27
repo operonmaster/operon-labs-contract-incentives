@@ -233,7 +233,7 @@ const demoRequests: Record<string, EvaluationRequest> = {
       umRequestId: "PA-260526-0900-DELEGATE",
       planId: "acme-health-ppo",
       delegateVendorId: "northstar-um",
-      requestType: "outpatient_service",
+      requestType: "pharmacy_benefit",
       state: "determined",
       outcomeStatusPresent: true,
       outcomeStatus: "approved",

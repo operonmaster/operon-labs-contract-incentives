@@ -32,7 +32,26 @@ export const policyBoundaryStatement =
   "Business contract policies describe plan/provider incentive agreements. Payment policies are plan-level Hedera Agent Kit settlement guardrails before any approved payment leaves the treasury.";
 
 export const providerDocumentationBusinessPolicyType = "provider_documentation_completeness";
+export const delegateUmSlaBonusBusinessPolicyType = "delegate_um_sla_bonus";
 const providerDocumentationBusinessPolicyTitle = "Provider Documentation Completeness";
+const delegateUmSlaBonusBusinessPolicyTitle = "Delegate UM SLA Bonus";
+const delegateUmSlaHours = 24;
+
+export function buildBusinessPolicyCards(policy: IncentivePolicy | null | undefined): PolicySummary[] {
+  if (!policy) {
+    return [];
+  }
+
+  if (policy.evaluationType === providerDocumentationBusinessPolicyType) {
+    return buildProviderDocumentationBusinessPolicyCards(policy);
+  }
+
+  if (policy.evaluationType === delegateUmSlaBonusBusinessPolicyType) {
+    return buildDelegateUmSlaBonusBusinessPolicyCards(policy);
+  }
+
+  return [];
+}
 
 export function buildProviderDocumentationBusinessPolicyCards(policy: IncentivePolicy | null | undefined): PolicySummary[] {
   if (!policy) {
@@ -64,7 +83,34 @@ export function buildProviderDocumentationBusinessPolicyCards(policy: IncentiveP
         serviceCodePreview(policy),
         { label: "Payout", value: `${policy.payout.amountPerEligibleRequest} ${token}` }
       ],
-      detailSections: buildBusinessPolicyDetailSections(policy, status, token)
+      detailSections: buildBusinessPolicyDetailSections(policy, token)
+    }
+  ];
+}
+
+function buildDelegateUmSlaBonusBusinessPolicyCards(policy: IncentivePolicy): PolicySummary[] {
+  const token = policy.payout.token;
+  const status = policy.status === "active" ? "Active" : "Disabled";
+
+  return [
+    {
+      id: policy.policyId,
+      title: delegateUmSlaBonusBusinessPolicyTitle,
+      category: "business",
+      source: "Plan/delegate contract policy",
+      appliesTo: delegateUmSlaBonusBusinessPolicyTitle,
+      payoutOrControl: `${policy.payout.amountPerEligibleRequest} ${token} per eligible UM request`,
+      status,
+      summary: "Delegate UM SLA bonus incentive for eligible determinations completed within the configured review window.",
+      previewItems: [
+        { label: "Policy ID", value: policy.policyId },
+        { label: "Plan", value: policy.contractPair.planName },
+        { label: "Delegate", value: policy.contractPair.providerName },
+        requestTypePreview(policy),
+        { label: "SLA", value: `${delegateUmSlaHours} hours` },
+        { label: "Payout", value: `${policy.payout.amountPerEligibleRequest} ${token}` }
+      ],
+      detailSections: buildDelegateUmSlaBonusDetailSections(policy, token)
     }
   ];
 }
@@ -101,13 +147,8 @@ export function buildHederaAgentKitPlanPolicyCards(policy: HederaAgentPlanPolicy
         items: [
           `Plan: ${policy.planName} (${policy.planId})`,
           `Version: ${policy.version}`,
-          `Status: ${status}`,
           "Storage collection: paymentPolicies"
         ]
-      },
-      {
-        title: "Enabled Agent Kit blocks",
-        items: enabledControls
       },
       {
         title: "Settlement limits",
@@ -115,6 +156,10 @@ export function buildHederaAgentKitPlanPolicyCards(policy: HederaAgentPlanPolicy
           `Payment token: ${policy.paymentToken}`,
           `Max payment per request: ${policy.maxPaymentAmount} ${policy.paymentToken}`
         ]
+      },
+      {
+        title: "Enabled Agent Kit blocks",
+        items: enabledControls
       },
       {
         title: "Runtime validation",
@@ -164,14 +209,13 @@ function formatEnabled(enabled: boolean): string {
   return enabled ? "Enabled" : "Disabled";
 }
 
-function buildBusinessPolicyDetailSections(policy: IncentivePolicy, status: string, token: string): PolicyDetailSection[] {
+function buildBusinessPolicyDetailSections(policy: IncentivePolicy, token: string): PolicyDetailSection[] {
   return [
     {
       title: "Policy identity",
       items: [
         `Policy ID: ${policy.policyId}`,
         `Version: ${policy.version}`,
-        `Status: ${status}`,
         `Evaluation type: ${policy.evaluationType}`,
         "Storage collection: incentivePolicies"
       ]
@@ -194,6 +238,60 @@ function buildBusinessPolicyDetailSections(policy: IncentivePolicy, status: stri
       items: [
         `Applies only to covered benefits: ${formatBoolean(policy.eligibilityCriteria.appliesOnlyToCoveredBenefits)}`,
         `Requires DTR completion when requested: ${formatBoolean(policy.eligibilityCriteria.requiresDtrCompletionWhenRequested)}`
+      ]
+    },
+    {
+      title: "Payout",
+      items: [
+        `Amount per eligible request: ${policy.payout.amountPerEligibleRequest} ${token}`,
+        `Monthly cap: ${policy.payout.monthlyCap} ${token}`,
+        `Token: ${token}`
+      ]
+    },
+    {
+      title: "Settlement",
+      items: [
+        `Settlement mode: ${formatSettlementMode(policy.settlement.mode)}`,
+        `Recipient wallet ID: ${policy.settlement.recipientWalletId}`,
+        `Human approval required: ${formatBoolean(policy.settlement.requiresHumanApproval)}`
+      ]
+    }
+  ];
+}
+
+function buildDelegateUmSlaBonusDetailSections(policy: IncentivePolicy, token: string): PolicyDetailSection[] {
+  return [
+    {
+      title: "Policy identity",
+      items: [
+        `Policy ID: ${policy.policyId}`,
+        `Version: ${policy.version}`,
+        `Evaluation type: ${policy.evaluationType}`,
+        "Storage collection: incentivePolicies"
+      ]
+    },
+    {
+      title: "Contract pair",
+      items: [
+        `Plan: ${policy.contractPair.planName} (${policy.contractPair.planId})`,
+        `Delegate: ${policy.contractPair.providerName} (${policy.contractPair.providerId})`,
+        `Effective from: ${policy.effectivePeriod.startsOn}`,
+        `Effective through: ${policy.effectivePeriod.endsOn ?? "none"}`
+      ]
+    },
+    {
+      title: "Incentive scope",
+      items: requestTypeDetailItems(policy)
+    },
+    {
+      title: "Eligibility criteria",
+      items: [
+        "UM request is determined: Yes",
+        "Outcome status is present: Yes",
+        `Outcome value affects payment: ${formatBoolean(!policy.eligibilityCriteria.prohibitsOutcomeBasedPayment)}`,
+        `Clinical review checklist complete: ${formatBoolean(Boolean(policy.eligibilityCriteria.requiresClinicalReviewCompletion))}`,
+        `Completed within SLA: ${delegateUmSlaHours} hours`,
+        "PHI in payment metadata: No"
       ]
     },
     {

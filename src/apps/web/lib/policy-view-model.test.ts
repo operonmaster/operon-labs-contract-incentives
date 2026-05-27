@@ -3,6 +3,7 @@ import type { IncentivePolicy } from "@operon-labs/policy-engine";
 import { defaultPaymentPlanPolicies } from "./payment-policy-store";
 import { defaultIncentivePolicies } from "./policy-store";
 import {
+  buildBusinessPolicyCards,
   buildHederaAgentKitPlanPolicyCards,
   buildProviderDocumentationBusinessPolicyCards,
   policyBoundaryStatement,
@@ -48,7 +49,7 @@ describe("policy view model", () => {
     const detailItems = acmeOutpatient.detailSections.flatMap((section) => section.items);
     expect(detailItems).toContain("Policy ID: plcy_8K2M4Q6R9T1V3X5Z7B0C");
     expect(detailItems).toContain("Version: v1");
-    expect(detailItems).toContain("Status: Active");
+    expect(detailItems).not.toContain("Status: Active");
     expect(detailItems).toContain("Evaluation type: provider_documentation_completeness");
     expect(detailItems).toContain("Storage collection: incentivePolicies");
     expect(detailItems).toContain("Plan: Acme Health PPO (acme-health-ppo)");
@@ -115,7 +116,6 @@ describe("policy view model", () => {
     ]);
     expect(summary.detailSections.flatMap((section) => section.items)).toEqual(
       expect.arrayContaining([
-        "Status: Disabled",
         "Excluded request types: Inpatient Admission (inpatient_admission)",
         "Excluded service codes: CPT 76498",
         "Applies only to covered benefits: Yes",
@@ -124,6 +124,39 @@ describe("policy view model", () => {
         "Human approval required: Yes"
       ])
     );
+    expect(summary.detailSections.flatMap((section) => section.items)).not.toContain("Status: Disabled");
+  });
+
+  it("builds delegate UM SLA business policy cards", () => {
+    const policy = defaultIncentivePolicies.delegate_um_acme_sla_bonus;
+    const cards = buildBusinessPolicyCards(policy);
+
+    expect(cards).toEqual([
+      expect.objectContaining({
+        id: "delegate-um-sla-bonus-v1",
+        title: "Delegate UM SLA Bonus",
+        appliesTo: "Delegate UM SLA Bonus",
+        payoutOrControl: "5 HBAR per eligible UM request",
+        previewItems: expect.arrayContaining([
+          { label: "Plan", value: "Acme Health PPO" },
+          { label: "Delegate", value: "Northstar UM" },
+          { label: "Eligible request types", value: "Pharmacy Benefit" },
+          { label: "SLA", value: "24 hours" }
+        ])
+      })
+    ]);
+    expect(cards[0]!.detailSections.flatMap((section) => section.items)).toEqual(
+      expect.arrayContaining([
+        "UM request is determined: Yes",
+        "Outcome status is present: Yes",
+        "Outcome value affects payment: No",
+        "Clinical review checklist complete: Yes",
+        "Completed within SLA: 24 hours",
+        "PHI in payment metadata: No"
+      ])
+    );
+    expect(cards[0]!.detailSections.flatMap((section) => section.items)).toContain("Eligible request types: Pharmacy Benefit (pharmacy_benefit)");
+    expect(cards[0]!.detailSections.flatMap((section) => section.items).join(" ")).not.toContain("outpatient_service");
   });
 
   it("lists plan-level payment policies separately from business eligibility", () => {
@@ -147,8 +180,16 @@ describe("policy view model", () => {
       { label: "Duplicate prevention", value: "Enabled" },
       { label: "Envelope integrity", value: "Enabled" }
     ]);
+    expect(summaries[0].detailSections.map((section) => section.title)).toEqual([
+      "Policy identity",
+      "Settlement limits",
+      "Enabled Agent Kit blocks",
+      "Runtime validation"
+    ]);
     expect(summaries[0].detailSections.flatMap((section) => section.items)).toEqual(
       expect.arrayContaining([
+        "Plan: Acme Health PPO (acme-health-ppo)",
+        "Version: v1",
         "Storage collection: paymentPolicies",
         "Business evaluation attestation: Enabled",
         "Duplicate payment prevention: Enabled",
@@ -157,6 +198,7 @@ describe("policy view model", () => {
         "Max payment per request: 5 HBAR"
       ])
     );
+    expect(summaries[0].detailSections.flatMap((section) => section.items)).not.toContain("Status: Active");
     expect(summaries[0].detailSections.flatMap((section) => section.items)).not.toEqual(
       expect.arrayContaining(["Safe transaction memo: Enabled", "Testnet only: Enabled"])
     );
