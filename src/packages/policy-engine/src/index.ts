@@ -192,8 +192,11 @@ function evaluateDelegateUmSlaPolicy(input: EvaluatePolicyInput): PolicyEvaluati
   }
 
   const requestType = String(request.requestObject.requestType ?? "");
+  const excludedRequestTypes = policy.incentiveScope.excludedRequestTypes ?? [];
   const eligibleRequestTypes = policy.incentiveScope.eligibleRequestTypes ?? [];
-  if (eligibleRequestTypes.length > 0 && !eligibleRequestTypes.includes(requestType)) {
+  if (excludedRequestTypes.includes(requestType)) {
+    reasonCodes.push("REQUEST_TYPE_EXCLUDED");
+  } else if (eligibleRequestTypes.length > 0 && !eligibleRequestTypes.includes(requestType)) {
     reasonCodes.push("REQUEST_TYPE_NOT_ELIGIBLE");
   }
 
@@ -243,8 +246,18 @@ function evaluateDelegateUmSlaPolicy(input: EvaluatePolicyInput): PolicyEvaluati
     reasonCodes.push("MONTHLY_CAP_EXCEEDED");
   }
 
+  const blocked = reasonCodes.length > 0;
+  if (!blocked && (policy.settlement.mode === "manual" || policy.settlement.requiresHumanApproval)) {
+    return result({
+      decision: "manual_review",
+      policy,
+      reasonCodes: ["MANUAL_REVIEW_REQUIRED"],
+      token
+    });
+  }
+
   return result({
-    decision: reasonCodes.length > 0 ? "blocked" : "approved",
+    decision: blocked ? "blocked" : "approved",
     policy,
     reasonCodes,
     token

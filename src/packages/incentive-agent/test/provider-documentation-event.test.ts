@@ -20,6 +20,36 @@ describe("evaluateProviderDocumentationEvent", () => {
     });
   });
 
+  it("evaluates the delegate UM demo scenario with policy-safe determination evidence", () => {
+    const policy = createDelegateUmPolicy(5);
+    const evaluation = evaluateDemoScenario("delegate_um_sla_bonus", policy);
+
+    expect(evaluation.request.requestObject).toMatchObject({
+      umRequestId: "PA-260526-0900-DELEGATE",
+      planId: "acme-health-ppo",
+      delegateVendorId: "northstar-um",
+      requestType: "outpatient_service",
+      state: "determined",
+      outcomeStatusPresent: true,
+      outcomeStatus: "approved",
+      outcomeStatusUsedForPayment: false,
+      completedWithinSla: true,
+      slaHours: 24,
+      clinicalReviewCompleted: true,
+      medicalNecessityReviewed: true,
+      policyCriteriaChecked: true,
+      rationaleCaptured: true,
+      auditReady: true,
+      containsPhi: false
+    });
+    expect(evaluation.result).toMatchObject({
+      decision: "approved",
+      amount: 5,
+      walletId: "0.0.9049550",
+      reasonCodes: []
+    });
+  });
+
   it("uses the caller supplied Firestore policy for provider documentation events", () => {
     const platform = createInMemoryUmPlatform();
     const umRequest = platform.submitPriorAuth({
@@ -364,6 +394,45 @@ function createProviderDocumentationPolicy(
     settlement: {
       mode: "auto",
       recipientWalletId: "0.0.9049549",
+      requiresHumanApproval: false
+    }
+  };
+}
+
+function createDelegateUmPolicy(amount: number): IncentivePolicy {
+  return {
+    policyId: "delegate-um-sla-bonus-v1",
+    version: "v1",
+    status: "active",
+    evaluationType: "delegate_um_sla_bonus",
+    contractPair: {
+      planId: "acme-health-ppo",
+      planName: "Acme Health PPO",
+      providerId: "northstar-um",
+      providerName: "Northstar UM"
+    },
+    effectivePeriod: {
+      startsOn: "2026-05-01",
+      endsOn: null
+    },
+    incentiveScope: {
+      eligibleRequestTypes: ["outpatient_service", "pharmacy_benefit"]
+    },
+    eligibilityCriteria: {
+      appliesOnlyToCoveredBenefits: false,
+      requiresDtrCompletionWhenRequested: false,
+      requiresDeterminationWithinSla: true,
+      requiresClinicalReviewCompletion: true,
+      prohibitsOutcomeBasedPayment: true
+    },
+    payout: {
+      token: "HBAR",
+      amountPerEligibleRequest: amount,
+      monthlyCap: 500
+    },
+    settlement: {
+      mode: "auto",
+      recipientWalletId: "0.0.9049550",
       requiresHumanApproval: false
     }
   };

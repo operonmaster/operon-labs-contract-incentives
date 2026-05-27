@@ -365,6 +365,76 @@ describe("evaluatePolicy", () => {
     });
   });
 
+  it("routes delegate UM SLA policies requiring manual settlement to manual review", () => {
+    const result = evaluatePolicy({
+      policy: {
+        ...delegatePolicy,
+        settlement: {
+          ...delegatePolicy.settlement,
+          mode: "manual",
+          requiresHumanApproval: true
+        }
+      },
+      request: approvedDelegateRequest,
+      monthToDateAmount: 0
+    });
+
+    expect(result).toMatchObject({
+      decision: "manual_review",
+      amount: 0,
+      walletId: null,
+      requiresHumanApproval: true,
+      reasonCodes: ["MANUAL_REVIEW_REQUIRED"]
+    });
+  });
+
+  it("blocks delegate UM SLA bonus when request type is excluded before eligible scope is applied", () => {
+    const exclusionOnly = evaluatePolicy({
+      policy: {
+        ...delegatePolicy,
+        incentiveScope: {
+          excludedRequestTypes: ["inpatient_admission"]
+        }
+      },
+      request: {
+        ...approvedDelegateRequest,
+        requestObject: {
+          ...approvedDelegateRequest.requestObject,
+          requestType: "inpatient_admission"
+        }
+      },
+      monthToDateAmount: 0
+    });
+    const exclusionWins = evaluatePolicy({
+      policy: {
+        ...delegatePolicy,
+        incentiveScope: {
+          eligibleRequestTypes: ["outpatient_service", "inpatient_admission"],
+          excludedRequestTypes: ["inpatient_admission"]
+        }
+      },
+      request: {
+        ...approvedDelegateRequest,
+        requestObject: {
+          ...approvedDelegateRequest.requestObject,
+          requestType: "inpatient_admission"
+        }
+      },
+      monthToDateAmount: 0
+    });
+
+    expect(exclusionOnly).toMatchObject({
+      decision: "blocked",
+      amount: 0,
+      reasonCodes: ["REQUEST_TYPE_EXCLUDED"]
+    });
+    expect(exclusionWins).toMatchObject({
+      decision: "blocked",
+      amount: 0,
+      reasonCodes: ["REQUEST_TYPE_EXCLUDED"]
+    });
+  });
+
   it("blocks delegate UM SLA bonus when SLA is exceeded or outcome is used as payment basis", () => {
     const late = evaluatePolicy({
       policy: delegatePolicy,
