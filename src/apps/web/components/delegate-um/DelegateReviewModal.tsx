@@ -13,6 +13,24 @@ interface DelegateReviewModalProps {
   onCompleted: (row: DelegateUmRow) => void;
 }
 
+const approvalReasonOptions: LabsSelectOption[] = [
+  {
+    value: "POLICY_CRITERIA_MET",
+    label: "Policy criteria met",
+    description: "Plan pharmacy prior authorization criteria were satisfied."
+  },
+  {
+    value: "MEDICAL_NECESSITY_SUPPORTED",
+    label: "Medical necessity supported",
+    description: "Submitted clinical evidence supports the requested pharmacy benefit."
+  },
+  {
+    value: "PRIOR_THERAPY_CONFIRMED",
+    label: "Prior therapy confirmed",
+    description: "Required step therapy or prior treatment history was documented."
+  }
+];
+
 const denialReasonOptions: LabsSelectOption[] = [
   {
     value: "NOT_MEDICALLY_NECESSARY",
@@ -38,6 +56,7 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, row 
   const [medicalNecessityReviewed, setMedicalNecessityReviewed] = useState(false);
   const [policyCriteriaChecked, setPolicyCriteriaChecked] = useState(false);
   const [rationaleCaptured, setRationaleCaptured] = useState(false);
+  const [approvalReasonCode, setApprovalReasonCode] = useState("POLICY_CRITERIA_MET");
   const [denialReasonCode, setDenialReasonCode] = useState("NOT_MEDICALLY_NECESSARY");
   const [submitting, setSubmitting] = useState(false);
   const [actionStatus, setActionStatus] = useState<string | null>(null);
@@ -45,6 +64,9 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, row 
 
   const checklistComplete = medicalNecessityReviewed && policyCriteriaChecked && rationaleCaptured;
   const canSubmit = reviewStarted && checklistComplete && !submitting;
+  const activeReasonOptions = outcomeStatus === "approved" ? approvalReasonOptions : denialReasonOptions;
+  const activeReasonCode = outcomeStatus === "approved" ? approvalReasonCode : denialReasonCode;
+  const activeReasonLabel = outcomeStatus === "approved" ? "Approval reason" : "Denial reason";
 
   useEffect(() => {
     closeButtonRef.current?.focus();
@@ -100,6 +122,7 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, row 
           medicalNecessityReviewed,
           policyCriteriaChecked,
           rationaleCaptured,
+          approvalReasonCode: outcomeStatus === "approved" ? approvalReasonCode : null,
           denialReasonCode: outcomeStatus === "denied" ? denialReasonCode : null
         })
       });
@@ -217,18 +240,16 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, row 
                 </label>
               ))}
             </div>
-            {outcomeStatus === "denied" ? (
-              <div className="form-row delegate-field">
-                <span>Denial reason</span>
-                <LabsSelect
-                  id="delegate-denial-reason"
-                  options={denialReasonOptions}
-                  placeholder="Select denial reason"
-                  value={denialReasonCode}
-                  onChange={setDenialReasonCode}
-                />
-              </div>
-            ) : null}
+            <div className="form-row delegate-field">
+              <span>{activeReasonLabel}</span>
+              <LabsSelect
+                id={`delegate-${outcomeStatus}-reason`}
+                options={activeReasonOptions}
+                placeholder={`Select ${outcomeStatus} reason`}
+                value={activeReasonCode}
+                onChange={outcomeStatus === "approved" ? setApprovalReasonCode : setDenialReasonCode}
+              />
+            </div>
           </section>
         </div>
 

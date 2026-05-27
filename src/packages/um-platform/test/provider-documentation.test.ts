@@ -546,7 +546,8 @@ describe("provider documentation UM Platform", () => {
       outcomeStatus: "approved",
       medicalNecessityReviewed: true,
       policyCriteriaChecked: true,
-      rationaleCaptured: true
+      rationaleCaptured: true,
+      approvalReasonCode: "POLICY_CRITERIA_MET"
     });
 
     expect(determined).toMatchObject({
@@ -557,6 +558,7 @@ describe("provider documentation UM Platform", () => {
         medicalNecessityReviewed: true,
         policyCriteriaChecked: true,
         rationaleCaptured: true,
+        approvalReasonCode: "POLICY_CRITERIA_MET",
         denialReasonCode: null
       }
     });

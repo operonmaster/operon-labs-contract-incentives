@@ -29,6 +29,7 @@ function parseDeterminationInput(value: unknown): CompleteClinicalReviewInput | 
 
   const candidate = value as Record<string, unknown>;
   const outcomeStatus = candidate.outcomeStatus;
+  const approvalReasonCode = candidate.approvalReasonCode;
   const denialReasonCode = candidate.denialReasonCode;
 
   if (outcomeStatus !== "approved" && outcomeStatus !== "denied") {
@@ -44,10 +45,22 @@ function parseDeterminationInput(value: unknown): CompleteClinicalReviewInput | 
   }
 
   if (
+    approvalReasonCode !== undefined &&
+    approvalReasonCode !== null &&
+    typeof approvalReasonCode !== "string"
+  ) {
+    return null;
+  }
+
+  if (
     denialReasonCode !== undefined &&
     denialReasonCode !== null &&
     typeof denialReasonCode !== "string"
   ) {
+    return null;
+  }
+
+  if (outcomeStatus === "approved" && typeof approvalReasonCode === "string" && approvalReasonCode.trim().length === 0) {
     return null;
   }
 
@@ -60,6 +73,7 @@ function parseDeterminationInput(value: unknown): CompleteClinicalReviewInput | 
     medicalNecessityReviewed: candidate.medicalNecessityReviewed,
     policyCriteriaChecked: candidate.policyCriteriaChecked,
     rationaleCaptured: candidate.rationaleCaptured,
+    approvalReasonCode: typeof approvalReasonCode === "string" ? approvalReasonCode.trim() : approvalReasonCode ?? null,
     denialReasonCode: typeof denialReasonCode === "string" ? denialReasonCode.trim() : denialReasonCode ?? null
   };
 }

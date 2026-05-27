@@ -94,6 +94,7 @@ export interface UMRequest extends PriorAuthCompatibilityFields {
     medicalNecessityReviewed: boolean;
     policyCriteriaChecked: boolean;
     rationaleCaptured: boolean;
+    approvalReasonCode: string | null;
     denialReasonCode: string | null;
   };
   auditRefs: {
@@ -121,6 +122,7 @@ export interface CompleteClinicalReviewInput {
   medicalNecessityReviewed: boolean;
   policyCriteriaChecked: boolean;
   rationaleCaptured: boolean;
+  approvalReasonCode?: string | null;
   denialReasonCode?: string | null;
 }
 
@@ -275,6 +277,7 @@ export function completeClinicalReviewForRequest(
       medicalNecessityReviewed: input.medicalNecessityReviewed,
       policyCriteriaChecked: input.policyCriteriaChecked,
       rationaleCaptured: input.rationaleCaptured,
+      approvalReasonCode: input.outcomeStatus === "approved" ? input.approvalReasonCode ?? null : null,
       denialReasonCode: input.outcomeStatus === "denied" ? input.denialReasonCode ?? null : null
     }
   });
@@ -350,6 +353,7 @@ export function createInMemoryUmPlatform(options: UmPlatformOptions = {}): UmPla
           medicalNecessityReviewed: false,
           policyCriteriaChecked: false,
           rationaleCaptured: false,
+          approvalReasonCode: null,
           denialReasonCode: null
         },
         auditRefs: {

@@ -25,6 +25,11 @@ describe("DelegateVendorConsole source", () => {
     expect(modalSource).toContain("const canSubmit = reviewStarted && checklistComplete && !submitting");
     expect(modalSource).toContain("disabled={!canSubmit}");
     expect(modalSource).toContain("LabsSelect");
+    expect(modalSource).toContain("approvalReasonOptions");
+    expect(modalSource).toContain("Policy criteria met");
+    expect(modalSource).toContain("Medical necessity supported");
+    expect(modalSource).toContain("Prior therapy confirmed");
+    expect(modalSource).toContain("approvalReasonCode: outcomeStatus === \"approved\" ? approvalReasonCode : null");
     expect(modalSource).not.toContain("<select");
 
     const stylesSource = readFileSync(path.join(process.cwd(), "src/apps/web/app/styles.css"), "utf8");
@@ -37,7 +42,7 @@ describe("DelegateVendorConsole source", () => {
     const markup = renderToStaticMarkup(
       createElement(DelegateReviewModal, {
         requestApiBase: "/api/delegate-um/requests/",
-        row: buildDelegateRow("in_clinical_review", "denied"),
+        row: buildDelegateRow("in_clinical_review", "approved"),
         onClose: () => undefined,
         onCompleted: () => undefined
       })
@@ -48,9 +53,29 @@ describe("DelegateVendorConsole source", () => {
     expect(markup).toContain("Rationale captured");
     expect(markup).toContain("Outcome status");
     expect(markup).toContain("labs-select");
-    expect(markup).toContain("Not medically necessary");
+    expect(markup).toContain("Approval reason");
+    expect(markup).toContain("Policy criteria met");
+    expect(markup).not.toContain("Denial reason");
+    expect(markup).not.toContain("Not medically necessary");
     expect(markup).toContain("Submit determination");
     expect(markup).toMatch(/<button class="primary-button" disabled="" type="button">Submit determination<\/button>/);
+    expect(markup).not.toContain("<select");
+  });
+
+  it("renders denial reasons when the denial outcome is selected", () => {
+    const markup = renderToStaticMarkup(
+      createElement(DelegateReviewModal, {
+        requestApiBase: "/api/delegate-um/requests/",
+        row: buildDelegateRow("in_clinical_review", "denied"),
+        onClose: () => undefined,
+        onCompleted: () => undefined
+      })
+    );
+
+    expect(markup).toContain("Denial reason");
+    expect(markup).toContain("Not medically necessary");
+    expect(markup).not.toContain("Approval reason");
+    expect(markup).toContain("Submit determination");
     expect(markup).not.toContain("<select");
   });
 });
