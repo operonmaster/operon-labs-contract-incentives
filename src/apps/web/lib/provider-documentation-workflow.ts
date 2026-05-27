@@ -42,6 +42,7 @@ export interface PolicyCriterionMatch {
 }
 
 export interface IncentiveWorklistRow {
+  evaluationType?: "provider_documentation_completeness";
   id: string;
   umRequestId: string;
   caseId: string;
@@ -115,17 +116,18 @@ export function createProviderDocumentationWorkflow(
     }
 
     const existing = rows.get(event.umRequestId) ?? (await persistence?.getIncentiveRow(event.umRequestId)) ?? null;
-    if (existing && isImmutablePaidIncentiveRow(existing)) {
-      rows.set(event.umRequestId, existing);
-      return existing;
+    const providerExisting = existing && isProviderDocumentationIncentiveRow(existing) ? existing : null;
+    if (providerExisting && isImmutablePaidIncentiveRow(providerExisting)) {
+      rows.set(event.umRequestId, providerExisting);
+      return providerExisting;
     }
 
-    if (existing && isCurrentIncentiveRow(existing, record)) {
-      const refreshed = refreshIncentiveRowDisplayFields(existing, record);
+    if (providerExisting && isCurrentIncentiveRow(providerExisting, record)) {
+      const refreshed = refreshIncentiveRowDisplayFields(providerExisting, record);
       rows.set(event.umRequestId, refreshed);
       if (
-        hasIncentiveRowDisplayFieldChanges(existing, refreshed) &&
-        !hasOnlyPaidLifecycleDisplayFieldChanges(existing, refreshed)
+        hasIncentiveRowDisplayFieldChanges(providerExisting, refreshed) &&
+        !hasOnlyPaidLifecycleDisplayFieldChanges(providerExisting, refreshed)
       ) {
         await persistence?.saveIncentiveRow(refreshed);
       }
@@ -177,6 +179,7 @@ export function createProviderDocumentationWorkflow(
       transactionId: null
     });
     const baseRow: IncentiveWorklistRow = {
+      evaluationType: "provider_documentation_completeness",
       id: record.id,
       umRequestId: record.id,
       caseId: record.id,
@@ -275,7 +278,13 @@ export function createProviderDocumentationWorkflow(
       return paid;
     } catch (error) {
       const existing = rows.get(event.umRequestId) ?? (await persistence?.getIncentiveRow(event.umRequestId)) ?? null;
-      if (existing && isCurrentIncentiveRow(existing, record) && existing.incentiveStatus === "paid" && existing.transactionId) {
+      if (
+        existing &&
+        isProviderDocumentationIncentiveRow(existing) &&
+        isCurrentIncentiveRow(existing, record) &&
+        existing.incentiveStatus === "paid" &&
+        existing.transactionId
+      ) {
         rows.set(event.umRequestId, existing);
         return existing;
       }
@@ -324,7 +333,8 @@ export function createProviderDocumentationWorkflow(
 
   async function getIncentiveRow(umRequestId: string): Promise<IncentiveWorklistRow | null> {
     await processPlatformEvents(umRequestId);
-    return rows.get(umRequestId) ?? (await persistence?.getIncentiveRow(umRequestId)) ?? null;
+    const row = rows.get(umRequestId) ?? (await persistence?.getIncentiveRow(umRequestId)) ?? null;
+    return row && isProviderDocumentationIncentiveRow(row) ? row : null;
   }
 
   return {
@@ -376,6 +386,10 @@ export function createProviderDocumentationWorkflow(
       await processPlatformEvents();
       const persistedRows = (await persistence?.listIncentiveRows()) ?? [];
       for (const row of persistedRows) {
+        if (!isProviderDocumentationIncentiveRow(row)) {
+          continue;
+        }
+
         const processedRow = rows.get(row.umRequestId);
         if (processedRow && hasOnlyPaidLifecycleDisplayFieldChanges(row, processedRow)) {
           continue;
@@ -395,6 +409,10 @@ function isUmRequestCreatedEvent(event: UMPlatformEvent): event is UMPlatformEve
 }
 
 export const providerDocumentationWorkflow = createProviderDocumentationWorkflow();
+
+function isProviderDocumentationIncentiveRow(row: IncentiveWorklistRow & { evaluationType?: string }): row is IncentiveWorklistRow {
+  return row.evaluationType === undefined || row.evaluationType === "provider_documentation_completeness";
+}
 
 function isCurrentIncentiveRow(row: IncentiveWorklistRow, record: PriorAuthRecord): boolean {
   return (

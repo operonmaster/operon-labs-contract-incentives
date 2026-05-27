@@ -198,7 +198,6 @@ describe("delegate UM workflow", () => {
       policyCriteriaChecked: true,
       rationaleCaptured: true
     });
-
     expect(row).toMatchObject({
       umRequestId: umRequest.id,
       incentiveStatus: "not_eligible",
@@ -236,6 +235,12 @@ describe("delegate UM workflow", () => {
       policyCriteriaChecked: true,
       rationaleCaptured: true
     });
+    const retried = await workflow.completeDetermination(umRequest.id, {
+      outcomeStatus: "approved",
+      medicalNecessityReviewed: true,
+      policyCriteriaChecked: true,
+      rationaleCaptured: true
+    });
 
     expect(row).toMatchObject({
       umRequestId: umRequest.id,
@@ -245,6 +250,7 @@ describe("delegate UM workflow", () => {
       reasonCodes: ["SLA_EXCEEDED"],
       transactionId: null
     });
+    expect(retried).toEqual(row);
     expect(executePolicyBoundPaymentMock).not.toHaveBeenCalled();
   });
 
@@ -268,6 +274,12 @@ describe("delegate UM workflow", () => {
       policyCriteriaChecked: true,
       rationaleCaptured: true
     });
+    const retried = await workflow.completeDetermination(umRequest.id, {
+      outcomeStatus: "approved",
+      medicalNecessityReviewed: true,
+      policyCriteriaChecked: true,
+      rationaleCaptured: true
+    });
 
     expect(row).toMatchObject({
       umRequestId: umRequest.id,
@@ -276,6 +288,7 @@ describe("delegate UM workflow", () => {
       reasonCodes: ["POLICY_NOT_FOUND"],
       transactionId: null
     });
+    expect(retried).toEqual(row);
     expect(executePolicyBoundPaymentMock).not.toHaveBeenCalled();
   });
 
@@ -360,6 +373,7 @@ describe("delegate UM workflow", () => {
 
 function buildPaidDelegateRow(request: UMRequest): DelegateUmRow {
   return {
+    evaluationType: "delegate_um_sla_bonus",
     umRequestId: request.id,
     id: request.id,
     planId: request.planId,

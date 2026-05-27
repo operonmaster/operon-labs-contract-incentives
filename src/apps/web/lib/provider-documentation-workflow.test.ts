@@ -904,6 +904,94 @@ describe("provider documentation workflow", () => {
     expect(executePolicyBoundPaymentMock).toHaveBeenCalledTimes(1);
   });
 
+  it("ignores persisted delegate UM rows in the provider documentation worklist", async () => {
+    const delegateRow = {
+      evaluationType: "delegate_um_sla_bonus",
+      umRequestId: "PA-260526-0900-DELEGATE",
+      id: "PA-260526-0900-DELEGATE",
+      caseId: "PA-260526-0900-DELEGATE",
+      planId: "acme-health-ppo",
+      planDisplay: "Acme Health PPO",
+      delegateVendorId: "northstar-um",
+      requestType: "outpatient_service",
+      serviceLabel: "Knee MRI after injury",
+      submittedAt: "2026-05-26T09:00:00.000Z",
+      pendStartedAt: "2026-05-26T09:00:00.000Z",
+      slaDeadlineAt: "2026-05-27T09:00:00.000Z",
+      determinedAt: "2026-05-26T10:00:00.000Z",
+      timeRemainingMs: 0,
+      state: "determined",
+      outcomeStatus: "approved",
+      slaStatus: "within_sla",
+      incentiveStatus: "paid",
+      paymentStatus: "auto_executed",
+      incentiveValue: 5,
+      currency: "HBAR",
+      settlementToken: { symbol: "HBAR" },
+      reason: "Determination completed within SLA",
+      reasonCodes: [],
+      policyId: "delegate-um-sla-bonus-v1",
+      audit: {
+        id: "audit-delegate-row",
+        requestHash: "hash-delegate-row",
+        policyId: "delegate-um-sla-bonus-v1",
+        policyVersion: "v1",
+        decision: "approved",
+        reasonCodes: [],
+        transactionId: "testnet-delegate-row",
+        createdAt: "2026-05-26T10:00:00.000Z"
+      },
+      walletId: "0.0.9049550",
+      paymentIntentId: "PA-260526-0900-DELEGATE",
+      transactionId: "testnet-delegate-row"
+    };
+    const persistence: UmPasPersistenceStore = {
+      backend: "firestore" as const,
+      async savePasSubmission() {
+        throw new Error("TEST_UNEXPECTED_SAVE");
+      },
+      async savePriorAuth() {
+        throw new Error("TEST_UNEXPECTED_SAVE");
+      },
+      async saveUmRequest() {
+        throw new Error("TEST_UNEXPECTED_SAVE");
+      },
+      async listUmRequests() {
+        return [];
+      },
+      async getUmRequest() {
+        return null;
+      },
+      async listUmEvents() {
+        return [];
+      },
+      async listPriorAuthRecords() {
+        return [];
+      },
+      async getPriorAuthRecord() {
+        return null;
+      },
+      async getEvidence() {
+        return null;
+      },
+      async listPasEvents() {
+        return [];
+      },
+      async saveIncentiveRow() {
+        throw new Error("TEST_UNEXPECTED_SAVE");
+      },
+      async listIncentiveRows() {
+        return [delegateRow as unknown as IncentiveWorklistRow];
+      },
+      async getIncentiveRow() {
+        return delegateRow as unknown as IncentiveWorklistRow;
+      }
+    };
+    const workflow = createProviderDocumentationWorkflow(createInMemoryUmPlatform(), persistence);
+
+    await expect(workflow.listIncentiveRows()).resolves.toEqual([]);
+  });
+
   it("keeps paid rows immutable when canonical UM documentation evidence later becomes ineligible", async () => {
     const platform = createInMemoryUmPlatform();
     const record = platform.submitPriorAuth({

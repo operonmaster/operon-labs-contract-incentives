@@ -21,6 +21,7 @@ export type DelegatePaymentStatus = "pending" | "auto_executed" | "blocked_by_po
 export type DelegateSlaStatus = "pending" | "within_sla" | "breached";
 
 export interface DelegateUmRow {
+  evaluationType: "delegate_um_sla_bonus";
   umRequestId: string;
   id: string;
   planId: string;
@@ -89,12 +90,6 @@ export function createDelegateUmWorkflow(
     return rows.get(umRequestId) ?? normalizePersistedDelegateRow(await persistence?.getIncentiveRow(umRequestId));
   }
 
-  async function getImmutablePaidRow(umRequestId: string): Promise<DelegateUmRow | null> {
-    const row = await getStoredDelegateRow(umRequestId);
-
-    return row && isImmutablePaidDelegateRow(row) ? row : null;
-  }
-
   return {
     async listWorkqueue() {
       return (await listRequests())
@@ -123,10 +118,16 @@ export function createDelegateUmWorkflow(
       return started;
     },
     async completeDetermination(umRequestId, input) {
-      const paidRow = await getImmutablePaidRow(umRequestId);
-      if (paidRow) {
-        rows.set(umRequestId, paidRow);
-        return paidRow;
+      const existingRow = await getStoredDelegateRow(umRequestId);
+      if (existingRow && isImmutablePaidDelegateRow(existingRow)) {
+        rows.set(umRequestId, existingRow);
+        return existingRow;
+      }
+
+      const request = await getRequest(umRequestId);
+      if (request?.state === "determined" && existingRow && isTerminalDelegateRow(existingRow)) {
+        rows.set(umRequestId, existingRow);
+        return existingRow;
       }
 
       const existingSettlement = settlementsInFlight.get(umRequestId);
@@ -243,6 +244,7 @@ function buildDelegateEvidence(request: UMRequest): DelegateUmSlaEvidence {
 
 function buildPendingRow(request: UMRequest): DelegateUmRow {
   return {
+    evaluationType: "delegate_um_sla_bonus",
     umRequestId: request.id,
     id: request.id,
     planId: request.planId,
@@ -506,6 +508,7 @@ function isDelegateUmRowShape(value: unknown): value is DelegateUmRow {
 
   return (
     typeof candidate.umRequestId === "string" &&
+    candidate.evaluationType === "delegate_um_sla_bonus" &&
     typeof candidate.id === "string" &&
     typeof candidate.delegateVendorId === "string" &&
     typeof candidate.planId === "string" &&
@@ -521,6 +524,10 @@ function isDelegateUmRowShape(value: unknown): value is DelegateUmRow {
 
 function isImmutablePaidDelegateRow(row: DelegateUmRow): boolean {
   return row.incentiveStatus === "paid" && Boolean(row.transactionId || row.paymentIntentId);
+}
+
+function isTerminalDelegateRow(row: DelegateUmRow): boolean {
+  return row.incentiveStatus === "paid" || row.incentiveStatus === "not_eligible" || row.incentiveStatus === "payment_failed";
 }
 
 function selectDelegateUmSlaEvaluation(
