@@ -116,9 +116,8 @@ export function createProviderDocumentationWorkflow(
 
     const existing = rows.get(event.umRequestId) ?? (await persistence?.getIncentiveRow(event.umRequestId)) ?? null;
     if (existing && isImmutablePaidIncentiveRow(existing)) {
-      const refreshed = refreshPaidIncentiveRowLifecycleFields(existing, record);
-      rows.set(event.umRequestId, refreshed);
-      return refreshed;
+      rows.set(event.umRequestId, existing);
+      return existing;
     }
 
     if (existing && isCurrentIncentiveRow(existing, record)) {
@@ -432,14 +431,6 @@ function refreshIncentiveRowDisplayFields(row: IncentiveWorklistRow, record: UMR
     state: record.state,
     outcomeStatus: record.outcomeStatus,
     umEvidenceSignature: buildUmEvidenceSignature(record)
-  };
-}
-
-function refreshPaidIncentiveRowLifecycleFields(row: IncentiveWorklistRow, record: UMRequest): IncentiveWorklistRow {
-  return {
-    ...row,
-    state: record.state,
-    outcomeStatus: record.outcomeStatus
   };
 }
 
