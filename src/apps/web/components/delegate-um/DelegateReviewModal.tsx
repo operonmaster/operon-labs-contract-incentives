@@ -63,7 +63,7 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, row 
   const [error, setError] = useState<string | null>(null);
 
   const checklistComplete = medicalNecessityReviewed && policyCriteriaChecked && rationaleCaptured;
-  const canChooseOutcome = reviewStarted && checklistComplete;
+  const canChooseOutcome = checklistComplete;
   const canSubmit = canChooseOutcome && outcomeStatus !== null && !submitting;
   const activeReasonOptions = outcomeStatus === "denied" ? denialReasonOptions : approvalReasonOptions;
   const activeReasonCode = outcomeStatus === "denied" ? denialReasonCode : approvalReasonCode;
@@ -85,10 +85,10 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, row 
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
 
-  async function startReview() {
-    setSubmitting(true);
-    setError(null);
-
+  async function ensureReviewStarted(): Promise<boolean> {
+    if (reviewStarted) {
+      return true;
+    }
     try {
       const response = await fetch(`${requestApiBase}${encodeURIComponent(row.umRequestId)}/start-review`, {
         method: "POST",
@@ -99,13 +99,24 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, row 
 
       if (!response.ok) {
         setError(payload.error ?? "Unable to start review");
-        return;
+        return false;
       }
 
       setReviewStarted(true);
       setActionStatus("Clinical review started");
+      return true;
     } catch {
       setError("Unable to start review");
+      return false;
+    }
+  }
+
+  async function startReview() {
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      await ensureReviewStarted();
     } finally {
       setSubmitting(false);
     }
@@ -121,6 +132,11 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, row 
     setError(null);
 
     try {
+      const started = await ensureReviewStarted();
+      if (!started) {
+        return;
+      }
+
       const response = await fetch(`${requestApiBase}${encodeURIComponent(row.umRequestId)}/determination`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

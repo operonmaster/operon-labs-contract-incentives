@@ -5,7 +5,7 @@ import path from "node:path";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { DelegateUmRow } from "../../lib/delegate-um-workflow";
 import { DelegateReviewModal } from "./DelegateReviewModal";
 
@@ -26,9 +26,10 @@ describe("DelegateVendorConsole source", () => {
     expect(modalSource).toContain('document.removeEventListener("keydown", handleKeyDown)');
     expect(modalSource).toContain("useState(false)");
     expect(modalSource).toContain("row.outcomeStatus ?? null");
-    expect(modalSource).toContain("const canChooseOutcome = reviewStarted && checklistComplete");
+    expect(modalSource).toContain("const canChooseOutcome = checklistComplete");
     expect(modalSource).toContain("const canSubmit = canChooseOutcome && outcomeStatus !== null && !submitting");
     expect(modalSource).toContain("disabled={!canChooseOutcome}");
+    expect(modalSource).toContain("const started = await ensureReviewStarted()");
     expect(modalSource).toContain("disabled={!canSubmit}");
     expect(modalSource).toContain("LabsSelect");
     expect(modalSource).toContain("approvalReasonOptions");
@@ -131,6 +132,108 @@ describe("DelegateVendorConsole source", () => {
       expect(container.textContent).toContain("Approval reason");
       expect(container.textContent).toContain("Policy criteria met");
     } finally {
+      await act(async () => {
+        root?.unmount();
+      });
+      root = null;
+      container.remove();
+    }
+  });
+
+  it("unlocks outcome selection from a pended row after all checklist items are checked", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    let root: Root | null = createRoot(container);
+
+    try {
+      await act(async () => {
+        root?.render(
+          createElement(DelegateReviewModal, {
+            requestApiBase: "/api/delegate-um/requests/",
+            row: buildDelegateRow("pend"),
+            onClose: () => undefined,
+            onCompleted: () => undefined
+          })
+        );
+      });
+
+      const checklistInputs = Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'));
+      const outcomeInputs = Array.from(container.querySelectorAll<HTMLInputElement>('input[name="delegate-outcome"]'));
+
+      expect(container.textContent).toContain("Complete the clinical checklist before choosing an outcome");
+      expect(outcomeInputs.every((input) => input.disabled)).toBe(true);
+
+      for (const input of checklistInputs) {
+        await act(async () => {
+          input.click();
+        });
+      }
+
+      expect(container.textContent).not.toContain("Complete the clinical checklist before choosing an outcome");
+      expect(outcomeInputs.every((input) => input.disabled)).toBe(false);
+    } finally {
+      await act(async () => {
+        root?.unmount();
+      });
+      root = null;
+      container.remove();
+    }
+  });
+
+  it("starts review before submitting a pended row determination", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const onCompleted = vi.fn();
+    const fetchMock = vi.fn(async (url: string | URL | Request) => {
+      const target = String(url);
+
+      if (target.includes("/start-review")) {
+        return new Response(JSON.stringify({ state: "in_clinical_review" }), { status: 200 });
+      }
+
+      if (target.includes("/determination")) {
+        return new Response(JSON.stringify(buildDelegateRow("determined", "approved")), { status: 200 });
+      }
+
+      return new Response(JSON.stringify({ error: "unexpected" }), { status: 404 });
+    });
+    let root: Root | null = createRoot(container);
+
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      await act(async () => {
+        root?.render(
+          createElement(DelegateReviewModal, {
+            requestApiBase: "/api/delegate-um/requests/",
+            row: buildDelegateRow("pend"),
+            onClose: () => undefined,
+            onCompleted
+          })
+        );
+      });
+
+      for (const input of Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'))) {
+        await act(async () => {
+          input.click();
+        });
+      }
+
+      await act(async () => {
+        container.querySelector<HTMLInputElement>('input[value="approved"]')?.click();
+      });
+      await act(async () => {
+        Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
+          .find((button) => button.textContent === "Submit determination")
+          ?.click();
+      });
+
+      expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+        "/api/delegate-um/requests/PA-260526-0900-REVIEW1/start-review",
+        "/api/delegate-um/requests/PA-260526-0900-REVIEW1/determination"
+      ]);
+      expect(onCompleted).toHaveBeenCalledWith(expect.objectContaining({ state: "determined", outcomeStatus: "approved" }));
+    } finally {
+      vi.unstubAllGlobals();
       await act(async () => {
         root?.unmount();
       });
