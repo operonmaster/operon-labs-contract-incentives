@@ -19,6 +19,32 @@ export interface ProviderDocumentationEvaluationDependencies {
   monthToDateAmount?: number;
 }
 
+export interface DelegateUmSlaEvidence {
+  umRequestId: string;
+  id: string;
+  planId: string;
+  delegateVendorId: string;
+  requestType: string;
+  state: string;
+  outcomeStatus: "approved" | "denied";
+  outcomeStatusPresent: boolean;
+  outcomeStatusUsedForPayment: false;
+  completedWithinSla: boolean;
+  slaHours: 24;
+  clinicalReviewCompleted: boolean;
+  medicalNecessityReviewed: boolean;
+  policyCriteriaChecked: boolean;
+  rationaleCaptured: boolean;
+  auditReady: boolean;
+  containsPhi: false;
+}
+
+export interface DelegateUmSlaEvaluationDependencies {
+  getEvidenceByUmRequestId: (umRequestId: string) => DelegateUmSlaEvidence | null;
+  policy: IncentivePolicy;
+  monthToDateAmount?: number;
+}
+
 export function evaluateDemoScenario(evaluationType: string, policy: IncentivePolicy): DemoEvaluation {
   const request = demoRequests[evaluationType];
 
@@ -106,6 +132,60 @@ export function evaluateProviderDocumentationEvent(
   };
 }
 
+export function evaluateDelegateUmSlaEvent(
+  event: { eventType: string; umRequestId: string; caseId?: string },
+  dependencies: DelegateUmSlaEvaluationDependencies
+): DemoEvaluation {
+  if (event.eventType !== "UM_REQUEST_DETERMINED") {
+    throw new Error("UNSUPPORTED_DELEGATE_UM_EVENT");
+  }
+  assertDelegateUmEventIdsMatch(event);
+  assertDelegateUmCanonicalPaId(event.umRequestId);
+
+  const evidence = dependencies.getEvidenceByUmRequestId(event.umRequestId);
+  if (!evidence) {
+    throw new Error(`DELEGATE_UM_EVIDENCE_NOT_FOUND:${event.umRequestId}`);
+  }
+  assertDelegateUmEvidenceMatchesEvent(evidence, event.umRequestId);
+
+  const request: EvaluationRequest = {
+    evaluationType: "delegate_um_sla_bonus",
+    submitter: { id: evidence.delegateVendorId },
+    requestObject: {
+      umRequestId: evidence.umRequestId,
+      id: evidence.id,
+      planId: evidence.planId,
+      delegateVendorId: evidence.delegateVendorId,
+      requestType: evidence.requestType,
+      state: evidence.state,
+      outcomeStatus: evidence.outcomeStatus,
+      outcomeStatusPresent: evidence.outcomeStatusPresent,
+      outcomeStatusUsedForPayment: evidence.outcomeStatusUsedForPayment,
+      completedWithinSla: evidence.completedWithinSla,
+      slaHours: evidence.slaHours,
+      clinicalReviewCompleted: evidence.clinicalReviewCompleted,
+      medicalNecessityReviewed: evidence.medicalNecessityReviewed,
+      policyCriteriaChecked: evidence.policyCriteriaChecked,
+      rationaleCaptured: evidence.rationaleCaptured,
+      auditReady: evidence.auditReady,
+      containsPhi: evidence.containsPhi
+    }
+  };
+
+  const result = evaluatePolicy({
+    policy: dependencies.policy,
+    request,
+    monthToDateAmount: dependencies.monthToDateAmount ?? 0
+  });
+
+  return {
+    request,
+    policy: dependencies.policy,
+    result,
+    explanation: explainDecision(result)
+  };
+}
+
 function assertProviderDocumentationEventIdsMatch(event: { umRequestId: string; caseId?: string }): void {
   if (event.caseId !== undefined && event.caseId !== event.umRequestId) {
     throw new Error(`PROVIDER_DOCUMENTATION_EVENT_ID_MISMATCH:${event.umRequestId}`);
@@ -124,6 +204,24 @@ function assertProviderDocumentationEvidenceMatchesEvent(
 ): void {
   if (evidence.id !== umRequestId || evidence.umRequestId !== umRequestId || evidence.caseId !== umRequestId) {
     throw new Error(`PROVIDER_DOCUMENTATION_EVIDENCE_ID_MISMATCH:${umRequestId}`);
+  }
+}
+
+function assertDelegateUmEventIdsMatch(event: { umRequestId: string; caseId?: string }): void {
+  if (event.caseId !== undefined && event.caseId !== event.umRequestId) {
+    throw new Error(`DELEGATE_UM_EVENT_ID_MISMATCH:${event.umRequestId}`);
+  }
+}
+
+function assertDelegateUmCanonicalPaId(umRequestId: string): void {
+  if (!umRequestId.startsWith("PA-")) {
+    throw new Error(`DELEGATE_UM_EVENT_ID_NOT_CANONICAL:${umRequestId}`);
+  }
+}
+
+function assertDelegateUmEvidenceMatchesEvent(evidence: DelegateUmSlaEvidence, umRequestId: string): void {
+  if (evidence.id !== umRequestId || evidence.umRequestId !== umRequestId) {
+    throw new Error(`DELEGATE_UM_EVIDENCE_ID_MISMATCH:${umRequestId}`);
   }
 }
 
