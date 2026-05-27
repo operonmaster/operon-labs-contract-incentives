@@ -50,12 +50,18 @@ export interface DelegateUmRow {
   transactionId: string | null;
 }
 
+/* eslint-disable no-unused-vars -- TypeScript function signatures require parameter names. */
 export interface DelegateUmWorkflow {
   listWorkqueue(): Promise<DelegateUmRow[]>;
   listPlanRows(): Promise<DelegateUmRow[]>;
-  startReview(umRequestId: string, reviewerId: string): Promise<UMRequest>;
-  completeDetermination(umRequestId: string, input: CompleteClinicalReviewInput): Promise<DelegateUmRow>;
+  startReview: (umRequestId: string, reviewerId: string) => Promise<UMRequest>;
+  completeDetermination: (umRequestId: string, input: CompleteClinicalReviewInput) => Promise<DelegateUmRow>;
 }
+/* eslint-enable no-unused-vars */
+
+type PersistedDelegateUmRow = DelegateUmRow & {
+  caseId: string;
+};
 
 export function createDelegateUmWorkflow(
   platform: UmPlatform = createInMemoryUmPlatform(),
@@ -65,6 +71,7 @@ export function createDelegateUmWorkflow(
   paymentPolicyStore: PaymentPolicyStore = createPaymentPolicyStoreFromEnv()
 ): DelegateUmWorkflow {
   const rows = new Map<string, DelegateUmRow>();
+  const settlementsInFlight = new Map<string, Promise<DelegateUmRow>>();
 
   async function listRequests(): Promise<UMRequest[]> {
     return persistence ? persistence.listUmRequests() : platform.listUmRequests();
@@ -78,6 +85,16 @@ export function createDelegateUmWorkflow(
     await persistence?.saveUmRequest(umRequest);
   }
 
+  async function getStoredDelegateRow(umRequestId: string): Promise<DelegateUmRow | null> {
+    return rows.get(umRequestId) ?? normalizePersistedDelegateRow(await persistence?.getIncentiveRow(umRequestId));
+  }
+
+  async function getImmutablePaidRow(umRequestId: string): Promise<DelegateUmRow | null> {
+    const row = await getStoredDelegateRow(umRequestId);
+
+    return row && isImmutablePaidDelegateRow(row) ? row : null;
+  }
+
   return {
     async listWorkqueue() {
       return (await listRequests())
@@ -86,6 +103,8 @@ export function createDelegateUmWorkflow(
         .sort((left, right) => left.slaDeadlineAt.localeCompare(right.slaDeadlineAt));
     },
     async listPlanRows() {
+      await loadPersistedDelegateRows(persistence, rows);
+
       return (await listRequests())
         .map((request) => rows.get(request.id) ?? buildPendingRow(request))
         .sort((left, right) => right.submittedAt.localeCompare(left.submittedAt));
@@ -103,29 +122,89 @@ export function createDelegateUmWorkflow(
       return started;
     },
     async completeDetermination(umRequestId, input) {
-      const persisted = await getRequest(umRequestId);
-      if (!persisted) {
-        throw new Error(`UM_REQUEST_NOT_FOUND:${umRequestId}`);
+      const paidRow = await getImmutablePaidRow(umRequestId);
+      if (paidRow) {
+        rows.set(umRequestId, paidRow);
+        return paidRow;
       }
 
-      const request = persistence
-        ? completeClinicalReviewForRequest(persisted, input)
-        : platform.completeClinicalReview(umRequestId, input);
-      await saveRequest(request);
+      const existingSettlement = settlementsInFlight.get(umRequestId);
+      if (existingSettlement) {
+        return existingSettlement;
+      }
 
-      const row = await settleDetermination(request, {
+      const settlement = completeAndSettleDetermination({
+        umRequestId,
+        input,
+        getRequest,
+        saveRequest,
+        platform,
+        persistence,
         rows,
         policyStore,
         paymentIntentStore,
         paymentPolicyStore
       });
-      rows.set(request.id, row);
-      return row;
+      settlementsInFlight.set(umRequestId, settlement);
+
+      try {
+        return await settlement;
+      } finally {
+        settlementsInFlight.delete(umRequestId);
+      }
     }
   };
 }
 
 export const delegateUmWorkflow = createDelegateUmWorkflow();
+
+/* eslint-disable no-unused-vars -- TypeScript function signatures require parameter names. */
+interface CompleteAndSettleDependencies {
+  umRequestId: string;
+  input: CompleteClinicalReviewInput;
+  getRequest: (umRequestId: string) => Promise<UMRequest | null>;
+  saveRequest: (umRequest: UMRequest) => Promise<void>;
+  platform: UmPlatform;
+  persistence: UmPasPersistenceStore | undefined;
+  rows: Map<string, DelegateUmRow>;
+  policyStore: PolicyStore;
+  paymentIntentStore: PaymentIntentStore | undefined;
+  paymentPolicyStore: PaymentPolicyStore;
+}
+/* eslint-enable no-unused-vars */
+
+async function completeAndSettleDetermination({
+  umRequestId,
+  input,
+  getRequest,
+  saveRequest,
+  platform,
+  persistence,
+  rows,
+  policyStore,
+  paymentIntentStore,
+  paymentPolicyStore
+}: CompleteAndSettleDependencies): Promise<DelegateUmRow> {
+  const persisted = await getRequest(umRequestId);
+  if (!persisted) {
+    throw new Error(`UM_REQUEST_NOT_FOUND:${umRequestId}`);
+  }
+
+  const request = persistence
+    ? completeClinicalReviewForRequest(persisted, input)
+    : platform.completeClinicalReview(umRequestId, input);
+  await saveRequest(request);
+
+  const row = await settleDetermination(request, {
+    rows,
+    policyStore,
+    paymentIntentStore,
+    paymentPolicyStore
+  });
+  rows.set(request.id, row);
+  await saveDelegateRow(persistence, row);
+  return row;
+}
 
 function buildDelegateEvidence(request: UMRequest): DelegateUmSlaEvidence {
   const clinicalReviewCompleted =
@@ -214,6 +293,44 @@ async function settleDetermination(
       paymentStatus: "blocked_by_policy",
       reason: "No matching Delegate UM SLA bonus policy",
       reasonCodes: ["POLICY_NOT_FOUND"]
+    };
+  }
+
+  if (policies.length > 1) {
+    const evaluation = evaluateDelegateUmSlaEvent(
+      { eventType: "UM_REQUEST_DETERMINED", umRequestId: request.id, caseId: request.id },
+      {
+        getEvidenceByUmRequestId: () => evidence,
+        policy: policies[0]!,
+        monthToDateAmount: 0
+      }
+    );
+    const result = {
+      ...evaluation.result,
+      decision: "blocked" as const,
+      amount: 0,
+      walletId: null,
+      reasonCodes: ["MULTIPLE_POLICY_MATCHES"]
+    };
+    const audit = createAuditRecord({
+      request: evaluation.request,
+      result,
+      transactionId: null
+    });
+
+    return {
+      ...buildPendingRow(request),
+      slaStatus: buildDeterminedSlaStatus(request),
+      incentiveStatus: "not_eligible",
+      paymentStatus: "blocked_by_policy",
+      incentiveValue: 0,
+      currency: result.currency,
+      settlementToken: result.settlementToken,
+      reason: summarizeDelegateReason(result.reasonCodes),
+      reasonCodes: result.reasonCodes,
+      policyId: result.policyId,
+      audit,
+      walletId: null
     };
   }
 
@@ -317,6 +434,73 @@ async function settleDetermination(
       transactionId: null
     };
   }
+}
+
+async function loadPersistedDelegateRows(
+  persistence: UmPasPersistenceStore | undefined,
+  rows: Map<string, DelegateUmRow>
+): Promise<void> {
+  const persistedRows = (await persistence?.listIncentiveRows()) ?? [];
+
+  for (const persistedRow of persistedRows) {
+    const row = normalizePersistedDelegateRow(persistedRow);
+    if (row) {
+      rows.set(row.umRequestId, row);
+    }
+  }
+}
+
+async function saveDelegateRow(
+  persistence: UmPasPersistenceStore | undefined,
+  row: DelegateUmRow
+): Promise<void> {
+  await persistence?.saveIncentiveRow(toPersistedDelegateRow(row) as unknown as Parameters<UmPasPersistenceStore["saveIncentiveRow"]>[0]);
+}
+
+function toPersistedDelegateRow(row: DelegateUmRow): PersistedDelegateUmRow {
+  return {
+    ...row,
+    caseId: row.umRequestId
+  };
+}
+
+function normalizePersistedDelegateRow(value: unknown): DelegateUmRow | null {
+  if (!isDelegateUmRowShape(value)) {
+    return null;
+  }
+
+  return {
+    ...value,
+    audit: value.audit ? { ...value.audit } : null,
+    reasonCodes: [...value.reasonCodes],
+    settlementToken: { ...value.settlementToken }
+  };
+}
+
+function isDelegateUmRowShape(value: unknown): value is DelegateUmRow {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Partial<DelegateUmRow>;
+
+  return (
+    typeof candidate.umRequestId === "string" &&
+    typeof candidate.id === "string" &&
+    typeof candidate.delegateVendorId === "string" &&
+    typeof candidate.planId === "string" &&
+    typeof candidate.submittedAt === "string" &&
+    typeof candidate.incentiveStatus === "string" &&
+    typeof candidate.paymentStatus === "string" &&
+    typeof candidate.incentiveValue === "number" &&
+    Array.isArray(candidate.reasonCodes) &&
+    typeof candidate.settlementToken === "object" &&
+    candidate.settlementToken !== null
+  );
+}
+
+function isImmutablePaidDelegateRow(row: DelegateUmRow): boolean {
+  return row.incentiveStatus === "paid" && Boolean(row.transactionId || row.paymentIntentId);
 }
 
 function selectDelegateUmSlaEvaluation(
