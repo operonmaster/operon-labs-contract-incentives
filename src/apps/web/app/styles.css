@@ -2114,6 +2114,75 @@ body {
   color: var(--op-blue-2);
 }
 
+.delegate-console .hero p {
+  max-width: 860px;
+}
+
+.delegate-workqueue,
+.delegate-plan-worklist {
+  min-width: 1080px;
+}
+
+.delegate-review-modal {
+  max-width: 980px;
+  width: min(100%, 980px);
+}
+
+.delegate-review-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.delegate-review-section {
+  background: rgba(5, 8, 22, 0.5);
+  border: 1px solid var(--op-line);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.delegate-review-section h3 {
+  font-size: 15px;
+  margin: 0;
+}
+
+.delegate-field {
+  display: grid;
+  gap: 7px;
+}
+
+.delegate-field span {
+  color: var(--op-muted);
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.delegate-field select {
+  appearance: none;
+  background: rgba(5, 8, 22, 0.64);
+  border: 1px solid var(--op-line);
+  border-radius: 8px;
+  color: var(--op-ink);
+  font: inherit;
+  min-height: 42px;
+  padding: 9px 12px;
+}
+
+.delegate-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (max-width: 720px) {
+  .delegate-review-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .error-text {
   color: #fca5a5;
 }

@@ -22,7 +22,7 @@ export const demoScenarios: DemoScenario[] = [
     submitter: "Delegated UM vendor",
     purpose: "Reward timely, complete, audit-ready delegated utilization-management work.",
     evaluationType: "delegate_um_sla_bonus",
-    status: "dormant"
+    status: "active"
   },
   {
     slug: "appeals",

@@ -8,13 +8,13 @@ describe("demo catalog", () => {
     expect(demoScenarios[0]?.slug).toBe("provider-documentation");
   });
 
-  it("marks non-primary home page use cases as dormant", () => {
+  it("marks implemented home page use cases as active", () => {
     const homePage = readFileSync(path.join(process.cwd(), "src/apps/web/app/page.tsx"), "utf8");
     const styles = readFileSync(path.join(process.cwd(), "src/apps/web/app/styles.css"), "utf8");
 
     expect(demoScenarios.find((scenario) => scenario.slug === "provider-documentation")?.status).toBe("active");
+    expect(demoScenarios.find((scenario) => scenario.slug === "delegate-um")?.status).toBe("active");
     expect(demoScenarios.filter((scenario) => scenario.status === "dormant").map((scenario) => scenario.slug)).toEqual([
-      "delegate-um",
       "appeals",
       "provider-directory"
     ]);
