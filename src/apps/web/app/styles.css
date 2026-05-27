@@ -2170,6 +2170,7 @@ body {
 
 .delegate-review-modal {
   max-width: 980px;
+  overflow: visible;
   width: min(100%, 980px);
 }
 

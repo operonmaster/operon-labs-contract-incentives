@@ -30,6 +30,7 @@ describe("DelegateVendorConsole source", () => {
     const stylesSource = readFileSync(path.join(process.cwd(), "src/apps/web/app/styles.css"), "utf8");
     expect(stylesSource).toContain(".delegate-field > span");
     expect(stylesSource).not.toContain(".delegate-field span");
+    expect(stylesSource).toMatch(/\.delegate-review-modal\s*\{[^}]*overflow:\s*visible;/s);
   });
 
   it("renders review modal with shared checklist, radio, and dropdown primitives", () => {
