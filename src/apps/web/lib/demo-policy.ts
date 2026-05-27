@@ -1,18 +1,57 @@
-import type { IncentivePolicy } from "@operon-labs/policy-engine";
+import { getDemoEvaluationRequest } from "@operon-labs/incentive-agent";
+import type { EvaluationRequest, IncentivePolicy } from "@operon-labs/policy-engine";
 import type { PolicyStore } from "./policy-store";
+
+type DemoPolicyStore = Pick<PolicyStore, "findPolicy" | "getPolicy">;
 
 export async function findDemoPolicy(
   evaluationType: string,
-  store: Pick<PolicyStore, "findPolicy" | "getPolicy">
+  store: DemoPolicyStore
 ): Promise<IncentivePolicy | null> {
-  if (evaluationType === "delegate_um_sla_bonus") {
+  return findPolicyForEvaluationRequest(getDemoEvaluationRequest(evaluationType), store);
+}
+
+export async function findPolicyForEvaluationRequest(
+  request: EvaluationRequest,
+  store: DemoPolicyStore
+): Promise<IncentivePolicy | null> {
+  if (request.evaluationType === "delegate_um_sla_bonus") {
+    const planId = stringValue(request.requestObject.planId);
+    const delegateVendorId = stringValue(request.requestObject.delegateVendorId);
+    const requestType = stringValue(request.requestObject.requestType);
+
+    if (!planId || !delegateVendorId || !requestType || request.submitter.id !== delegateVendorId) {
+      return null;
+    }
+
     return store.findPolicy({
-      evaluationType,
-      planId: "acme-health-ppo",
-      providerId: "northstar-um",
-      requestType: "pharmacy_benefit"
+      evaluationType: request.evaluationType,
+      planId,
+      providerId: delegateVendorId,
+      requestType
     });
   }
 
-  return store.getPolicy(evaluationType);
+  if (request.evaluationType === "provider_documentation_completeness") {
+    const planId = stringValue(request.requestObject.planId);
+    const providerId = stringValue(request.requestObject.providerId);
+    const requestType = stringValue(request.requestObject.requestType);
+
+    if (!planId || !providerId || !requestType) {
+      return null;
+    }
+
+    return store.findPolicy({
+      evaluationType: request.evaluationType,
+      planId,
+      providerId,
+      requestType
+    });
+  }
+
+  return store.getPolicy(request.evaluationType);
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
 }

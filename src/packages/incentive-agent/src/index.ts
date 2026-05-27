@@ -46,11 +46,7 @@ export interface DelegateUmSlaEvaluationDependencies {
 }
 
 export function evaluateDemoScenario(evaluationType: string, policy: IncentivePolicy): DemoEvaluation {
-  const request = demoRequests[evaluationType];
-
-  if (!request) {
-    throw new Error(`No demo scenario registered for ${evaluationType}`);
-  }
+  const request = getDemoEvaluationRequest(evaluationType);
 
   const result = evaluatePolicy({
     policy,
@@ -64,6 +60,16 @@ export function evaluateDemoScenario(evaluationType: string, policy: IncentivePo
     result,
     explanation: explainDecision(result)
   };
+}
+
+export function getDemoEvaluationRequest(evaluationType: string): EvaluationRequest {
+  const request = demoRequests[evaluationType];
+
+  if (!request) {
+    throw new Error(`No demo scenario registered for ${evaluationType}`);
+  }
+
+  return structuredClone(request);
 }
 
 export function explainDecision(result: PolicyEvaluationResult): string {
