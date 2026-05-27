@@ -612,16 +612,6 @@ function getStoredCanonicalPaId(...ids: Array<string | null | undefined>): strin
   return paId ?? canonicalizedIds[0] ?? "";
 }
 
-function getCanonicalPaIdOrNull(id: string | null | undefined): string | null {
-  if (!id) {
-    return null;
-  }
-
-  const canonicalId = canonicalizeLegacyCanonicalId(id);
-
-  return canonicalId.startsWith("PA-") ? canonicalId : null;
-}
-
 function getStrictPaIdOrNull(id: string | null | undefined): string | null {
   if (!id) {
     return null;

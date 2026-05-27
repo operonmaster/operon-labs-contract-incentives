@@ -115,6 +115,12 @@ export function createProviderDocumentationWorkflow(
     }
 
     const existing = rows.get(event.umRequestId) ?? (await persistence?.getIncentiveRow(event.umRequestId)) ?? null;
+    if (existing && isImmutablePaidIncentiveRow(existing)) {
+      const refreshed = refreshPaidIncentiveRowLifecycleFields(existing, record);
+      rows.set(event.umRequestId, refreshed);
+      return refreshed;
+    }
+
     if (existing && isCurrentIncentiveRow(existing, record)) {
       const refreshed = refreshIncentiveRowDisplayFields(existing, record);
       rows.set(event.umRequestId, refreshed);
@@ -427,6 +433,18 @@ function refreshIncentiveRowDisplayFields(row: IncentiveWorklistRow, record: UMR
     outcomeStatus: record.outcomeStatus,
     umEvidenceSignature: buildUmEvidenceSignature(record)
   };
+}
+
+function refreshPaidIncentiveRowLifecycleFields(row: IncentiveWorklistRow, record: UMRequest): IncentiveWorklistRow {
+  return {
+    ...row,
+    state: record.state,
+    outcomeStatus: record.outcomeStatus
+  };
+}
+
+function isImmutablePaidIncentiveRow(row: IncentiveWorklistRow): boolean {
+  return row.incentiveStatus === "paid" && Boolean(row.transactionId || row.paymentIntentId);
 }
 
 function hasIncentiveRowDisplayFieldChanges(left: IncentiveWorklistRow, right: IncentiveWorklistRow): boolean {
