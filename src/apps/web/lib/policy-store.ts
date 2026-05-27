@@ -458,7 +458,7 @@ function normalizePolicyScope(policy: IncentivePolicy): IncentivePolicy {
       providerName: policy.contractPair.providerName ?? providerNameForId(policy.contractPair.providerId)
     },
     incentiveScope: {
-      ...requestTypeScope(policy.incentiveScope),
+      ...requestTypeScope(policy),
       ...serviceCodeScope(policy.incentiveScope)
     }
   };
@@ -606,17 +606,24 @@ function providerDocumentationPolicy({
   };
 }
 
-function requestTypeScope(scope: IncentivePolicy["incentiveScope"]): IncentivePolicy["incentiveScope"] {
-  if (scope.eligibleRequestTypes?.length) {
+function requestTypeScope(policy: IncentivePolicy): IncentivePolicy["incentiveScope"] {
+  const scope = policy.incentiveScope;
+  const eligibleRequestTypes = scope.eligibleRequestTypes?.length ? { eligibleRequestTypes: [...scope.eligibleRequestTypes] } : {};
+  const excludedRequestTypes = scope.excludedRequestTypes?.length ? { excludedRequestTypes: [...scope.excludedRequestTypes] } : {};
+
+  if (policy.evaluationType === "delegate_um_sla_bonus") {
     return {
-      eligibleRequestTypes: [...scope.eligibleRequestTypes]
+      ...eligibleRequestTypes,
+      ...excludedRequestTypes
     };
   }
 
+  if (scope.eligibleRequestTypes?.length) {
+    return eligibleRequestTypes;
+  }
+
   if (scope.excludedRequestTypes?.length) {
-    return {
-      excludedRequestTypes: [...scope.excludedRequestTypes]
-    };
+    return excludedRequestTypes;
   }
 
   return {};

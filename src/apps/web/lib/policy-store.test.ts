@@ -242,6 +242,52 @@ describe("policy store", () => {
     });
   });
 
+  it("preserves delegate request-type exclusions when normalizing edited Firestore policies", async () => {
+    const firestore = createFakeFirestore();
+    const store = createFirestorePolicyStore(
+      {
+        projectId: "operon-labs-nonprod",
+        databaseId: "(default)"
+      },
+      firestore
+    );
+    await store.listPolicies("delegate_um_sla_bonus");
+    await firestore.collection("incentivePolicies").doc("delegate-um-sla-bonus-v1").set({
+      ...defaultIncentivePolicies.delegate_um_acme_sla_bonus,
+      incentiveScope: {
+        eligibleRequestTypes: ["outpatient_service", "pharmacy_benefit"],
+        excludedRequestTypes: ["pharmacy_benefit"]
+      }
+    });
+
+    const excluded = await store.findPolicy({
+      evaluationType: "delegate_um_sla_bonus",
+      planId: "acme-health-ppo",
+      providerId: "northstar-um",
+      requestType: "pharmacy_benefit"
+    });
+    const eligible = await store.findPolicy({
+      evaluationType: "delegate_um_sla_bonus",
+      planId: "acme-health-ppo",
+      providerId: "northstar-um",
+      requestType: "outpatient_service"
+    });
+    const normalized = await store.getPolicyById("delegate-um-sla-bonus-v1");
+
+    expect(excluded).toBeNull();
+    expect(eligible).toMatchObject({
+      policyId: "delegate-um-sla-bonus-v1",
+      incentiveScope: {
+        eligibleRequestTypes: ["outpatient_service", "pharmacy_benefit"],
+        excludedRequestTypes: ["pharmacy_benefit"]
+      }
+    });
+    expect(normalized?.incentiveScope).toMatchObject({
+      eligibleRequestTypes: ["outpatient_service", "pharmacy_benefit"],
+      excludedRequestTypes: ["pharmacy_benefit"]
+    });
+  });
+
   it("migrates deprecated wrapped policy documents to the pair-specific model", async () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePolicyStore(

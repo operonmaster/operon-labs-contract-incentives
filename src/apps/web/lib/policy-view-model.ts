@@ -39,6 +39,10 @@ export function buildProviderDocumentationBusinessPolicyCards(policy: IncentiveP
     return [];
   }
 
+  if (policy.evaluationType !== providerDocumentationBusinessPolicyType) {
+    return [];
+  }
+
   const token = policy.payout.token;
   const status = policy.status === "active" ? "Active" : "Disabled";
 
