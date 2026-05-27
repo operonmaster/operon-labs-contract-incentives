@@ -89,7 +89,7 @@ describe("DelegatePlanConsole source", () => {
     expect(markup).toContain("Execution failed");
     expect(markup).toContain("op-badge op-badge-warning");
     expect(markup).toContain("Recipient wallet");
-    expect(markup).toContain("0.0.9049550");
+    expect(markup).toContain("0.0.9049549");
   });
 });
 
@@ -206,7 +206,7 @@ function buildDelegatePlanAuditRow(overrides: Partial<DelegatePlanAuditRow> = {}
       transactionId: null,
       createdAt: "2026-05-27T06:10:19.551Z"
     },
-    walletId: "0.0.9049550",
+    walletId: "0.0.9049549",
     paymentIntentId: null,
     transactionId: null,
     ...overrides

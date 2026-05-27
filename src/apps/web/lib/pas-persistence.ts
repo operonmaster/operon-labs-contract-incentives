@@ -1,3 +1,4 @@
+import { buildBusinessEvaluationId, buildPaymentIntentId } from "@operon-labs/hedera-executor";
 import {
   buildProviderDocumentationEvidence,
   type ProviderDocumentationEvidence,
@@ -44,7 +45,7 @@ export interface PasPersistenceStore {
   listPasEvents(): Promise<StoredPasSubmittedEvent[]>;
   saveIncentiveRow(row: PersistedIncentiveWorklistRow): Promise<void>;
   listIncentiveRows(): Promise<PersistedIncentiveWorklistRow[]>;
-  getIncentiveRow(umRequestId: string): Promise<PersistedIncentiveWorklistRow | null>;
+  getIncentiveRow(umRequestId: string, businessPolicyId?: string): Promise<PersistedIncentiveWorklistRow | null>;
 }
 
 export interface UmPasPersistenceStore extends PasPersistenceStore {
@@ -292,8 +293,10 @@ class FirestorePasPersistenceStore implements UmPasPersistenceStore {
     validateIncentiveRowIds(row);
 
     const firestore = await this.getFirestore();
-    await firestore.collection(INCENTIVE_EVALUATIONS_COLLECTION).doc(row.umRequestId).set({
+    const documentId = buildIncentiveRowDocumentId(row);
+    await firestore.collection(INCENTIVE_EVALUATIONS_COLLECTION).doc(documentId).set({
       ...row,
+      id: documentId,
       storedAt: new Date().toISOString()
     });
   }
@@ -306,15 +309,27 @@ class FirestorePasPersistenceStore implements UmPasPersistenceStore {
     );
   }
 
-  async getIncentiveRow(umRequestId: string): Promise<PersistedIncentiveWorklistRow | null> {
+  async getIncentiveRow(
+    umRequestId: string,
+    businessPolicyId?: string
+  ): Promise<PersistedIncentiveWorklistRow | null> {
     const firestore = await this.getFirestore();
-    const snapshot = await firestore.collection(INCENTIVE_EVALUATIONS_COLLECTION).doc(umRequestId).get();
+    if (businessPolicyId) {
+      const documentId = buildBusinessEvaluationId({ umRequestId, businessPolicyId });
+      const snapshot = await firestore.collection(INCENTIVE_EVALUATIONS_COLLECTION).doc(documentId).get();
 
-    if (snapshot.exists) {
-      return canonicalizeStoredIncentiveRow(snapshot.data() as PersistedIncentiveWorklistRow & { storedAt?: string }, umRequestId);
+      if (snapshot.exists) {
+        return canonicalizeStoredIncentiveRow(
+          snapshot.data() as PersistedIncentiveWorklistRow & { storedAt?: string },
+          documentId
+        );
+      }
+
+      return null;
     }
 
-    return null;
+    const rows = await this.listIncentiveRows();
+    return rows.find((row) => row.umRequestId === umRequestId) ?? null;
   }
 
   private async getFirestore(): Promise<FirestoreDatabase> {
@@ -382,12 +397,31 @@ function validateIncentiveRowIds(row: PersistedIncentiveWorklistRow): void {
   if (rowIds.caseId !== undefined) {
     assertMatchingCanonicalId(rowIds.caseId, row.umRequestId, "row.caseId");
   }
-  if (rowIds.id !== undefined) {
-    assertMatchingCanonicalId(rowIds.id, row.umRequestId, "row.id");
+
+  const expectedBusinessEvaluationId = buildIncentiveRowDocumentId(row);
+  if (rowIds.id !== undefined && rowIds.id !== expectedBusinessEvaluationId) {
+    throw new Error("PAS_SUBMISSION_ID_MISMATCH:row.id");
   }
-  if (row.paymentIntentId !== null) {
-    assertMatchingCanonicalId(row.paymentIntentId, row.umRequestId, "row.paymentIntentId");
+
+  if (row.paymentIntentId !== null && row.paymentIntentId !== undefined) {
+    const expectedPaymentIntentId = buildPaymentIntentId({
+      umRequestId: row.umRequestId,
+      caseId: rowIds.caseId ?? row.umRequestId,
+      incentiveEvaluationId: expectedBusinessEvaluationId,
+      businessPolicyId: row.policyId,
+      paymentPolicyId: row.planId
+    });
+    if (row.paymentIntentId !== expectedPaymentIntentId) {
+      throw new Error("PAS_SUBMISSION_ID_MISMATCH:row.paymentIntentId");
+    }
   }
+}
+
+function buildIncentiveRowDocumentId(row: PersistedIncentiveWorklistRow): string {
+  return buildBusinessEvaluationId({
+    umRequestId: row.umRequestId,
+    businessPolicyId: row.policyId
+  });
 }
 
 function assertCanonicalPaId(value: string, fieldName: string): void {
@@ -632,25 +666,26 @@ function canonicalizeStoredIncentiveRow(
     denialReason?: unknown;
     storedAt?: string;
   };
-  const canonicalId = getStoredCanonicalPaId(
-    fallbackCanonicalId,
-    incentiveRow.umRequestId,
-    incentiveRow.caseId,
-    incentiveRow.id,
-    incentiveRow.paymentIntentId
-  );
+  const canonicalId = getStoredCanonicalPaId(fallbackCanonicalId, incentiveRow.umRequestId, incentiveRow.caseId);
+  const expectedEvaluationId =
+    incentiveRow.policyId && canonicalId.startsWith("PA-")
+      ? buildBusinessEvaluationId({
+          umRequestId: canonicalId,
+          businessPolicyId: incentiveRow.policyId
+        })
+      : fallbackCanonicalId ?? incentiveRow.id ?? canonicalId;
 
   delete (incentiveRow as PersistedIncentiveWorklistRow & { storedAt?: string }).storedAt;
   delete incentiveRow.paResult;
   delete incentiveRow.denialReason;
   return {
     ...incentiveRow,
-    id: canonicalId,
+    id: expectedEvaluationId,
     umRequestId: canonicalId,
     caseId: canonicalId,
     state: incentiveRow.state ?? "pend",
     outcomeStatus: incentiveRow.outcomeStatus ?? null,
-    paymentIntentId: incentiveRow.paymentIntentId ? canonicalId : null,
+    paymentIntentId: incentiveRow.paymentIntentId ?? null,
     settlementToken: incentiveRow.settlementToken ?? {
       symbol: incentiveRow.currency
     }

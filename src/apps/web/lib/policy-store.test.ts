@@ -49,7 +49,7 @@ describe("policy store", () => {
           },
           settlement: {
             mode: "auto",
-            recipientWalletId: "0.0.9049550",
+            recipientWalletId: "0.0.9049549",
             requiresHumanApproval: false
           }
         }),
@@ -73,6 +73,8 @@ describe("policy store", () => {
       "plcy_8K2M4Q6R9T1V3X5Z7B0C",
       "plcy_9Q3S6V1X8Z2B5D7F0H4K"
     ]);
+    expect([...new Set(policies.map((policy) => policy.settlement.recipientWalletId))]).toEqual(["0.0.9049549"]);
+    expect([...new Set(delegatePolicies.map((policy) => policy.settlement.recipientWalletId))]).toEqual(["0.0.9049549"]);
     expect(policies).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

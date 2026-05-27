@@ -1,5 +1,11 @@
 import { createAuditRecord, type AuditRecord } from "@operon-labs/audit-log";
-import { executePolicyBoundPayment, type PaymentIntentStore } from "@operon-labs/hedera-executor";
+import {
+  buildBusinessEvaluationId,
+  buildPaymentIntentId,
+  executePolicyBoundPayment,
+  type PaymentApprovalRequest,
+  type PaymentIntentStore
+} from "@operon-labs/hedera-executor";
 import { evaluateProviderDocumentationEvent } from "@operon-labs/incentive-agent";
 import type { Currency, SettlementToken } from "@operon-labs/policy-engine";
 import {
@@ -116,8 +122,7 @@ export function createProviderDocumentationWorkflow(
       return null;
     }
 
-    const existing = rows.get(event.umRequestId) ?? (await persistence?.getIncentiveRow(event.umRequestId)) ?? null;
-    const providerExisting = existing && isProviderDocumentationIncentiveRow(existing) ? existing : null;
+    const providerExisting = await getStoredProviderDocumentationRow(event.umRequestId);
     if (providerExisting && isImmutablePaidIncentiveRow(providerExisting)) {
       rows.set(event.umRequestId, providerExisting);
       return providerExisting;
@@ -179,9 +184,14 @@ export function createProviderDocumentationWorkflow(
       result: evaluation.result,
       transactionId: null
     });
+    const businessPolicyId = evaluation.result.policyId;
+    const businessEvaluationId = buildBusinessEvaluationId({
+      umRequestId: record.id,
+      businessPolicyId
+    });
     const baseRow: IncentiveWorklistRow = {
       evaluationType: "provider_documentation_completeness",
-      id: record.id,
+      id: businessEvaluationId,
       umRequestId: record.id,
       caseId: record.id,
       planId: record.planId,
@@ -200,7 +210,7 @@ export function createProviderDocumentationWorkflow(
       settlementToken: evaluation.result.settlementToken,
       reason: summarizeReason(evidence, evaluation.result.reasonCodes),
       reasonCodes: evaluation.result.reasonCodes,
-      policyId: evaluation.result.policyId,
+      policyId: businessPolicyId,
       policyControls,
       policyCriteria: buildProviderDocumentationPolicyCriteria(evaluation),
       umEvidenceSignature: buildUmEvidenceSignature(record),
@@ -217,6 +227,7 @@ export function createProviderDocumentationWorkflow(
     }
 
     let paymentPolicy: PaymentPlanPolicy | null = null;
+    let requestedPaymentIntentId: string | null = null;
 
     try {
       rows.set(event.umRequestId, baseRow);
@@ -226,37 +237,52 @@ export function createProviderDocumentationWorkflow(
         throw new Error("HEDERA_PLAN_POLICY_NOT_FOUND");
       }
 
-      const payment = await executePolicyBoundPayment({
+      const paymentRequest = {
         auditId: audit.id,
-        incentiveEvaluationId: event.umRequestId,
+        umRequestId: event.umRequestId,
+        caseId: event.umRequestId,
+        incentiveEvaluationId: businessEvaluationId,
         planId: evidence.planId,
+        paymentPolicyId: paymentPolicy.planId,
         amount: evaluation.result.amount,
         currency: evaluation.result.currency,
         walletId: evaluation.result.walletId,
-        policyId: evaluation.result.policyId,
+        policyId: businessPolicyId,
+        businessPolicyId,
         policyVersion: evaluation.result.policyVersion,
-        caseId: event.umRequestId,
         triggerEvent: event.eventType,
         policyControls
-      }, {
+      } satisfies PaymentApprovalRequest;
+      requestedPaymentIntentId = buildPaymentIntentId(paymentRequest);
+
+      const payment = await executePolicyBoundPayment(paymentRequest, {
         paymentIntentStore,
         planPolicy: paymentPolicy,
         businessEvaluationStore: createBusinessEvaluationAttestationStore(
           persistence ?? {
-            async getIncentiveRow(incentiveEvaluationId) {
-              return (
-                rows.get(incentiveEvaluationId) ??
-                [...rows.values()].find((row) => row.umRequestId === incentiveEvaluationId) ??
-                null
-              );
+            async getIncentiveRow(lookupUmRequestId, lookupBusinessPolicyId) {
+              const row =
+                rows.get(lookupUmRequestId) ??
+                [...rows.values()].find((candidate) => candidate.umRequestId === lookupUmRequestId) ??
+                null;
+              if (!row || (lookupBusinessPolicyId && row.policyId !== lookupBusinessPolicyId)) {
+                return null;
+              }
+
+              return row;
             }
           },
           policyStore
         )
       });
+      const paymentIntentId = payment.paymentIntentId ?? requestedPaymentIntentId;
+      if (!paymentIntentId) {
+        throw new Error("PAYMENT_INTENT_ID_REQUIRED");
+      }
+
       const paid: IncentiveWorklistRow = {
         ...baseRow,
-        paymentIntentId: payment.paymentIntentId,
+        paymentIntentId,
         transactionId: payment.transactionId,
         audit: {
           ...audit,
@@ -272,16 +298,15 @@ export function createProviderDocumentationWorkflow(
           paymentPolicy,
           outcome: payment.status === "simulated" ? "simulated" : "paid",
           failureCode: null,
-          paymentIntentId: payment.paymentIntentId ?? null,
+          paymentIntentId,
           transactionId: payment.transactionId ?? null
         })
       );
       return paid;
     } catch (error) {
-      const existing = rows.get(event.umRequestId) ?? (await persistence?.getIncentiveRow(event.umRequestId)) ?? null;
+      const existing = await getStoredProviderDocumentationRow(event.umRequestId);
       if (
         existing &&
-        isProviderDocumentationIncentiveRow(existing) &&
         isCurrentIncentiveRow(existing, record) &&
         existing.incentiveStatus === "paid" &&
         existing.transactionId
@@ -301,13 +326,22 @@ export function createProviderDocumentationWorkflow(
       rows.set(event.umRequestId, failed);
       await persistence?.saveIncentiveRow(failed);
       if (paymentPolicy) {
+        const failedPaymentIntentId =
+          requestedPaymentIntentId ??
+          buildPaymentIntentId({
+            umRequestId: failed.umRequestId,
+            caseId: failed.caseId,
+            incentiveEvaluationId: failed.id,
+            businessPolicyId: failed.policyId,
+            paymentPolicyId: paymentPolicy.planId
+          });
         await paymentPolicyEvidenceStore?.saveEvidence(
           buildPaymentPolicyEvidence({
             row: failed,
             paymentPolicy,
             outcome: "blocked",
             failureCode: toPaymentPolicyFailureCode(error),
-            paymentIntentId: null,
+            paymentIntentId: failedPaymentIntentId,
             transactionId: null
           })
         );
@@ -334,8 +368,17 @@ export function createProviderDocumentationWorkflow(
 
   async function getIncentiveRow(umRequestId: string): Promise<IncentiveWorklistRow | null> {
     await processPlatformEvents(umRequestId);
-    const row = rows.get(umRequestId) ?? (await persistence?.getIncentiveRow(umRequestId)) ?? null;
-    return row && isProviderDocumentationIncentiveRow(row) ? row : null;
+    return getStoredProviderDocumentationRow(umRequestId);
+  }
+
+  async function getStoredProviderDocumentationRow(umRequestId: string): Promise<IncentiveWorklistRow | null> {
+    const memoryRow = rows.get(umRequestId);
+    if (memoryRow && isProviderDocumentationIncentiveRow(memoryRow)) {
+      return memoryRow;
+    }
+
+    const persistedRows = (await persistence?.listIncentiveRows()) ?? [];
+    return persistedRows.find((row) => row.umRequestId === umRequestId && isProviderDocumentationIncentiveRow(row)) ?? null;
   }
 
   return {
@@ -418,7 +461,10 @@ function isProviderDocumentationIncentiveRow(row: IncentiveWorklistRow & { evalu
 function isCurrentIncentiveRow(row: IncentiveWorklistRow, record: PriorAuthRecord): boolean {
   return (
     row.submittedAt === record.submittedAt &&
-    row.id === record.id &&
+    row.id === buildBusinessEvaluationId({
+      umRequestId: record.id,
+      businessPolicyId: row.policyId
+    }) &&
     row.umRequestId === record.id &&
     row.caseId === record.id &&
     row.requestType === record.requestType &&
@@ -437,7 +483,10 @@ function isCurrentUmEvidenceSignature(row: IncentiveWorklistRow, record: UMReque
 function refreshIncentiveRowDisplayFields(row: IncentiveWorklistRow, record: UMRequest): IncentiveWorklistRow {
   return {
     ...row,
-    id: record.id,
+    id: buildBusinessEvaluationId({
+      umRequestId: record.id,
+      businessPolicyId: row.policyId
+    }),
     umRequestId: record.id,
     caseId: record.id,
     planId: record.planId,
@@ -723,7 +772,7 @@ function buildPaymentPolicyEvidence({
   paymentPolicy: PaymentPlanPolicy;
   outcome: PaymentPolicyEvidenceOutcome;
   failureCode: string | null;
-  paymentIntentId: string | null;
+  paymentIntentId: string;
   transactionId: string | null;
 }): PaymentPolicyEvidence {
   const now = new Date().toISOString();
@@ -731,7 +780,8 @@ function buildPaymentPolicyEvidence({
   const token = row.currency;
 
   return {
-    incentiveEvaluationId: row.umRequestId,
+    incentiveEvaluationId: row.id,
+    umRequestId: row.umRequestId,
     caseId: row.caseId,
     planId: paymentPolicy.planId,
     paymentPolicyId: paymentPolicy.planId,

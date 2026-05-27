@@ -45,7 +45,7 @@ describe("evaluateProviderDocumentationEvent", () => {
     expect(evaluation.result).toMatchObject({
       decision: "approved",
       amount: 5,
-      walletId: "0.0.9049550",
+      walletId: "0.0.9049549",
       reasonCodes: []
     });
   });
@@ -432,7 +432,7 @@ function createDelegateUmPolicy(amount: number): IncentivePolicy {
     },
     settlement: {
       mode: "auto",
-      recipientWalletId: "0.0.9049550",
+      recipientWalletId: "0.0.9049549",
       requiresHumanApproval: false
     }
   };

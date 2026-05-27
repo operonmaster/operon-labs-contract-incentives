@@ -225,21 +225,23 @@ Shape:
 }
 ```
 
-The business evaluation attestation control fetches `incentiveEvaluations/{canonicalId}` and `incentivePolicies/{policyId}` once during payment execution to confirm that the approved evaluation was recorded and that the referenced business policy remains active. It does not fetch PAS evidence or re-evaluate healthcare business criteria.
+The business evaluation attestation control fetches `incentiveEvaluations/{businessEvaluationId}` and `incentivePolicies/{businessPolicyId}` once during payment execution to confirm that the approved evaluation was recorded and that the referenced business policy remains active. It does not fetch PAS evidence or re-evaluate healthcare business criteria. The business evaluation id is deterministic: `businessEvaluationId = ie_sha256(umRequestId | businessPolicyId)`.
 
-### `paymentPolicyEvidences/{incentiveEvaluationId}`
+### `paymentPolicyEvidences/{paymentIntentId}`
 
-Stores the runtime output of the Hedera Agent Kit payment policy checks. This is the audit bridge between the internal business-policy evaluation and the Hedera settlement attempt. The document id matches the incentive evaluation id so judges and operators can cross-reference the local audit trail to the Hedera transaction memo.
+Stores the runtime output of the Hedera Agent Kit payment policy checks. This is the audit bridge between the internal business-policy evaluation and the Hedera settlement attempt. The document id matches the settlement intent id, where `paymentIntentId = pi_sha256(umRequestId | businessPolicyId | paymentPolicyId)`. The readable PA/UM request id remains in `umRequestId`, `caseId`, and the Hedera transaction memo.
 
 Shape:
 
 ```json
 {
-  "incentiveEvaluationId": "PA-260524-2102-AAAA1111",
-  "caseId": "PA-260524-2102-AAAA1111",
-  "planId": "acme-health-ppo",
-  "paymentPolicyId": "acme-health-ppo",
-  "businessPolicyId": "plcy_8K2M4Q6R9T1V3X5Z7B0C",
+  "paymentIntentId": "pi_1f2e3d4c5b6a79800112233445566778",
+  "umRequestId": "PA-260527-1132-GNJNP7AE",
+  "caseId": "PA-260527-1132-GNJNP7AE",
+  "incentiveEvaluationId": "ie_0123456789abcdef0123456789abcdef",
+  "planId": "summit-health-hmo",
+  "paymentPolicyId": "summit-health-hmo",
+  "businessPolicyId": "delegate-um-summit-pharmacy-sla-bonus-v1",
   "runtime": "hedera-agent-kit-policy",
   "outcome": "paid",
   "failureCode": null,
@@ -262,14 +264,13 @@ Shape:
       "actual": "5 HBAR"
     }
   ],
-  "paymentIntentId": "PA-260524-2102-AAAA1111",
   "transactionId": "0.0.6870566@1779686274.765050870",
   "createdAt": "2026-05-24T00:00:00.000Z",
   "updatedAt": "2026-05-24T00:00:00.000Z"
 }
 ```
 
-### `pasClaims/{canonicalId}`
+### `pasClaims/{umRequestId}`
 
 Stores the submitted prior authorization record, policy-safe evidence projection, and PAS-style synthetic FHIR Bundle. The implemented app shape is intentionally nested so the domain record, policy evidence, and FHIR artifact stay distinct.
 
@@ -353,18 +354,22 @@ Shape:
 }
 ```
 
-### `incentiveEvaluations/{canonicalId}`
+### `incentiveEvaluations/{businessEvaluationId}`
 
-Stores plan-side policy evaluation and payment/audit results.
+Stores plan-side policy evaluation and payment/audit results. The document id is `businessEvaluationId = ie_sha256(umRequestId | businessPolicyId)`, so Provider Documentation and Delegate UM evaluations for the same PA/UM request do not overwrite each other.
 
 Shape:
 
 ```json
 {
-  "umRequestId": "PA-260524-2102-AAAA1111",
-  "caseId": "PA-260524-2102-AAAA1111",
+  "id": "ie_0123456789abcdef0123456789abcdef",
+  "umRequestId": "PA-260527-1132-GNJNP7AE",
+  "caseId": "PA-260527-1132-GNJNP7AE",
   "submittedAt": "2026-05-24T00:00:00.000Z",
-  "policyId": "provider-documentation-completeness-v1",
+  "policyId": "delegate-um-summit-pharmacy-sla-bonus-v1",
+  "businessPolicyId": "delegate-um-summit-pharmacy-sla-bonus-v1",
+  "paymentPolicyId": "summit-health-hmo",
+  "paymentIntentId": "pi_1f2e3d4c5b6a79800112233445566778",
   "incentiveStatus": "paid",
   "paymentStatus": "auto_executed",
   "incentiveValue": 5,
@@ -385,27 +390,30 @@ Shape:
 
 Persisting `incentiveEvaluations` is recommended once Firestore is introduced, because otherwise PA requests survive restart but their plan-side payment/audit rows do not.
 
-### `paymentIntents/{canonicalId}`
+### `paymentIntents/{paymentIntentId}`
 
-Stores the durable Hedera Agent Kit settlement intent used to prevent duplicate payments at transfer execution time. For PA-tied incentives, the document id is the canonical PA/UM request id, so retries for the same request reserve the same id.
+Stores the durable Hedera Agent Kit settlement intent used to prevent duplicate payments at transfer execution time. The document id is `paymentIntentId = pi_sha256(umRequestId | businessPolicyId | paymentPolicyId)`, so duplicate prevention blocks only the same settlement triplet and not every incentive attached to the same PA/UM request.
 
 Shape:
 
 ```json
 {
-  "id": "PA-260524-2102-AAAA1111",
+  "id": "pi_1f2e3d4c5b6a79800112233445566778",
   "auditId": "audit_abc123",
-  "caseId": "PA-260524-2102-AAAA1111",
-  "incentiveEvaluationId": "PA-260524-2102-AAAA1111",
-  "planId": "acme-health-ppo",
-  "policyId": "provider-documentation-completeness-v1",
+  "umRequestId": "PA-260527-1132-GNJNP7AE",
+  "caseId": "PA-260527-1132-GNJNP7AE",
+  "incentiveEvaluationId": "ie_0123456789abcdef0123456789abcdef",
+  "planId": "summit-health-hmo",
+  "policyId": "delegate-um-summit-pharmacy-sla-bonus-v1",
+  "businessPolicyId": "delegate-um-summit-pharmacy-sla-bonus-v1",
+  "paymentPolicyId": "summit-health-hmo",
   "policyVersion": "v1",
-  "triggerEvent": "PAS_SUBMITTED",
+  "triggerEvent": "UM_REQUEST_DETERMINED",
   "token": "HBAR",
   "amount": 5,
   "sourceAccountId": "0.0.6870566",
   "recipientAccountId": "0.0.9049549",
-  "transactionMemo": "PA-260524-2102-AAAA1111",
+  "transactionMemo": "PA-260527-1132-GNJNP7AE",
   "status": "submitted",
   "transactionId": "0.0.6870566@1779686274.765050870",
   "createdAt": "2026-05-24T00:00:00.000Z",
@@ -413,7 +421,7 @@ Shape:
 }
 ```
 
-The Agent Kit hook blocks execution when this intent already exists, when the recorded business evaluation cannot be attested, when the transfer envelope is changed, or when the transfer amount exceeds the plan policy maximum.
+The Agent Kit hook blocks execution when this same intent already exists, when the recorded business evaluation cannot be attested, when the transfer envelope is changed, or when the transfer amount exceeds the plan policy maximum. A Provider Documentation incentive and a Delegate UM incentive can both settle for the same `umRequestId` because their `businessPolicyId` values produce different intent ids.
 
 ## FHIR/PAS Expectations
 
@@ -551,6 +559,15 @@ FIRESTORE_DATABASE_ID=(default)
 
 For local Firestore testing, use developer ADC from `gcloud auth application-default login` only if needed. Do not commit credentials or key files.
 
+For dev resets after a settlement identity change, run the app repo purge utility:
+
+```bash
+node scripts/purge-demo-settlement-state.mjs --dry-run
+node scripts/purge-demo-settlement-state.mjs --confirm
+```
+
+The utility deletes only `umRequests`, `pasClaims`, `auditEvents`, `incentiveEvaluations`, `paymentPolicyEvidences`, and `paymentIntents`. It never deletes `incentivePolicies`, `paymentPolicies`, or reference data.
+
 ## Acceptance Criteria
 
 Infra is ready when:
@@ -559,7 +576,7 @@ Infra is ready when:
 2. The app Cloud Run service runs as a dedicated service account.
 3. That service account can create/read/update documents in the planned collections.
 4. The deployed app has the Firestore env vars set.
-5. Submitting a PA in the deployed app writes a `pasClaims/{canonicalId}` document.
+5. Submitting a PA in the deployed app writes a `pasClaims/{umRequestId}` document.
 6. Restarting/redeploying the app does not lose submitted PAS requests.
 7. Plan-side incentive rows remain available after restart once `incentiveEvaluations` persistence is implemented.
 8. No service account keys or Terraform files are introduced into the public app repo.

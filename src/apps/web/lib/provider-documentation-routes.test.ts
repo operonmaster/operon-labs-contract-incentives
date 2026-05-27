@@ -118,7 +118,7 @@ describe("provider documentation API routes", () => {
 
     expect(response.status).toBe(200);
     expect(row).toMatchObject({
-      id: submitted.id,
+      id: expect.stringMatching(/^ie_[a-f0-9]{32}$/),
       umRequestId: submitted.id,
       incentiveStatus: "paid",
       paymentStatus: "auto_executed"

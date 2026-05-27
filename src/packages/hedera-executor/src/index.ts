@@ -6,6 +6,7 @@ import type { Currency } from "@operon-labs/policy-engine";
 
 export interface PaymentApprovalRequest {
   auditId: string;
+  umRequestId?: string;
   caseId?: string;
   incentiveEvaluationId?: string;
   planId?: string;
@@ -13,6 +14,8 @@ export interface PaymentApprovalRequest {
   currency: Currency;
   walletId: string;
   policyId?: string;
+  businessPolicyId?: string;
+  paymentPolicyId?: string;
   policyVersion?: string;
   triggerEvent?: string;
   policyControls?: string[];
@@ -87,10 +90,13 @@ export type PaymentIntentStatus = "reserved" | "submitted" | "failed";
 export interface PaymentIntent {
   id: string;
   auditId: string;
-  caseId?: string;
-  incentiveEvaluationId?: string;
+  umRequestId: string;
+  caseId: string;
+  incentiveEvaluationId: string;
   planId?: string;
   policyId?: string;
+  businessPolicyId: string;
+  paymentPolicyId: string;
   policyVersion?: string;
   triggerEvent?: string;
   token: Currency;
@@ -127,13 +133,16 @@ export interface HederaExecutionPolicyContext {
 
 export interface BusinessEvaluationAttestationLookup {
   incentiveEvaluationId: string;
+  umRequestId: string;
   caseId?: string;
   planId: string;
   policyId?: string;
+  businessPolicyId?: string;
 }
 
 export interface BusinessEvaluationAttestation {
   incentiveEvaluationId: string;
+  umRequestId: string;
   caseId: string;
   planId: string;
   businessPolicyId: string;
@@ -207,24 +216,25 @@ export async function executePolicyBoundPayment(
   options: ExecutePolicyBoundPaymentOptions = {}
 ): Promise<PaymentExecutionResult> {
   const config = options.config ?? createHederaSettlementConfigFromEnv();
-  validatePolicyBoundPayment(request, config, options.planPolicy);
-  const businessEvaluationAttestation = await loadBusinessEvaluationAttestation(request, options);
+  const settlementRequest = normalizePaymentApprovalRequest(request, options.planPolicy);
+  validatePolicyBoundPayment(settlementRequest, config, options.planPolicy);
+  const businessEvaluationAttestation = await loadBusinessEvaluationAttestation(settlementRequest, options);
 
   if (config.mode === "simulated") {
-    const transactionId = `testnet-${request.auditId}-${request.currency.toLowerCase()}-${Date.now()}`;
+    const transactionId = `testnet-${settlementRequest.auditId}-${settlementRequest.currency.toLowerCase()}-${Date.now()}`;
     return {
       status: "simulated",
       network: config.network,
       transactionId,
       runtime: "hedera-agent-kit-policy",
-      paymentIntentId: buildPaymentIntentId(request),
+      paymentIntentId: buildPaymentIntentId(settlementRequest),
       rawResponse: "Explicit simulated settlement mode. No Hedera transaction was submitted."
     };
   }
 
   const sourceAccountId = requireConfigValue(config.operatorAccountId, "HEDERA_OPERATOR_ACCOUNT_ID_REQUIRED");
-  const transactionMemo = buildHederaTransactionMemo(request);
-  const paymentIntent = buildPaymentIntent(request, {
+  const transactionMemo = buildHederaTransactionMemo(settlementRequest);
+  const paymentIntent = buildPaymentIntent(settlementRequest, {
     sourceAccountId,
     transactionMemo
   });
@@ -232,8 +242,8 @@ export async function executePolicyBoundPayment(
   let transfer: HederaHbarTransferOutput;
   const transferInput: HederaHbarTransferInput = {
     sourceAccountId,
-    recipientAccountId: request.walletId,
-    amountHbar: request.amount,
+    recipientAccountId: settlementRequest.walletId,
+    amountHbar: settlementRequest.amount,
     transactionMemo
   };
 
@@ -272,10 +282,7 @@ export async function executePolicyBoundPayment(
 export const executeApprovedPayment = executePolicyBoundPayment;
 
 export function buildHederaTransactionMemo(request: PaymentApprovalRequest): string {
-  const memo = request.incentiveEvaluationId?.trim();
-  if (!memo) {
-    throw new Error("INCENTIVE_EVALUATION_ID_REQUIRED");
-  }
+  const memo = requireCanonicalPaId(request.umRequestId ?? request.caseId, "UM_REQUEST_ID_REQUIRED");
 
   if (memo.length > HEDERA_TRANSACTION_MEMO_LIMIT) {
     throw new Error("HEDERA_TRANSACTION_MEMO_TOO_LONG");
@@ -294,14 +301,19 @@ export function buildPaymentIntent(
   now: Date = new Date()
 ): PaymentIntent {
   const timestamp = now.toISOString();
+  const identity = getPaymentIntentIdentity(request);
+  const incentiveEvaluationId = request.incentiveEvaluationId ?? buildBusinessEvaluationId(identity);
 
   return {
-    id: buildPaymentIntentId(request),
+    id: buildPaymentIntentId(identity),
     auditId: request.auditId,
-    caseId: request.caseId,
-    incentiveEvaluationId: request.incentiveEvaluationId,
+    umRequestId: identity.umRequestId,
+    caseId: identity.umRequestId,
+    incentiveEvaluationId,
     planId: request.planId,
     policyId: request.policyId,
+    businessPolicyId: identity.businessPolicyId,
+    paymentPolicyId: identity.paymentPolicyId,
     policyVersion: request.policyVersion,
     triggerEvent: request.triggerEvent,
     token: request.currency,
@@ -316,40 +328,105 @@ export function buildPaymentIntent(
   };
 }
 
-export function buildPaymentIntentId(request: PaymentApprovalRequest): string {
-  const canonicalPaymentId = getCanonicalPaymentId(request);
-  if (canonicalPaymentId) {
-    return canonicalPaymentId;
-  }
-
-  const raw = [
-    request.planId ?? "plan",
-    request.auditId,
-    request.policyId ?? "policy",
-    request.currency
-  ].join("|");
-
-  return `pi_${createHash("sha256").update(raw).digest("hex").slice(0, 32)}`;
+export interface BusinessEvaluationIdentityInput {
+  umRequestId?: string;
+  caseId?: string;
+  businessPolicyId?: string;
+  policyId?: string;
 }
 
-function getCanonicalPaymentId(request: PaymentApprovalRequest): string | null {
-  const incentiveEvaluationId = request.incentiveEvaluationId?.trim();
-  const caseId = request.caseId?.trim();
+export interface PaymentIntentIdentityInput extends BusinessEvaluationIdentityInput {
+  paymentPolicyId?: string;
+  planId?: string;
+  incentiveEvaluationId?: string;
+  auditId?: string;
+  amount?: number;
+  currency?: Currency;
+  walletId?: string;
+  policyVersion?: string;
+  triggerEvent?: string;
+  policyControls?: string[];
+}
 
-  if (incentiveEvaluationId && caseId && incentiveEvaluationId !== caseId) {
+export function buildBusinessEvaluationId(input: BusinessEvaluationIdentityInput): string {
+  const identity = getBusinessEvaluationIdentity(input);
+  return `ie_${hashIdentity([identity.umRequestId, identity.businessPolicyId])}`;
+}
+
+export function buildPaymentIntentId(request: PaymentIntentIdentityInput): string {
+  const identity = getPaymentIntentIdentity(request);
+  return `pi_${hashIdentity([identity.umRequestId, identity.businessPolicyId, identity.paymentPolicyId])}`;
+}
+
+function getBusinessEvaluationIdentity(input: BusinessEvaluationIdentityInput): {
+  umRequestId: string;
+  businessPolicyId: string;
+} {
+  const umRequestId = requireCanonicalPaId(input.umRequestId ?? input.caseId, "UM_REQUEST_ID_REQUIRED");
+  if (input.umRequestId && input.caseId && input.umRequestId.trim() !== input.caseId.trim()) {
     throw new Error("PAYMENT_ID_MISMATCH");
   }
+  const businessPolicyId = cleanIdentityPart(input.businessPolicyId ?? input.policyId, "BUSINESS_POLICY_ID_REQUIRED");
+  return { umRequestId, businessPolicyId };
+}
 
-  const canonicalPaymentId = incentiveEvaluationId || caseId;
-  if (!canonicalPaymentId) {
-    return null;
+function getPaymentIntentIdentity(input: PaymentIntentIdentityInput): {
+  umRequestId: string;
+  businessPolicyId: string;
+  paymentPolicyId: string;
+} {
+  const businessIdentity = getBusinessEvaluationIdentity(input);
+  const paymentPolicyId = cleanIdentityPart(input.paymentPolicyId ?? input.planId, "PAYMENT_POLICY_ID_REQUIRED");
+  const expectedEvaluationId = buildBusinessEvaluationId(businessIdentity);
+  if (input.incentiveEvaluationId && input.incentiveEvaluationId.trim() !== expectedEvaluationId) {
+    throw new Error("INCENTIVE_EVALUATION_ID_MISMATCH");
   }
 
-  if (!canonicalPaymentId.startsWith("PA-")) {
+  return { ...businessIdentity, paymentPolicyId };
+}
+
+function hashIdentity(parts: string[]): string {
+  return createHash("sha256").update(parts.join("|")).digest("hex").slice(0, 32);
+}
+
+function cleanIdentityPart(value: string | undefined, errorCode: string): string {
+  const cleaned = value?.trim();
+  if (!cleaned) {
+    throw new Error(errorCode);
+  }
+
+  if (sanitizeMemoPart(cleaned) !== cleaned) {
+    throw new Error(`${errorCode}_INVALID`);
+  }
+
+  return cleaned;
+}
+
+function requireCanonicalPaId(value: string | undefined, errorCode: string): string {
+  const cleaned = value?.trim();
+  if (!cleaned) {
+    throw new Error(errorCode);
+  }
+
+  if (!cleaned.startsWith("PA-")) {
     throw new Error("PAYMENT_ID_NOT_CANONICAL");
   }
 
-  return canonicalPaymentId;
+  return cleaned;
+}
+
+function normalizePaymentApprovalRequest(
+  request: PaymentApprovalRequest,
+  planPolicy?: HederaAgentPlanPolicy
+): PaymentApprovalRequest {
+  if (request.paymentPolicyId || !planPolicy?.planId) {
+    return request;
+  }
+
+  return {
+    ...request,
+    paymentPolicyId: planPolicy.planId
+  };
 }
 
 export function createInMemoryPaymentIntentStore(): PaymentIntentStore {
@@ -456,9 +533,10 @@ async function loadBusinessEvaluationAttestation(
     return undefined;
   }
 
-  const incentiveEvaluationId = request.incentiveEvaluationId ?? request.caseId;
-  if (!incentiveEvaluationId) {
-    throw new Error("INCENTIVE_EVALUATION_ID_REQUIRED");
+  const identity = getBusinessEvaluationIdentity(request);
+  const incentiveEvaluationId = request.incentiveEvaluationId ?? buildBusinessEvaluationId(identity);
+  if (request.incentiveEvaluationId && request.incentiveEvaluationId.trim() !== incentiveEvaluationId) {
+    throw new Error("INCENTIVE_EVALUATION_ID_MISMATCH");
   }
 
   if (!options.businessEvaluationStore) {
@@ -467,9 +545,11 @@ async function loadBusinessEvaluationAttestation(
 
   const attestation = await options.businessEvaluationStore.getAttestation({
     incentiveEvaluationId,
-    caseId: request.caseId,
+    umRequestId: identity.umRequestId,
+    caseId: request.caseId ?? identity.umRequestId,
     planId: planPolicy.planId,
-    policyId: request.policyId
+    policyId: request.policyId,
+    businessPolicyId: identity.businessPolicyId
   });
   if (!attestation) {
     throw new Error("BUSINESS_EVALUATION_ATTESTATION_NOT_FOUND");
@@ -484,15 +564,27 @@ function validateBusinessEvaluationAttestation(
   planPolicy: HederaAgentPlanPolicy,
   attestation: BusinessEvaluationAttestation
 ): void {
+  const identity = getBusinessEvaluationIdentity(request);
+  const expectedEvaluationId = request.incentiveEvaluationId ?? buildBusinessEvaluationId(identity);
+  const expectedCaseId = request.caseId ?? identity.umRequestId;
+
+  if (attestation.incentiveEvaluationId !== expectedEvaluationId) {
+    throw new Error("BUSINESS_EVALUATION_ID_MISMATCH");
+  }
+
+  if (attestation.umRequestId !== identity.umRequestId) {
+    throw new Error("BUSINESS_EVALUATION_UM_REQUEST_MISMATCH");
+  }
+
   if (attestation.planId !== planPolicy.planId) {
     throw new Error("BUSINESS_EVALUATION_PLAN_MISMATCH");
   }
 
-  if (request.caseId && attestation.caseId !== request.caseId) {
+  if (attestation.caseId !== expectedCaseId) {
     throw new Error("BUSINESS_EVALUATION_CASE_MISMATCH");
   }
 
-  if (request.policyId && attestation.businessPolicyId !== request.policyId) {
+  if (attestation.businessPolicyId !== identity.businessPolicyId) {
     throw new Error("BUSINESS_EVALUATION_POLICY_MISMATCH");
   }
 

@@ -1,6 +1,6 @@
 # Operon Labs Contract Incentives
 
-Policy-gated healthcare operations incentive demo for the Hedera hackathon. The demo keeps the public repo focused on app code, mock policies, Hedera Agent Kit integration points, and Hedera testnet settlement without exposing private infrastructure or wallet keys.
+Policy-gated healthcare operations incentive demo for the Hedera AI Agent Bounty Campaign. The demo keeps the public repo focused on app code, mock policies, Hedera Agent Kit integration points, and Hedera testnet settlement without exposing private infrastructure or wallet keys.
 
 ## Structure
 
@@ -76,7 +76,9 @@ HEDERA_OPERATOR_PRIVATE_KEY=<Secret Manager value>
 HEDERA_BLOCKED_RECIPIENT_ACCOUNT_IDS=
 ```
 
-The Hedera Agent Kit execution policy is intentionally narrower than the healthcare business policy. CRD/DTR/PAS eligibility is evaluated before settlement and recorded in Firestore. Plan-level payment policies in `paymentPolicies/{planId}` enforce business-evaluation attestation, duplicate-payment prevention, payment-token scope, payment-envelope integrity, and max payment amount at the transfer-tool boundary. The execution result is recorded in `paymentPolicyEvidences/{incentiveEvaluationId}`.
+The Hedera Agent Kit execution policy is intentionally narrower than the healthcare business policy. CRD/DTR/PAS eligibility is evaluated before settlement and recorded in Firestore. Settlement-facing documents use deterministic opaque ids: `incentiveEvaluations/{businessEvaluationId}` where `businessEvaluationId = ie_sha256(umRequestId | businessPolicyId)`, and `paymentIntents/{paymentIntentId}` / `paymentPolicyEvidences/{paymentIntentId}` where `paymentIntentId = pi_sha256(umRequestId | businessPolicyId | paymentPolicyId)`. The readable PA/UM request id remains in `umRequestId`, `caseId`, and the Hedera transaction memo.
+
+Provider Documentation and Delegate UM can both pay for the same UM request because they use different `businessPolicyId` values. Duplicate prevention blocks only a repeat of the same `umRequestId + businessPolicyId + paymentPolicyId` settlement triplet.
 
 For tests or offline demos only:
 
@@ -109,11 +111,11 @@ The Firestore adapter writes:
 
 - `incentivePolicies/{policyId}` with pair-scoped business policy objects used by runtime evaluation and payment controls.
 - `paymentPolicies/{planId}` with flat plan-level Agent Kit settlement-control switches and limits.
-- `paymentPolicyEvidences/{incentiveEvaluationId}` with the runtime output of the Hedera Agent Kit payment policy checks.
-- `pasClaims/{caseId}` with the prior-auth record, policy-safe evidence, and PAS-style FHIR `Bundle` containing the `Claim`.
-- `auditEvents/{caseId}-PAS_SUBMITTED` for auditable async incentive processing.
-- `incentiveEvaluations/{caseId}` so policy payment outcomes are idempotent across Cloud Run restarts.
-- `paymentIntents/{paymentIntentId}` so Hedera Agent Kit execution can reserve and block duplicate settlement for the same plan/evaluation/policy/token.
+- `paymentPolicyEvidences/{paymentIntentId}` with the runtime output of the Hedera Agent Kit payment policy checks.
+- `pasClaims/{umRequestId}` with the prior-auth record, policy-safe evidence, and PAS-style FHIR `Bundle` containing the `Claim`.
+- `auditEvents/{umRequestId}-PAS_SUBMITTED` for auditable async incentive processing.
+- `incentiveEvaluations/{businessEvaluationId}` with business-policy outcomes keyed by `umRequestId + businessPolicyId`.
+- `paymentIntents/{paymentIntentId}` with durable settlement reservations keyed by `umRequestId + businessPolicyId + paymentPolicyId`.
 
 The UM reference adapter auto-seeds these demo reference collections when they are missing:
 
@@ -122,6 +124,15 @@ The UM reference adapter auto-seeds these demo reference collections when they a
 - `questionnaires/{questionnaireId}` for FHIR Questionnaire templates used by the DTR flow.
 
 Full FHIR bundles stay server-side. The incentive agent receives policy-safe evidence only.
+
+For development resets after the settlement identity model changes, use:
+
+```bash
+node scripts/purge-demo-settlement-state.mjs --dry-run
+node scripts/purge-demo-settlement-state.mjs --confirm
+```
+
+The purge script deletes only `umRequests`, `pasClaims`, `auditEvents`, `incentiveEvaluations`, `paymentPolicyEvidences`, and `paymentIntents`. It does not touch `incentivePolicies`, `paymentPolicies`, or reference-data collections.
 
 ## Local Development
 

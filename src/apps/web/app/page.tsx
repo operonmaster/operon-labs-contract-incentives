@@ -12,7 +12,7 @@ export default function HomePage() {
         </p>
       </LabsHero>
 
-      <LabsProductFrame title="Operon Labs demo catalog" meta="Hackathon build">
+      <LabsProductFrame title="Operon Labs demo catalog" meta="Hedera AI Agent Bounty Campaign">
         <section className="grid" aria-label="Demo workflows">
           {demoScenarios.map((scenario) => (
             <Link className="card" href={`/${scenario.slug}`} key={scenario.slug}>

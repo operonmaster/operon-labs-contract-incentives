@@ -1,3 +1,4 @@
+import { buildBusinessEvaluationId, buildPaymentIntentId } from "@operon-labs/hedera-executor";
 import type { Currency } from "@operon-labs/policy-engine";
 import type { FirestoreDatabase } from "./pas-persistence";
 
@@ -17,6 +18,7 @@ export interface PaymentPolicyControlEvidence {
 
 export interface PaymentPolicyEvidence {
   incentiveEvaluationId: string;
+  umRequestId: string;
   caseId: string;
   planId: string;
   paymentPolicyId: string;
@@ -30,7 +32,7 @@ export interface PaymentPolicyEvidence {
     recipientWalletId: string;
   };
   controls: PaymentPolicyControlEvidence[];
-  paymentIntentId: string | null;
+  paymentIntentId: string;
   transactionId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -40,7 +42,7 @@ export interface PaymentPolicyEvidence {
 export interface PaymentPolicyEvidenceStore {
   backend: PaymentPolicyEvidenceStoreBackend;
   saveEvidence(evidence: PaymentPolicyEvidence): Promise<void>;
-  getEvidence(incentiveEvaluationId: string): Promise<PaymentPolicyEvidence | null>;
+  getEvidence(paymentIntentId: string): Promise<PaymentPolicyEvidence | null>;
 }
 /* eslint-enable no-unused-vars */
 
@@ -108,14 +110,14 @@ class FirestorePaymentPolicyEvidenceStore implements PaymentPolicyEvidenceStore 
 
     await (await this.getFirestore())
       .collection(PAYMENT_POLICY_EVIDENCES_COLLECTION)
-      .doc(evidence.incentiveEvaluationId)
+      .doc(evidence.paymentIntentId)
       .set(toFirestoreEvidence(evidence));
   }
 
-  async getEvidence(incentiveEvaluationId: string): Promise<PaymentPolicyEvidence | null> {
+  async getEvidence(paymentIntentId: string): Promise<PaymentPolicyEvidence | null> {
     const snapshot = await (await this.getFirestore())
       .collection(PAYMENT_POLICY_EVIDENCES_COLLECTION)
-      .doc(incentiveEvaluationId)
+      .doc(paymentIntentId)
       .get();
 
     if (!snapshot.exists) {
@@ -147,10 +149,30 @@ function toFirestoreEvidence(evidence: PaymentPolicyEvidence): PaymentPolicyEvid
 }
 
 function validatePaymentPolicyEvidenceIds(evidence: PaymentPolicyEvidence): void {
-  assertCanonicalPaId(evidence.incentiveEvaluationId, "evidence.incentiveEvaluationId");
-  assertMatchingCanonicalId(evidence.caseId, evidence.incentiveEvaluationId, "evidence.caseId");
-  if (evidence.paymentIntentId !== null) {
-    assertMatchingCanonicalId(evidence.paymentIntentId, evidence.incentiveEvaluationId, "evidence.paymentIntentId");
+  assertCanonicalPaId(evidence.umRequestId, "evidence.umRequestId");
+  assertMatchingCanonicalId(evidence.caseId, evidence.umRequestId, "evidence.caseId");
+
+  const expectedEvaluationId = buildBusinessEvaluationId({
+    umRequestId: evidence.umRequestId,
+    businessPolicyId: evidence.businessPolicyId
+  });
+  if (evidence.incentiveEvaluationId !== expectedEvaluationId) {
+    throw new Error("PAYMENT_POLICY_EVIDENCE_ID_MISMATCH:evidence.incentiveEvaluationId");
+  }
+
+  if (!evidence.paymentIntentId) {
+    throw new Error("PAYMENT_POLICY_EVIDENCE_ID_REQUIRED:evidence.paymentIntentId");
+  }
+
+  const expectedPaymentIntentId = buildPaymentIntentId({
+    umRequestId: evidence.umRequestId,
+    caseId: evidence.caseId,
+    incentiveEvaluationId: evidence.incentiveEvaluationId,
+    businessPolicyId: evidence.businessPolicyId,
+    paymentPolicyId: evidence.paymentPolicyId
+  });
+  if (evidence.paymentIntentId !== expectedPaymentIntentId) {
+    throw new Error("PAYMENT_POLICY_EVIDENCE_ID_MISMATCH:evidence.paymentIntentId");
   }
 }
 

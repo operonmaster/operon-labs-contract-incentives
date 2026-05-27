@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   PolicyBoundHbarTransferHook,
+  buildBusinessEvaluationId,
   buildHederaTransactionMemo,
   buildPaymentIntent,
+  buildPaymentIntentId,
   createHederaSettlementConfigFromEnv,
   createInMemoryPaymentIntentStore,
   executePolicyBoundPayment,
@@ -13,6 +15,9 @@ import {
 
 describe("Hedera policy-bound payment executor", () => {
   const caseId = "PA-260524-2102-AAAA1111";
+  const providerBusinessPolicyId = "provider-documentation-completeness-v1";
+  const delegateBusinessPolicyId = "delegate-um-summit-pharmacy-sla-bonus-v1";
+  const paymentPolicyId = "acme-health-ppo";
 
   it("reads real testnet settlement configuration from environment variables", () => {
     const config = createHederaSettlementConfigFromEnv({
@@ -72,12 +77,16 @@ describe("Hedera policy-bound payment executor", () => {
     const result = await executePolicyBoundPayment(
       {
         auditId: "audit-provider-documentation-completeness-v1-1234567890",
+        umRequestId: caseId,
         caseId,
-        incentiveEvaluationId: caseId,
+        incentiveEvaluationId: buildBusinessEvaluationId({ umRequestId: caseId, businessPolicyId: providerBusinessPolicyId }),
+        businessPolicyId: providerBusinessPolicyId,
+        paymentPolicyId,
+        planId: paymentPolicyId,
         amount: 5,
         currency: "HBAR",
         walletId: "0.0.23456",
-        policyId: "provider-documentation-completeness-v1",
+        policyId: providerBusinessPolicyId,
         policyVersion: "v1",
         triggerEvent: "PAS_SUBMITTED",
         policyControls: ["Allowed submitter and recipient wallet", "5 HBAR max per PA request"]
@@ -113,6 +122,10 @@ describe("Hedera policy-bound payment executor", () => {
   });
 
   it("uses plan-level Agent Kit controls to attest the business evaluation before settlement", async () => {
+    const incentiveEvaluationId = buildBusinessEvaluationId({
+      umRequestId: caseId,
+      businessPolicyId: providerBusinessPolicyId
+    });
     const runner: HederaAgentKitTransferRunner = {
       runHbarTransfer: vi.fn(async () => ({
         transactionId: "0.0.1001@1716500000.000000001",
@@ -121,10 +134,11 @@ describe("Hedera policy-bound payment executor", () => {
     };
     const businessEvaluationStore = {
       getAttestation: vi.fn(async () => ({
-        incentiveEvaluationId: caseId,
+        incentiveEvaluationId,
+        umRequestId: caseId,
         caseId,
-        planId: "acme-health-ppo",
-        businessPolicyId: "provider-documentation-completeness-v1",
+        planId: paymentPolicyId,
+        businessPolicyId: providerBusinessPolicyId,
         businessPolicyVersion: "v1",
         businessPolicyStatus: "active" as const,
         amount: 5,
@@ -136,13 +150,16 @@ describe("Hedera policy-bound payment executor", () => {
     const result = await executePolicyBoundPayment(
       {
         auditId: "audit-provider-documentation-completeness-v1-1234567890",
+        umRequestId: caseId,
         caseId,
-        incentiveEvaluationId: caseId,
-        planId: "acme-health-ppo",
+        incentiveEvaluationId,
+        planId: paymentPolicyId,
+        businessPolicyId: providerBusinessPolicyId,
+        paymentPolicyId,
         amount: 5,
         currency: "HBAR",
         walletId: "0.0.23456",
-        policyId: "provider-documentation-completeness-v1",
+        policyId: providerBusinessPolicyId,
         policyVersion: "v1",
         triggerEvent: "PAS_SUBMITTED"
       },
@@ -157,7 +174,7 @@ describe("Hedera policy-bound payment executor", () => {
           maxPaymentHbar: 50
         },
         planPolicy: {
-          planId: "acme-health-ppo",
+          planId: paymentPolicyId,
           planName: "Acme Health PPO",
           status: "active",
           version: "v1",
@@ -175,19 +192,38 @@ describe("Hedera policy-bound payment executor", () => {
 
     expect(result).toMatchObject({
       status: "submitted",
-      paymentIntentId: caseId
+      paymentIntentId: buildPaymentIntentId({
+        auditId: "audit-provider-documentation-completeness-v1-1234567890",
+        umRequestId: caseId,
+        caseId,
+        incentiveEvaluationId,
+        businessPolicyId: providerBusinessPolicyId,
+        paymentPolicyId,
+        planId: paymentPolicyId,
+        amount: 5,
+        currency: "HBAR",
+        walletId: "0.0.23456",
+        policyId: providerBusinessPolicyId,
+        triggerEvent: "PAS_SUBMITTED"
+      })
     });
     expect(businessEvaluationStore.getAttestation).toHaveBeenCalledTimes(1);
     expect(businessEvaluationStore.getAttestation).toHaveBeenCalledWith({
-      incentiveEvaluationId: caseId,
+      incentiveEvaluationId,
+      umRequestId: caseId,
       caseId,
-      planId: "acme-health-ppo",
-      policyId: "provider-documentation-completeness-v1"
+      planId: paymentPolicyId,
+      policyId: providerBusinessPolicyId,
+      businessPolicyId: providerBusinessPolicyId
     });
     expect(runner.runHbarTransfer).toHaveBeenCalledTimes(1);
   });
 
   it("blocks settlement when the recorded business evaluation does not match the payment envelope", async () => {
+    const incentiveEvaluationId = buildBusinessEvaluationId({
+      umRequestId: caseId,
+      businessPolicyId: providerBusinessPolicyId
+    });
     const runner: HederaAgentKitTransferRunner = {
       runHbarTransfer: vi.fn(async () => ({
         transactionId: "0.0.1001@1716500000.000000001",
@@ -196,10 +232,11 @@ describe("Hedera policy-bound payment executor", () => {
     };
     const businessEvaluationStore = {
       getAttestation: vi.fn(async () => ({
-        incentiveEvaluationId: caseId,
+        incentiveEvaluationId,
+        umRequestId: caseId,
         caseId,
-        planId: "acme-health-ppo",
-        businessPolicyId: "provider-documentation-completeness-v1",
+        planId: paymentPolicyId,
+        businessPolicyId: providerBusinessPolicyId,
         businessPolicyVersion: "v1",
         businessPolicyStatus: "active" as const,
         amount: 5,
@@ -212,13 +249,16 @@ describe("Hedera policy-bound payment executor", () => {
       executePolicyBoundPayment(
         {
           auditId: "audit-provider-documentation-completeness-v1-1234567890",
+          umRequestId: caseId,
           caseId,
-          incentiveEvaluationId: caseId,
-          planId: "acme-health-ppo",
+          incentiveEvaluationId,
+          planId: paymentPolicyId,
+          businessPolicyId: providerBusinessPolicyId,
+          paymentPolicyId,
           amount: 5,
           currency: "HBAR",
           walletId: "0.0.23456",
-          policyId: "provider-documentation-completeness-v1",
+          policyId: providerBusinessPolicyId,
           policyVersion: "v1",
           triggerEvent: "PAS_SUBMITTED"
         },
@@ -233,7 +273,7 @@ describe("Hedera policy-bound payment executor", () => {
             maxPaymentHbar: 50
           },
           planPolicy: {
-            planId: "acme-health-ppo",
+            planId: paymentPolicyId,
             planName: "Acme Health PPO",
             status: "active",
             version: "v1",
@@ -271,12 +311,16 @@ describe("Hedera policy-bound payment executor", () => {
     const result = await executePolicyBoundPayment(
       {
         auditId: "audit-provider-documentation-completeness-v1-1234567890",
+        umRequestId: caseId,
         caseId,
-        incentiveEvaluationId: caseId,
+        incentiveEvaluationId: buildBusinessEvaluationId({ umRequestId: caseId, businessPolicyId: providerBusinessPolicyId }),
+        businessPolicyId: providerBusinessPolicyId,
+        paymentPolicyId,
+        planId: paymentPolicyId,
         amount: 5,
         currency: "HBAR",
         walletId: "0.0.23456",
-        policyId: "provider-documentation-completeness-v1",
+        policyId: providerBusinessPolicyId,
         policyVersion: "v1",
         triggerEvent: "PAS_SUBMITTED",
         policyControls: ["Allowed submitter and recipient wallet", "5 HBAR max per PA request"]
@@ -339,15 +383,74 @@ describe("Hedera policy-bound payment executor", () => {
     expect(runner.runHbarTransfer).not.toHaveBeenCalled();
   });
 
-  it("uses the canonical PA id as the deterministic payment intent for duplicate-payment prevention", () => {
+  it("builds deterministic hashed identities from UM request, business policy, and payment policy", () => {
+    const providerEvaluationId = buildBusinessEvaluationId({
+      umRequestId: caseId,
+      businessPolicyId: providerBusinessPolicyId
+    });
+    const delegateEvaluationId = buildBusinessEvaluationId({
+      umRequestId: caseId,
+      businessPolicyId: delegateBusinessPolicyId
+    });
+    const providerIntentId = buildPaymentIntentId({
+      auditId: "audit-1",
+      umRequestId: caseId,
+      caseId,
+      incentiveEvaluationId: providerEvaluationId,
+      businessPolicyId: providerBusinessPolicyId,
+      paymentPolicyId,
+      amount: 5,
+      currency: "HBAR",
+      walletId: "0.0.23456"
+    });
+    const providerIntentIdAgain = buildPaymentIntentId({
+      auditId: "audit-2",
+      umRequestId: caseId,
+      caseId,
+      incentiveEvaluationId: providerEvaluationId,
+      businessPolicyId: providerBusinessPolicyId,
+      paymentPolicyId,
+      amount: 5,
+      currency: "HBAR",
+      walletId: "0.0.23456"
+    });
+    const delegateIntentId = buildPaymentIntentId({
+      auditId: "audit-3",
+      umRequestId: caseId,
+      caseId,
+      incentiveEvaluationId: delegateEvaluationId,
+      businessPolicyId: delegateBusinessPolicyId,
+      paymentPolicyId,
+      amount: 5,
+      currency: "HBAR",
+      walletId: "0.0.23456"
+    });
+
+    expect(providerEvaluationId).toMatch(/^ie_[a-f0-9]{32}$/);
+    expect(delegateEvaluationId).toMatch(/^ie_[a-f0-9]{32}$/);
+    expect(providerEvaluationId).not.toBe(delegateEvaluationId);
+    expect(providerIntentId).toMatch(/^pi_[a-f0-9]{32}$/);
+    expect(providerIntentIdAgain).toBe(providerIntentId);
+    expect(delegateIntentId).not.toBe(providerIntentId);
+  });
+
+  it("stores the deterministic payment tuple on payment intents", () => {
+    const incentiveEvaluationId = buildBusinessEvaluationId({
+      umRequestId: caseId,
+      businessPolicyId: providerBusinessPolicyId
+    });
     const first = buildPaymentIntent({
       auditId: "audit-1",
+      umRequestId: caseId,
       caseId,
-      incentiveEvaluationId: caseId,
+      incentiveEvaluationId,
+      businessPolicyId: providerBusinessPolicyId,
+      paymentPolicyId,
+      planId: paymentPolicyId,
       amount: 5,
       currency: "HBAR",
       walletId: "0.0.23456",
-      policyId: "provider-documentation-completeness-v1",
+      policyId: providerBusinessPolicyId,
       policyVersion: "v1",
       triggerEvent: "PAS_SUBMITTED"
     }, {
@@ -356,12 +459,16 @@ describe("Hedera policy-bound payment executor", () => {
     });
     const second = buildPaymentIntent({
       auditId: "audit-2",
+      umRequestId: caseId,
       caseId,
-      incentiveEvaluationId: caseId,
+      incentiveEvaluationId,
+      businessPolicyId: providerBusinessPolicyId,
+      paymentPolicyId,
+      planId: paymentPolicyId,
       amount: 5,
       currency: "HBAR",
       walletId: "0.0.23456",
-      policyId: "provider-documentation-completeness-v1",
+      policyId: providerBusinessPolicyId,
       policyVersion: "v1",
       triggerEvent: "PAS_SUBMITTED"
     }, {
@@ -370,11 +477,14 @@ describe("Hedera policy-bound payment executor", () => {
     });
 
     expect(first.id).toBe(second.id);
-    expect(first.id).toBe(caseId);
+    expect(first.id).toBe(buildPaymentIntentId(first));
     expect(first).toMatchObject({
+      umRequestId: caseId,
       caseId,
-      incentiveEvaluationId: caseId,
-      policyId: "provider-documentation-completeness-v1",
+      incentiveEvaluationId,
+      policyId: providerBusinessPolicyId,
+      businessPolicyId: providerBusinessPolicyId,
+      paymentPolicyId,
       triggerEvent: "PAS_SUBMITTED",
       token: "HBAR",
       amount: 5,
@@ -382,30 +492,18 @@ describe("Hedera policy-bound payment executor", () => {
     });
   });
 
-  it("falls back to a hashed payment intent id only when no canonical PA id is supplied", () => {
-    const intent = buildPaymentIntent({
-      auditId: "audit-1",
-      amount: 5,
-      currency: "HBAR",
-      walletId: "0.0.23456",
-      policyId: "provider-documentation-completeness-v1"
-    }, {
-      sourceAccountId: "0.0.1001",
-      transactionMemo: caseId
-    });
-
-    expect(intent.id).toMatch(/^pi_[a-f0-9]{32}$/);
-  });
-
-  it("rejects non-PA ids as payment intent canonical ids", () => {
+  it("rejects non-PA UM request ids as payment identity inputs", () => {
     expect(() =>
       buildPaymentIntent({
         auditId: "audit-1",
-        incentiveEvaluationId: "UMR-260524-2102-AAAA1111",
+        umRequestId: "UMR-260524-2102-AAAA1111",
+        caseId: "UMR-260524-2102-AAAA1111",
+        businessPolicyId: providerBusinessPolicyId,
+        paymentPolicyId,
         amount: 5,
         currency: "HBAR",
         walletId: "0.0.23456",
-        policyId: "provider-documentation-completeness-v1"
+        policyId: providerBusinessPolicyId
       }, {
         sourceAccountId: "0.0.1001",
         transactionMemo: caseId
@@ -417,17 +515,20 @@ describe("Hedera policy-bound payment executor", () => {
     expect(() =>
       buildPaymentIntent({
         auditId: "audit-1",
+        umRequestId: caseId,
         caseId,
-        incentiveEvaluationId: "PA-260524-2102-BBBBBBBB",
+        incentiveEvaluationId: "ie_bad",
+        businessPolicyId: providerBusinessPolicyId,
+        paymentPolicyId,
         amount: 5,
         currency: "HBAR",
         walletId: "0.0.23456",
-        policyId: "provider-documentation-completeness-v1"
+        policyId: providerBusinessPolicyId
       }, {
         sourceAccountId: "0.0.1001",
         transactionMemo: caseId
       })
-    ).toThrow("PAYMENT_ID_MISMATCH");
+    ).toThrow("INCENTIVE_EVALUATION_ID_MISMATCH");
   });
 
   it("uses the Agent Kit policy hook to reserve an intent and block duplicate transfers", async () => {
@@ -441,14 +542,22 @@ describe("Hedera policy-bound payment executor", () => {
       blockedRecipientAccountIds: [],
       maxPaymentHbar: 5
     };
+    const incentiveEvaluationId = buildBusinessEvaluationId({
+      umRequestId: caseId,
+      businessPolicyId: providerBusinessPolicyId
+    });
     const request = {
       auditId: "audit-1",
+      umRequestId: caseId,
       caseId,
-      incentiveEvaluationId: caseId,
+      incentiveEvaluationId,
+      businessPolicyId: providerBusinessPolicyId,
+      paymentPolicyId,
+      planId: paymentPolicyId,
       amount: 5,
       currency: "HBAR" as const,
       walletId: "0.0.23456",
-      policyId: "provider-documentation-completeness-v1",
+      policyId: providerBusinessPolicyId,
       policyVersion: "v1",
       triggerEvent: "PAS_SUBMITTED"
     };
@@ -479,6 +588,30 @@ describe("Hedera policy-bound payment executor", () => {
         HEDERA_TRANSFER_HBAR_TOOL
       )
     ).rejects.toThrow("DUPLICATE_PAYMENT_BLOCKED");
+
+    const delegateRequest = {
+      ...request,
+      auditId: "audit-2",
+      incentiveEvaluationId: buildBusinessEvaluationId({
+        umRequestId: caseId,
+        businessPolicyId: delegateBusinessPolicyId
+      }),
+      businessPolicyId: delegateBusinessPolicyId,
+      policyId: delegateBusinessPolicyId,
+      triggerEvent: "UM_REQUEST_DETERMINED"
+    };
+    const delegatePaymentIntent = buildPaymentIntent(delegateRequest, {
+      sourceAccountId: expectedTransfer.sourceAccountId,
+      transactionMemo: expectedTransfer.transactionMemo
+    });
+
+    expect(delegatePaymentIntent.id).not.toBe(paymentIntent.id);
+    await expect(
+      new PolicyBoundHbarTransferHook(expectedTransfer, config, delegatePaymentIntent, store).preToolExecutionHook(
+        { rawParams } as never,
+        HEDERA_TRANSFER_HBAR_TOOL
+      )
+    ).resolves.toBeUndefined();
   });
 
   it("uses the Agent Kit policy hook to block wallet, amount, source, and memo tampering", async () => {
@@ -525,15 +658,18 @@ describe("Hedera policy-bound payment executor", () => {
     ).rejects.toThrow("HEDERA_POLICY_MEMO_MISMATCH");
   });
 
-  it("uses only the incentive evaluation id as the Hedera transaction memo", () => {
+  it("uses only the UM request id as the Hedera transaction memo", () => {
     const memo = buildHederaTransactionMemo({
       auditId: "audit-with spaces and symbols !@#$%^&*() and a very long suffix that should be clipped before it can exceed memo limits",
+      umRequestId: caseId,
       caseId,
-      incentiveEvaluationId: caseId,
+      incentiveEvaluationId: buildBusinessEvaluationId({ umRequestId: caseId, businessPolicyId: providerBusinessPolicyId }),
+      businessPolicyId: providerBusinessPolicyId,
+      paymentPolicyId,
       amount: 1,
       currency: "HBAR",
       walletId: "0.0.23456",
-      policyId: "provider-documentation-completeness-v1",
+      policyId: providerBusinessPolicyId,
       triggerEvent: "PAS_SUBMITTED"
     });
 
@@ -545,18 +681,20 @@ describe("Hedera policy-bound payment executor", () => {
     expect(memo).not.toContain("Chen");
   });
 
-  it("requires an incentive evaluation id before building a Hedera transaction memo", () => {
+  it("requires a canonical UM request id before building a Hedera transaction memo", () => {
     expect(() =>
       buildHederaTransactionMemo({
         auditId: "audit-1",
-        caseId,
+        incentiveEvaluationId: buildBusinessEvaluationId({ umRequestId: caseId, businessPolicyId: providerBusinessPolicyId }),
+        businessPolicyId: providerBusinessPolicyId,
+        paymentPolicyId,
         amount: 1,
         currency: "HBAR",
         walletId: "0.0.23456",
-        policyId: "provider-documentation-completeness-v1",
+        policyId: providerBusinessPolicyId,
         triggerEvent: "PAS_SUBMITTED"
       })
-    ).toThrow("INCENTIVE_EVALUATION_ID_REQUIRED");
+    ).toThrow("UM_REQUEST_ID_REQUIRED");
   });
 
   it("extracts a clean transaction ID from Agent Kit response text", () => {

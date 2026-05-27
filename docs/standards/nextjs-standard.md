@@ -157,7 +157,7 @@ Use the platform-style split:
 - `make deploy` updates the image on an existing Terraform-managed Cloud Run service.
 - `make ci-all ENV=nonprod` runs the full local pipeline.
 
-`ENV=prod` is invalid for this repo. The only environment is `nonprod` because the public hackathon app is backed by `operon-labs-nonprod`.
+`ENV=prod` is invalid for this repo. The only environment is `nonprod` because the public Hedera AI Agent Bounty Campaign app is backed by `operon-labs-nonprod`.
 
 Image publishing uses two tags: the immutable build tag plus generic `latest`. This repo is environment-scoped by GCP project, so `latest` is unambiguous inside `operon-labs-nonprod`. Deployments use the `latest` tag while the immutable tag remains available for traceability.
 
@@ -207,7 +207,7 @@ Hedera settlement defaults to real testnet execution. Use `HEDERA_SETTLEMENT_MOD
 
 Incentive amount, caps, recipient wallet mapping, request-type scope, and service-code scope must come from pair/request-type-scoped `incentivePolicies/{policyId}` Firestore documents. Runtime selection must support multiple policy matches by using `evaluationType`, `contractPair.planId`, `contractPair.providerId`, optional `requestType`, and the effective period. Store `contractPair.planName` and `contractPair.providerName` with the ids so policy views do not need reference-data joins. Configure either include or exclude lists for request types, and either include or exclude lists for service codes; do not configure both sides of a scope in the same policy object. Runtime code must not read YAML policy files or collapse the business policy catalog into a single hardcoded object per pair. The current real settlement adapter supports HBAR only; policies may model future `USDC`, `OPER`, or `OPRN` payouts, but those require a token-transfer adapter before they can be marked settled.
 
-Hedera Agent Kit hooks are the settlement-control boundary, not a duplicate CRD/DTR/PAS eligibility engine. Agent Kit execution policy must use flat plan-level `paymentPolicies/{planId}` documents to enforce business-evaluation attestation, duplicate-payment prevention through `paymentIntents/{canonicalId}` for PA-tied incentives, payment-token scope, exact transfer-envelope integrity, and max payment amount before the HBAR transfer tool can run. Runtime check results must be persisted to `paymentPolicyEvidences/{incentiveEvaluationId}`.
+Hedera Agent Kit hooks are the settlement-control boundary, not a duplicate CRD/DTR/PAS eligibility engine. Agent Kit execution policy must use flat plan-level `paymentPolicies/{planId}` documents and deterministic tuple ids: `incentiveEvaluations/{businessEvaluationId}` from `umRequestId + businessPolicyId`, and `paymentIntents/{paymentIntentId}` / `paymentPolicyEvidences/{paymentIntentId}` from `umRequestId + businessPolicyId + paymentPolicyId`. Duplicate prevention blocks only the same triplet.
 
 ## Security Boundary
 

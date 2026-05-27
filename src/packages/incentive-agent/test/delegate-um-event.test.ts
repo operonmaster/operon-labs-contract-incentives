@@ -23,7 +23,7 @@ const policy: IncentivePolicy = {
     prohibitsOutcomeBasedPayment: true
   },
   payout: { token: "HBAR", amountPerEligibleRequest: 5, monthlyCap: 500 },
-  settlement: { mode: "auto", recipientWalletId: "0.0.9049550", requiresHumanApproval: false }
+  settlement: { mode: "auto", recipientWalletId: "0.0.9049549", requiresHumanApproval: false }
 };
 
 const evidence: DelegateUmSlaEvidence = {
@@ -81,7 +81,7 @@ describe("evaluateDelegateUmSlaEvent", () => {
     expect(evaluation.result).toMatchObject({
       decision: "approved",
       amount: 5,
-      walletId: "0.0.9049550",
+      walletId: "0.0.9049549",
       reasonCodes: []
     });
   });

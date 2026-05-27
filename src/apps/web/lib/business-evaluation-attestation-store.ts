@@ -1,18 +1,21 @@
-import type {
-  BusinessEvaluationAttestation,
-  BusinessEvaluationAttestationLookup,
-  BusinessEvaluationAttestationStore
+import {
+  buildBusinessEvaluationId,
+  type BusinessEvaluationAttestation,
+  type BusinessEvaluationAttestationLookup,
+  type BusinessEvaluationAttestationStore
 } from "@operon-labs/hedera-executor";
 import type { Currency } from "@operon-labs/policy-engine";
 import type { PolicyStore } from "./policy-store";
 
 /* eslint-disable no-unused-vars -- TypeScript interface method signatures require parameter names. */
 interface IncentiveEvaluationSource {
-  getIncentiveRow(incentiveEvaluationId: string): Promise<RecordedIncentiveEvaluation | null>;
+  getIncentiveRow(umRequestId: string, businessPolicyId?: string): Promise<RecordedIncentiveEvaluation | null>;
 }
 /* eslint-enable no-unused-vars */
 
 interface RecordedIncentiveEvaluation {
+  id: string;
+  umRequestId: string;
   caseId: string;
   planId?: string;
   policyId: string;
@@ -46,7 +49,20 @@ class ProviderDocumentationBusinessEvaluationAttestationStore implements Busines
   }
 
   async getAttestation(lookup: BusinessEvaluationAttestationLookup): Promise<BusinessEvaluationAttestation | null> {
-    const row = await this.source.getIncentiveRow(lookup.incentiveEvaluationId);
+    const businessPolicyId = lookup.businessPolicyId ?? lookup.policyId;
+    if (!businessPolicyId) {
+      return null;
+    }
+
+    const expectedEvaluationId = buildBusinessEvaluationId({
+      umRequestId: lookup.umRequestId,
+      businessPolicyId
+    });
+    if (lookup.incentiveEvaluationId !== expectedEvaluationId) {
+      return null;
+    }
+
+    const row = await this.source.getIncentiveRow(lookup.umRequestId, businessPolicyId);
     if (!row) {
       return null;
     }
@@ -59,7 +75,15 @@ class ProviderDocumentationBusinessEvaluationAttestationStore implements Busines
       return null;
     }
 
-    if (lookup.policyId && row.policyId !== lookup.policyId) {
+    if (row.id !== expectedEvaluationId) {
+      return null;
+    }
+
+    if (row.umRequestId !== lookup.umRequestId) {
+      return null;
+    }
+
+    if (row.policyId !== businessPolicyId) {
       return null;
     }
 
@@ -70,7 +94,8 @@ class ProviderDocumentationBusinessEvaluationAttestationStore implements Busines
     const policy = await this.policyStore.getPolicyById(row.policyId);
 
     return {
-      incentiveEvaluationId: lookup.incentiveEvaluationId,
+      incentiveEvaluationId: expectedEvaluationId,
+      umRequestId: row.umRequestId,
       caseId: row.caseId,
       planId: lookup.planId,
       businessPolicyId: row.policyId,

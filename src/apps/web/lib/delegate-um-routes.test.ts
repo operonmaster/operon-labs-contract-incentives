@@ -83,7 +83,7 @@ describe("delegate UM API routes", () => {
       expect.arrayContaining([
         expect.objectContaining({
           umRequestId: submitted.id,
-          id: submitted.id,
+          id: expect.stringMatching(/^ie_[a-f0-9]{32}$/),
           incentiveStatus: "paid",
           paymentStatus: "auto_executed"
         })

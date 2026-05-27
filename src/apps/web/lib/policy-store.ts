@@ -75,7 +75,7 @@ const POLICY_SEED_ACTOR = "operon-labs-contract-incentives";
 const PROVIDER_ID = "lakeside-provider-admin";
 const PROVIDER_WALLET_ID = "0.0.9049549";
 const DELEGATE_VENDOR_ID = "northstar-um";
-const DELEGATE_VENDOR_WALLET_ID = "0.0.9049550";
+const DELEGATE_VENDOR_WALLET_ID = "0.0.9049549";
 
 export const defaultIncentivePolicies: Record<string, IncentivePolicy> = {
   provider_documentation_acme_outpatient: providerDocumentationPolicy({

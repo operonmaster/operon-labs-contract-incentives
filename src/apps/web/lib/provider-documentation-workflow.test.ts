@@ -1,29 +1,50 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createProviderDocumentationWorkflow, type IncentiveWorklistRow } from "./provider-documentation-workflow";
-import type { StoredPasSubmission, UmPasPersistenceStore } from "./pas-persistence";
+import { createDelegateUmWorkflow } from "./delegate-um-workflow";
+import type { PersistedIncentiveWorklistRow, StoredPasSubmission, UmPasPersistenceStore } from "./pas-persistence";
 import { createInMemoryPolicyStore, defaultIncentivePolicies } from "./policy-store";
-import { executePolicyBoundPayment } from "@operon-labs/hedera-executor";
-import { buildPasFhirBundle, createInMemoryUmPlatform, getDtrQuestionnaire } from "@operon-labs/um-platform";
+import {
+  buildBusinessEvaluationId,
+  buildPaymentIntentId,
+  executePolicyBoundPayment,
+  type PaymentApprovalRequest
+} from "@operon-labs/hedera-executor";
+import {
+  buildPasFhirBundle,
+  buildProviderDocumentationEvidence,
+  createInMemoryUmPlatform,
+  getDtrQuestionnaire,
+  type UMRequest
+} from "@operon-labs/um-platform";
 import type { PaymentPolicyEvidence, PaymentPolicyEvidenceStore } from "./payment-policy-evidence-store";
 
-vi.mock("@operon-labs/hedera-executor", () => ({
-  executePolicyBoundPayment: vi.fn(async (request: { auditId: string; currency: string }) => {
-    await new Promise((resolve) => setTimeout(resolve, 5));
+vi.mock("@operon-labs/hedera-executor", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@operon-labs/hedera-executor")>();
 
-    return {
-      status: "simulated",
-      network: "testnet",
-      transactionId: `testnet-${request.auditId}-${request.currency.toLowerCase()}-${Date.now()}`
-    };
-  })
-}));
+  return {
+    ...actual,
+    executePolicyBoundPayment: vi.fn()
+  };
+});
 
 const executePolicyBoundPaymentMock = vi.mocked(executePolicyBoundPayment);
 const PA_CASE_ID_PATTERN = /^PA-\d{6}-\d{4}-[A-Z0-9]{8}$/;
 
 describe("provider documentation workflow", () => {
   beforeEach(() => {
-    executePolicyBoundPaymentMock.mockClear();
+    executePolicyBoundPaymentMock.mockReset();
+    executePolicyBoundPaymentMock.mockImplementation(async (request: PaymentApprovalRequest) => {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+
+      const paymentIntentId = buildPaymentIntentId(request);
+      return {
+        status: "simulated",
+        network: "testnet",
+        transactionId: `testnet-${request.auditId}-${request.currency.toLowerCase()}-${Date.now()}`,
+        runtime: "hedera-agent-kit-policy",
+        paymentIntentId
+      };
+    });
   });
 
   it("submits knee MRI and automatically settles the eligible policy payment", async () => {
@@ -40,11 +61,15 @@ describe("provider documentation workflow", () => {
       }
     });
     const rows = await workflow.listIncentiveRows();
+    const businessEvaluationId = buildBusinessEvaluationId({
+      umRequestId: submitted.id,
+      businessPolicyId: rows[0]!.policyId
+    });
 
     expect(submitted.caseId).toMatch(PA_CASE_ID_PATTERN);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
-      id: submitted.id,
+      id: businessEvaluationId,
       umRequestId: submitted.id,
       caseId: submitted.id,
       serviceLabel: "Knee MRI after injury",
@@ -106,14 +131,21 @@ describe("provider documentation workflow", () => {
       ])
     );
     expect(executePolicyBoundPaymentMock).toHaveBeenCalledTimes(1);
-    expect(executePolicyBoundPaymentMock.mock.calls[0]?.[0]).toMatchObject({
-      caseId: submitted.caseId,
-      incentiveEvaluationId: submitted.id,
+    const paymentRequest = executePolicyBoundPaymentMock.mock.calls[0]![0]!;
+    expect(paymentRequest).toMatchObject({
+      umRequestId: submitted.id,
+      caseId: submitted.id,
+      incentiveEvaluationId: businessEvaluationId,
       planId: "acme-health-ppo",
+      paymentPolicyId: submitted.planId,
+      businessPolicyId: rows[0]!.policyId,
+      policyId: rows[0]!.policyId,
       amount: 5,
       currency: "HBAR",
       walletId: "0.0.9049549"
     });
+    expect(rows[0]!.id).toBe(paymentRequest.incentiveEvaluationId);
+    expect(rows[0]!.paymentIntentId).toBe(buildPaymentIntentId(paymentRequest));
     expect(executePolicyBoundPaymentMock.mock.calls[0]?.[1]).toMatchObject({
       planPolicy: expect.objectContaining({
         planId: "acme-health-ppo",
@@ -127,15 +159,188 @@ describe("provider documentation workflow", () => {
     expect(businessEvaluationStore).toBeDefined();
     await expect(
       businessEvaluationStore!.getAttestation({
-        incentiveEvaluationId: submitted.id,
+        incentiveEvaluationId: businessEvaluationId,
+        umRequestId: submitted.id,
         caseId: submitted.caseId,
         planId: "acme-health-ppo",
-        policyId: rows[0]!.policyId
+        policyId: rows[0]!.policyId,
+        businessPolicyId: rows[0]!.policyId
       })
     ).resolves.toMatchObject({
-      incentiveEvaluationId: submitted.id,
+      incentiveEvaluationId: businessEvaluationId,
+      umRequestId: submitted.id,
       caseId: submitted.caseId
     });
+  });
+
+  it("allows provider documentation and delegate UM incentives to settle for the same UM request without payment intent collision", async () => {
+    const platform = createInMemoryUmPlatform({ generateCaseId: () => "PA-260526-0900-SAMEUM01" });
+    const paymentIntentIds = new Set<string>();
+    executePolicyBoundPaymentMock.mockImplementation(async (request: PaymentApprovalRequest) => {
+      const paymentIntentId = buildPaymentIntentId(request);
+      if (paymentIntentIds.has(paymentIntentId)) {
+        throw new Error("DUPLICATE_PAYMENT_BLOCKED");
+      }
+      paymentIntentIds.add(paymentIntentId);
+
+      return {
+        status: "submitted",
+        network: "testnet",
+        transactionId: `testnet-${paymentIntentId}`,
+        runtime: "hedera-agent-kit-policy",
+        paymentIntentId
+      };
+    });
+    const providerWorkflow = createProviderDocumentationWorkflow(
+      platform,
+      undefined,
+      createInMemoryPolicyStore({
+        provider_documentation_summit_pharmacy: defaultIncentivePolicies.provider_documentation_summit_pharmacy
+      })
+    );
+    const delegateWorkflow = createDelegateUmWorkflow(
+      platform,
+      undefined,
+      createInMemoryPolicyStore({
+        delegate_um_summit_pharmacy_sla_bonus: defaultIncentivePolicies.delegate_um_summit_pharmacy_sla_bonus
+      })
+    );
+
+    const submitted = await providerWorkflow.submitPriorAuth({
+      planId: "summit-health-hmo",
+      planDisplay: "Summit Health HMO",
+      requestType: "pharmacy_benefit",
+      serviceCode: "wegovy_semaglutide",
+      dtr: {
+        symptomDurationConfirmed: true,
+        conservativeTherapyConfirmed: true,
+        examFindingsConfirmed: true,
+        clinicalNoteAttached: true
+      }
+    });
+    await delegateWorkflow.startReview(submitted.id, "reviewer-ana");
+    await delegateWorkflow.completeDetermination(submitted.id, {
+      outcomeStatus: "approved",
+      medicalNecessityReviewed: true,
+      policyCriteriaChecked: true,
+      rationaleCaptured: true
+    });
+    const providerRow = await providerWorkflow.getIncentiveRow(submitted.id);
+    const [delegateRow] = await delegateWorkflow.listPlanRows();
+
+    expect(executePolicyBoundPaymentMock).toHaveBeenCalledTimes(2);
+    expect(providerRow).toMatchObject({
+      id: buildBusinessEvaluationId({
+        umRequestId: submitted.id,
+        businessPolicyId: providerRow!.policyId
+      }),
+      umRequestId: submitted.id,
+      caseId: submitted.id,
+      incentiveStatus: "paid",
+      paymentStatus: "auto_executed"
+    });
+    expect(delegateRow).toMatchObject({
+      id: buildBusinessEvaluationId({
+        umRequestId: submitted.id,
+        businessPolicyId: "delegate-um-summit-pharmacy-sla-bonus-v1"
+      }),
+      umRequestId: submitted.id,
+      incentiveStatus: "paid",
+      paymentStatus: "auto_executed"
+    });
+    expect(providerRow!.paymentIntentId).toMatch(/^pi_[a-f0-9]{32}$/);
+    expect(delegateRow!.paymentIntentId).toMatch(/^pi_[a-f0-9]{32}$/);
+    expect(providerRow!.paymentIntentId).not.toBe(delegateRow!.paymentIntentId);
+    expect(paymentIntentIds.size).toBe(2);
+  });
+
+  it("keeps provider and delegate rows separate after restart when both are persisted for the same UM request", async () => {
+    const platform = createInMemoryUmPlatform({ generateCaseId: () => "PA-260527-1300-MIXED001" });
+    const persistence = new FakeMixedPasPersistenceStore();
+    const providerPolicyStore = createInMemoryPolicyStore({
+      provider_documentation_summit_pharmacy: defaultIncentivePolicies.provider_documentation_summit_pharmacy
+    });
+    const delegatePolicyStore = createInMemoryPolicyStore({
+      delegate_um_summit_pharmacy_sla_bonus: defaultIncentivePolicies.delegate_um_summit_pharmacy_sla_bonus
+    });
+    const providerWorkflow = createProviderDocumentationWorkflow(
+      platform,
+      persistence,
+      providerPolicyStore
+    );
+    const delegateWorkflow = createDelegateUmWorkflow(
+      platform,
+      persistence,
+      delegatePolicyStore
+    );
+
+    const submitted = await providerWorkflow.submitPriorAuth({
+      planId: "summit-health-hmo",
+      planDisplay: "Summit Health HMO",
+      requestType: "pharmacy_benefit",
+      serviceCode: "wegovy_semaglutide",
+      dtr: {
+        symptomDurationConfirmed: true,
+        conservativeTherapyConfirmed: true,
+        examFindingsConfirmed: true,
+        clinicalNoteAttached: true
+      }
+    });
+    await delegateWorkflow.startReview(submitted.id, "reviewer-ana");
+    await delegateWorkflow.completeDetermination(submitted.id, {
+      outcomeStatus: "approved",
+      medicalNecessityReviewed: true,
+      policyCriteriaChecked: true,
+      rationaleCaptured: true
+    });
+
+    const persistedRows = await persistence.listIncentiveRows();
+    expect(persistedRows.map((row) => row.evaluationType)).toEqual([
+      "delegate_um_sla_bonus",
+      "provider_documentation_completeness"
+    ]);
+    expect(persistedRows.map((row) => row.umRequestId)).toEqual([submitted.id, submitted.id]);
+
+    executePolicyBoundPaymentMock.mockClear();
+    executePolicyBoundPaymentMock.mockRejectedValue(new Error("TEST_RESTART_SHOULD_NOT_EXECUTE_PAYMENT"));
+    const restartedProviderWorkflow = createProviderDocumentationWorkflow(
+      createInMemoryUmPlatform(),
+      persistence,
+      providerPolicyStore
+    );
+    const restartedDelegateWorkflow = createDelegateUmWorkflow(
+      createInMemoryUmPlatform(),
+      persistence,
+      delegatePolicyStore
+    );
+
+    const providerRow = await restartedProviderWorkflow.getIncentiveRow(submitted.id);
+    const delegateRows = await restartedDelegateWorkflow.listPlanRows();
+    await restartedDelegateWorkflow.completeDetermination(submitted.id, {
+      outcomeStatus: "approved",
+      medicalNecessityReviewed: true,
+      policyCriteriaChecked: true,
+      rationaleCaptured: true
+    });
+
+    expect(providerRow).toMatchObject({
+      evaluationType: "provider_documentation_completeness",
+      umRequestId: submitted.id,
+      incentiveStatus: "paid",
+      paymentStatus: "auto_executed",
+      policyId: "plcy_5R1T8W3Y6B0D9F2H4K7M"
+    });
+    expect(delegateRows).toEqual([
+      expect.objectContaining({
+        evaluationType: "delegate_um_sla_bonus",
+        umRequestId: submitted.id,
+        incentiveStatus: "paid",
+        paymentStatus: "auto_executed",
+        policyId: "delegate-um-summit-pharmacy-sla-bonus-v1"
+      })
+    ]);
+    expect(providerRow!.paymentIntentId).not.toBe(delegateRows[0]!.paymentIntentId);
+    expect(executePolicyBoundPaymentMock).not.toHaveBeenCalled();
   });
 
   it("settles the policy payment from a completed DTR questionnaire response with yes and no answers", async () => {
@@ -277,9 +482,22 @@ describe("provider documentation workflow", () => {
       }
     });
     const row = await workflow.getIncentiveRow(submitted.caseId);
+    const businessPolicyId = "plcy_9Q3S6V1X8Z2B5D7F0H4K";
+    const incentiveEvaluationId = buildBusinessEvaluationId({
+      umRequestId: submitted.id,
+      businessPolicyId
+    });
+    const paymentIntentId = buildPaymentIntentId({
+      umRequestId: submitted.id,
+      caseId: submitted.id,
+      incentiveEvaluationId,
+      businessPolicyId,
+      paymentPolicyId: "summit-health-hmo"
+    });
 
     expect(row).toMatchObject({
-      policyId: "plcy_9Q3S6V1X8Z2B5D7F0H4K",
+      id: incentiveEvaluationId,
+      policyId: businessPolicyId,
       incentiveStatus: "payment_failed",
       paymentStatus: "execution_failed",
       incentiveValue: 20,
@@ -303,11 +521,12 @@ describe("provider documentation workflow", () => {
     );
     expect(paymentPolicyEvidenceStore.saved).toHaveLength(1);
     expect(paymentPolicyEvidenceStore.saved[0]).toMatchObject({
-      incentiveEvaluationId: submitted.id,
+      incentiveEvaluationId,
+      umRequestId: submitted.id,
       caseId: submitted.caseId,
       planId: "summit-health-hmo",
       paymentPolicyId: "summit-health-hmo",
-      businessPolicyId: "plcy_9Q3S6V1X8Z2B5D7F0H4K",
+      businessPolicyId,
       runtime: "hedera-agent-kit-policy",
       outcome: "blocked",
       failureCode: "HEDERA_PAYMENT_AMOUNT_EXCEEDS_PLAN_MAX",
@@ -343,7 +562,7 @@ describe("provider documentation workflow", () => {
           status: "not_run"
         })
       ]),
-      paymentIntentId: null,
+      paymentIntentId,
       transactionId: null
     });
     expect(paymentPolicyEvidenceStore.saved[0]!.controls.map((control) => control.id)).not.toEqual(
@@ -429,13 +648,15 @@ describe("provider documentation workflow", () => {
       umRequestId: submitted.id,
       caseId: submitted.id
     });
-    expect(storedRows).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: submitted.id,
+    const storedRow = storedRows.find((row) => row.umRequestId === submitted.id);
+    expect(storedRow).toMatchObject({
+      id: buildBusinessEvaluationId({
         umRequestId: submitted.id,
-        caseId: submitted.id
-      })
-    ]));
+        businessPolicyId: storedRow!.policyId
+      }),
+      umRequestId: submitted.id,
+      caseId: submitted.id
+    });
     expect(savePriorAuth).not.toHaveBeenCalled();
     expect(storedRequests[0]).toMatchObject({
       umRequest: { id: submitted.id, caseId: submitted.id },
@@ -642,7 +863,10 @@ describe("provider documentation workflow", () => {
     const rows = await workflow.listIncentiveRows();
 
     expect(rows[0]).toMatchObject({
-      id: record.id,
+      id: buildBusinessEvaluationId({
+        umRequestId: record.id,
+        businessPolicyId: rows[0]!.policyId
+      }),
       umRequestId: record.id,
       caseId: record.id,
       submittedAt: record.submittedAt,
@@ -774,7 +998,10 @@ describe("provider documentation workflow", () => {
     const rows = await workflow.listIncentiveRows();
 
     expect(rows[0]).toMatchObject({
-      id: record.id,
+      id: buildBusinessEvaluationId({
+        umRequestId: record.id,
+        businessPolicyId: rows[0]!.policyId
+      }),
       umRequestId: record.id,
       submittedAt: record.submittedAt,
       incentiveStatus: "paid",
@@ -889,7 +1116,7 @@ describe("provider documentation workflow", () => {
     const [updatedRow] = await restartedWorkflow.listIncentiveRows();
 
     expect(updatedRow).toMatchObject({
-      id: record.id,
+      id: paidRow!.id,
       umRequestId: record.id,
       state: paidRow!.state,
       outcomeStatus: paidRow!.outcomeStatus,
@@ -941,7 +1168,7 @@ describe("provider documentation workflow", () => {
         transactionId: "testnet-delegate-row",
         createdAt: "2026-05-26T10:00:00.000Z"
       },
-      walletId: "0.0.9049550",
+      walletId: "0.0.9049549",
       paymentIntentId: "PA-260526-0900-DELEGATE",
       transactionId: "testnet-delegate-row"
     };
@@ -1073,7 +1300,7 @@ describe("provider documentation workflow", () => {
     const [immutableRow] = await restartedWorkflow.listIncentiveRows();
 
     expect(immutableRow).toMatchObject({
-      id: record.id,
+      id: paidRow!.id,
       umRequestId: record.id,
       serviceCode: "knee_mri",
       state: paidRow!.state,
@@ -1177,7 +1404,10 @@ describe("provider documentation workflow", () => {
     const rows = await workflow.listIncentiveRows();
 
     expect(rows[0]).toMatchObject({
-      id: record.id,
+      id: buildBusinessEvaluationId({
+        umRequestId: record.id,
+        businessPolicyId: rows[0]!.policyId
+      }),
       umRequestId: record.id,
       caseId: record.id,
       serviceCode: "full_body_wellness_mri",
@@ -1435,4 +1665,96 @@ function createCaseIdGenerator(caseIds: string[]): () => string {
 
     return caseId;
   };
+}
+
+class FakeMixedPasPersistenceStore implements UmPasPersistenceStore {
+  readonly backend = "firestore" as const;
+  private readonly requests = new Map<string, UMRequest>();
+  private readonly submissions = new Map<string, StoredPasSubmission>();
+  private readonly rows = new Map<string, PersistedIncentiveWorklistRow>();
+  private rowOrder: string[] = [];
+
+  async savePasSubmission(request: StoredPasSubmission): Promise<void> {
+    this.submissions.set(request.umRequest.id, structuredClone(request));
+    await this.saveUmRequest(request.umRequest);
+  }
+
+  async savePriorAuth(request: { record: UMRequest }): Promise<void> {
+    const evidence = buildProviderDocumentationEvidence(request.record);
+    await this.savePasSubmission({
+      umRequest: request.record,
+      evidence,
+      fhirBundle: buildPasFhirBundle(request.record, evidence)
+    });
+  }
+
+  async saveUmRequest(umRequest: UMRequest): Promise<void> {
+    this.requests.set(umRequest.id, structuredClone(umRequest));
+    const existing = this.submissions.get(umRequest.id);
+    if (existing) {
+      this.submissions.set(umRequest.id, {
+        ...existing,
+        umRequest: structuredClone(umRequest)
+      });
+    }
+  }
+
+  async listUmRequests(): Promise<UMRequest[]> {
+    return [...this.requests.values()].map((request) => structuredClone(request));
+  }
+
+  async getUmRequest(umRequestId: string): Promise<UMRequest | null> {
+    const request = this.requests.get(umRequestId);
+    return request ? structuredClone(request) : null;
+  }
+
+  async listUmEvents() {
+    return [...this.requests.values()].flatMap((request) => [
+      { eventType: "PAS_SUBMITTED" as const, caseId: request.id, umRequestId: request.id },
+      { eventType: "UM_REQUEST_CREATED" as const, caseId: request.id, umRequestId: request.id }
+    ]);
+  }
+
+  async listPriorAuthRecords(): Promise<UMRequest[]> {
+    return this.listUmRequests();
+  }
+
+  async getPriorAuthRecord(caseId: string): Promise<UMRequest | null> {
+    return this.getUmRequest(caseId);
+  }
+
+  async getEvidence(umRequestId: string) {
+    const request = await this.getUmRequest(umRequestId);
+    return request ? buildProviderDocumentationEvidence(request) : null;
+  }
+
+  async listPasEvents() {
+    return (await this.listUmEvents()).filter((event) => event.eventType === "PAS_SUBMITTED");
+  }
+
+  async saveIncentiveRow(row: PersistedIncentiveWorklistRow): Promise<void> {
+    const stored = structuredClone(row);
+    this.rows.set(stored.id, stored);
+    this.rowOrder = this.rowOrder.filter((rowId) => rowId !== stored.id);
+    this.rowOrder.push(stored.id);
+  }
+
+  async listIncentiveRows(): Promise<PersistedIncentiveWorklistRow[]> {
+    return this.rowOrder
+      .slice()
+      .reverse()
+      .map((rowId) => structuredClone(this.rows.get(rowId)!));
+  }
+
+  async getIncentiveRow(
+    umRequestId: string,
+    businessPolicyId?: string
+  ): Promise<PersistedIncentiveWorklistRow | null> {
+    if (businessPolicyId) {
+      const row = this.rows.get(buildBusinessEvaluationId({ umRequestId, businessPolicyId }));
+      return row ? structuredClone(row) : null;
+    }
+
+    return (await this.listIncentiveRows()).find((row) => row.umRequestId === umRequestId) ?? null;
+  }
 }

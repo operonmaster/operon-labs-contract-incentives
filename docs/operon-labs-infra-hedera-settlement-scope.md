@@ -2,43 +2,68 @@
 
 ## Purpose
 
-`operon-labs-contract-incentives` now supports real Hedera Agent Kit settlement for provider-documentation incentive payments. Terraform and secret operations remain outside this public repo, in `operon-labs-infra`.
+`operon-labs-contract-incentives` now supports real Hedera Agent Kit settlement for policy-approved incentive payments. Terraform and secret operations remain outside this public repo, in `operon-labs-infra`.
 
-This document describes the GCP and Hedera prerequisites needed for the deployed Cloud Run service to execute the current policy-approved HBAR testnet payment from the plan/operator wallet to the provider wallet.
+This document describes the GCP and Hedera prerequisites needed for the deployed Cloud Run service to execute current policy-approved HBAR testnet payments from the plan/operator wallet to the approved recipient wallet.
 
 ## Runtime Behavior
 
 The app defaults to real Hedera settlement unless `HEDERA_SETTLEMENT_MODE=simulated` is explicitly set.
 
-Approved provider-documentation PAS events follow this path:
+Approved Provider Documentation and Delegate UM events follow this settlement path:
 
 1. Provider submits a PAS-style prior authorization.
 2. The server records the PAS claim and emits `PAS_SUBMITTED`.
 3. The incentive agent fetches policy-safe evidence by the canonical PA/UM request ID.
 4. The deterministic policy evaluates evidence, amount, token symbol, submitter, and wallet mapping.
-5. The payment policy layer runs the plan-level Hedera Agent Kit controls and stores the control-level result in `paymentPolicyEvidences/{incentiveEvaluationId}`.
-6. The Hedera executor calls Hedera Agent Kit `transfer_hbar_tool` with a single recipient, a capped amount, and a non-PHI memo containing only the incentive evaluation id.
-7. The real transaction ID is stored in `incentiveEvaluations/{canonicalId}` and shown in the plan audit console.
+5. The payment policy layer runs the plan-level Hedera Agent Kit controls and stores the control-level result in `paymentPolicyEvidences/{paymentIntentId}`.
+6. The Hedera executor calls Hedera Agent Kit `transfer_hbar_tool` with a single recipient, a capped amount, and a non-PHI memo containing only the readable PA/UM request id.
+7. The real transaction ID is stored in `incentiveEvaluations/{businessEvaluationId}` and shown in the plan audit console.
 
 Blocked policy outcomes do not call Hedera.
+
+## Settlement Identity Contract
+
+Healthcare workflow records keep the readable PA/UM request id. Settlement-facing documents use deterministic opaque ids:
+
+```text
+businessEvaluationId = ie_sha256(umRequestId | businessPolicyId)
+paymentIntentId = pi_sha256(umRequestId | businessPolicyId | paymentPolicyId)
+```
+
+Example persisted payment intent:
+
+```json
+{
+  "id": "pi_1f2e3d4c5b6a79800112233445566778",
+  "umRequestId": "PA-260527-1132-GNJNP7AE",
+  "caseId": "PA-260527-1132-GNJNP7AE",
+  "incentiveEvaluationId": "ie_0123456789abcdef0123456789abcdef",
+  "businessPolicyId": "delegate-um-summit-pharmacy-sla-bonus-v1",
+  "paymentPolicyId": "summit-health-hmo"
+}
+```
+
+The PA/UM request id remains in `umRequestId`, `caseId`, and the Hedera transaction memo. Duplicate prevention blocks only the same `umRequestId + businessPolicyId + paymentPolicyId` triplet, so Provider Documentation and Delegate UM can both settle for the same request when they have different business policies.
 
 ## Hedera Testnet Accounts
 
 Create or choose two Hedera testnet accounts:
 
 - Plan/operator account: pays incentives and transaction fees.
-- Provider recipient account: receives the provider-documentation incentive.
+- Approved recipient account: receives the demo incentive.
 
-The current app policy expects the provider recipient account to match:
+The current app policies expect approved recipients to match:
 
 ```text
 lakeside-provider-admin -> 0.0.9049549
+northstar-um -> 0.0.9049549
 ```
 
 For real deployment, either:
 
 - create/use testnet account `0.0.9049549` if available in the demo setup, or
-- update the app policy and seeded wallet mapping to the actual provider recipient account before deployment.
+- update the app policy and seeded wallet mapping to the actual recipient account before deployment.
 
 The operator account must be funded with enough HBAR for demo transfers and fees. The current provider-documentation policy is bootstrapped as:
 
@@ -119,11 +144,12 @@ The app blocks real HBAR settlement before network execution when:
 - amount is zero, negative, or above the plan-level `paymentPolicies/{planId}.maxPaymentAmount`.
 - token does not match the plan-level `paymentPolicies/{planId}.paymentToken`.
 - the recorded incentive evaluation is missing or references an inactive business policy.
+- the same `umRequestId + businessPolicyId + paymentPolicyId` settlement intent already exists.
 - recipient wallet is listed in `HEDERA_BLOCKED_RECIPIENT_ACCOUNT_IDS`.
 - real mode is missing operator credentials.
 - `HEDERA_NETWORK` is anything other than `testnet`.
 
-The Hedera Agent Kit runner also attaches an Agent Kit hook for the HBAR transfer tool. The hook rejects transfer calls that do not match the approved payment intent: recorded business evaluation, no duplicate payment intent, single expected recipient, expected source account, expected amount/token, max plan payment amount, and expected transaction memo.
+The Hedera Agent Kit runner also attaches an Agent Kit hook for the HBAR transfer tool. The hook rejects transfer calls that do not match the approved payment intent: recorded business evaluation, no duplicate payment intent for the same settlement triplet, single expected recipient, expected source account, expected amount/token, max plan payment amount, and expected PA/UM request memo.
 
 ## Terraform Implementation Notes
 

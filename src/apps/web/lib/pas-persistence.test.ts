@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { buildBusinessEvaluationId, buildPaymentIntentId } from "@operon-labs/hedera-executor";
 import {
   createFirestorePasPersistenceStore,
   createPasPersistenceStoreFromEnv,
@@ -68,10 +69,22 @@ describe("PAS persistence store selection", () => {
       evidence,
       fhirBundle: buildPasFhirBundle(umRequest, evidence)
     });
-    await store.saveIncentiveRow({
-      id: umRequest.id,
+    const businessPolicyId = "provider-documentation-completeness-v1";
+    const paymentPolicyId = umRequest.planId;
+    const businessEvaluationId = buildBusinessEvaluationId({ umRequestId: umRequest.id, businessPolicyId });
+    const paymentIntentId = buildPaymentIntentId({
       umRequestId: umRequest.id,
       caseId: umRequest.id,
+      incentiveEvaluationId: businessEvaluationId,
+      businessPolicyId,
+      paymentPolicyId
+    });
+
+    await store.saveIncentiveRow({
+      id: businessEvaluationId,
+      umRequestId: umRequest.id,
+      caseId: umRequest.id,
+      planId: paymentPolicyId,
       submittedAt: umRequest.submittedAt,
       providerGroupDisplay: umRequest.providerGroupDisplay,
       requestType: umRequest.requestType,
@@ -88,13 +101,13 @@ describe("PAS persistence store selection", () => {
       },
       reason: "Complete DTR + PAS before cutoff",
       reasonCodes: [],
-      policyId: "provider-documentation-completeness-v1",
+      policyId: businessPolicyId,
       policyControls: [],
       policyCriteria: [],
       audit: {
         id: "audit-1",
         requestHash: "hash-1",
-        policyId: "provider-documentation-completeness-v1",
+        policyId: businessPolicyId,
         policyVersion: "2026-05-24",
         decision: "approved",
         reasonCodes: [],
@@ -102,7 +115,7 @@ describe("PAS persistence store selection", () => {
         createdAt: umRequest.submittedAt
       },
       walletId: "0.0.9049549",
-      paymentIntentId: umRequest.id,
+      paymentIntentId,
       transactionId: "testnet-1"
     });
 
@@ -136,18 +149,22 @@ describe("PAS persistence store selection", () => {
       { eventType: "PAS_SUBMITTED", caseId: umRequest.id, umRequestId: umRequest.id },
       { eventType: "UM_REQUEST_CREATED", caseId: umRequest.id, umRequestId: umRequest.id }
     ]);
-    await expect(firestore.collection("incentiveEvaluations").doc(umRequest.id).get()).resolves.toMatchObject({
+    await expect(firestore.collection("incentiveEvaluations").doc(businessEvaluationId).get()).resolves.toMatchObject({
       exists: true
     });
     await expect(store.getIncentiveRow(umRequest.id)).resolves.toMatchObject({
+      id: businessEvaluationId,
       umRequestId: umRequest.id,
       caseId: umRequest.id,
+      paymentIntentId,
       paymentStatus: "auto_executed"
     });
     await expect(store.listIncentiveRows()).resolves.toEqual([
       expect.objectContaining({
+        id: businessEvaluationId,
         umRequestId: umRequest.id,
         caseId: umRequest.id,
+        paymentIntentId,
         paymentStatus: "auto_executed"
       })
     ]);
@@ -155,6 +172,50 @@ describe("PAS persistence store selection", () => {
       expect.arrayContaining(["pasClaims", "umRequests", "auditEvents", "incentiveEvaluations"])
     );
     expect(firestore.collectionNames()).not.toEqual(expect.arrayContaining(["pasRequests", "pasEvents"]));
+  });
+
+  it("persists incentive rows under the hashed business evaluation id and preserves hashed payment intent ids", async () => {
+    const firestore = createFakeFirestore();
+    const store = createFirestorePasPersistenceStore(
+      { projectId: "operon-labs-nonprod", databaseId: "(default)" },
+      firestore
+    );
+    const platform = createInMemoryUmPlatform({ generateCaseId: () => "PA-260526-0900-ROWHASH" });
+    const umRequest = platform.submitPriorAuth({ requestType: "outpatient_service", serviceCode: "knee_mri" });
+    const businessPolicyId = "provider-documentation-completeness-v1";
+    const paymentPolicyId = umRequest.planId;
+    const businessEvaluationId = buildBusinessEvaluationId({ umRequestId: umRequest.id, businessPolicyId });
+    const paymentIntentId = buildPaymentIntentId({
+      umRequestId: umRequest.id,
+      caseId: umRequest.id,
+      incentiveEvaluationId: businessEvaluationId,
+      businessPolicyId,
+      paymentPolicyId
+    });
+
+    await store.saveIncentiveRow(
+      buildPersistedIncentiveRow(umRequest, {
+        id: businessEvaluationId,
+        policyId: businessPolicyId,
+        paymentIntentId
+      })
+    );
+
+    await expect(firestore.collection("incentiveEvaluations").doc(businessEvaluationId).get()).resolves.toMatchObject({
+      exists: true
+    });
+    await expect(store.getIncentiveRow(umRequest.id)).resolves.toMatchObject({
+      id: businessEvaluationId,
+      umRequestId: umRequest.id,
+      caseId: umRequest.id,
+      paymentIntentId
+    });
+    await expect(store.getIncentiveRow(umRequest.id, businessPolicyId)).resolves.toMatchObject({
+      id: businessEvaluationId,
+      umRequestId: umRequest.id,
+      caseId: umRequest.id,
+      paymentIntentId
+    });
   });
 
   it("updates workflow state in umRequests without mutating the submitted PAS FHIR claim", async () => {
@@ -936,6 +997,12 @@ describe("PAS persistence store selection", () => {
 
     await expect(
       store.saveIncentiveRow(buildPersistedIncentiveRow(umRequest, {
+        id: "PA-260526-0900-ROWMATCH"
+      }))
+    ).rejects.toThrow("PAS_SUBMISSION_ID_MISMATCH:row.id");
+
+    await expect(
+      store.saveIncentiveRow(buildPersistedIncentiveRow(umRequest, {
         paymentIntentId: "pi_test"
       }))
     ).rejects.toThrow("PAS_SUBMISSION_ID_MISMATCH:row.paymentIntentId");
@@ -966,6 +1033,10 @@ describe("PAS persistence store selection", () => {
       caseId: "UMR-260526-0900-ROWLEG1",
       paymentIntentId: "UMR-260526-0900-ROWLEG1"
     });
+    const expectedEvaluationId = buildBusinessEvaluationId({
+      umRequestId: umRequest.id,
+      businessPolicyId: legacyRow.policyId
+    });
 
     await firestore.collection("incentiveEvaluations").doc(umRequest.id).set({
       ...legacyRow,
@@ -973,14 +1044,17 @@ describe("PAS persistence store selection", () => {
     });
 
     await expect(store.getIncentiveRow(umRequest.id)).resolves.toMatchObject({
+      id: expectedEvaluationId,
       umRequestId: umRequest.id,
       caseId: umRequest.id,
-      paymentIntentId: umRequest.id
+      paymentIntentId: "UMR-260526-0900-ROWLEG1"
     });
     await expect(store.listIncentiveRows()).resolves.toEqual([
       expect.objectContaining({
+        id: expectedEvaluationId,
         umRequestId: umRequest.id,
-        caseId: umRequest.id
+        caseId: umRequest.id,
+        paymentIntentId: "UMR-260526-0900-ROWLEG1"
       })
     ]);
   });
@@ -1042,6 +1116,10 @@ describe("PAS persistence store selection", () => {
       paResult: "submitted_pending",
       denialReason: null
     };
+    const expectedEvaluationId = buildBusinessEvaluationId({
+      umRequestId: umRequest.id,
+      businessPolicyId: legacyRow.policyId
+    });
 
     await firestore.collection("incentiveEvaluations").doc(umRequest.id).set({
       ...legacyRow,
@@ -1049,7 +1127,7 @@ describe("PAS persistence store selection", () => {
     });
 
     await expect(store.getIncentiveRow(umRequest.id)).resolves.toMatchObject({
-      id: umRequest.id,
+      id: expectedEvaluationId,
       umRequestId: umRequest.id,
       caseId: umRequest.id,
       state: "pend",
@@ -1057,7 +1135,7 @@ describe("PAS persistence store selection", () => {
     });
     await expect(store.listIncentiveRows()).resolves.toEqual([
       expect.objectContaining({
-        id: umRequest.id,
+        id: expectedEvaluationId,
         umRequestId: umRequest.id,
         caseId: umRequest.id,
         state: "pend",
@@ -1094,12 +1172,16 @@ describe("PAS persistence store selection", () => {
       paymentIntentId: "PA-260526-0900-ROWBAD1",
       storedAt: umRequest.submittedAt
     });
+    const expectedEvaluationId = buildBusinessEvaluationId({
+      umRequestId: umRequest.id,
+      businessPolicyId: "provider-documentation-completeness-v1"
+    });
 
     await expect(store.getIncentiveRow(umRequest.id)).resolves.toMatchObject({
-      id: umRequest.id,
+      id: expectedEvaluationId,
       umRequestId: umRequest.id,
       caseId: umRequest.id,
-      paymentIntentId: umRequest.id
+      paymentIntentId: "PA-260526-0900-ROWBAD1"
     });
   });
 });
@@ -1108,10 +1190,25 @@ function buildPersistedIncentiveRow(
   umRequest: UMRequest,
   overrides: Partial<PersistedIncentiveWorklistRow> = {}
 ): PersistedIncentiveWorklistRow {
-  return {
-    id: umRequest.id,
+  const policyId = overrides.policyId ?? "provider-documentation-completeness-v1";
+  const planId = overrides.planId ?? umRequest.planId;
+  const businessEvaluationId = buildBusinessEvaluationId({
+    umRequestId: umRequest.id,
+    businessPolicyId: policyId
+  });
+  const paymentIntentId = buildPaymentIntentId({
     umRequestId: umRequest.id,
     caseId: umRequest.id,
+    incentiveEvaluationId: businessEvaluationId,
+    businessPolicyId: policyId,
+    paymentPolicyId: planId
+  });
+
+  return {
+    id: businessEvaluationId,
+    umRequestId: umRequest.id,
+    caseId: umRequest.id,
+    planId,
     submittedAt: umRequest.submittedAt,
     providerGroupDisplay: umRequest.providerGroupDisplay,
     requestType: umRequest.requestType,
@@ -1128,13 +1225,13 @@ function buildPersistedIncentiveRow(
     },
     reason: "Complete DTR + PAS before cutoff",
     reasonCodes: [],
-    policyId: "provider-documentation-completeness-v1",
+    policyId,
     policyControls: [],
     policyCriteria: [],
     audit: {
       id: "audit-1",
       requestHash: "hash-1",
-      policyId: "provider-documentation-completeness-v1",
+      policyId,
       policyVersion: "2026-05-24",
       decision: "approved",
       reasonCodes: [],
@@ -1142,7 +1239,7 @@ function buildPersistedIncentiveRow(
       createdAt: umRequest.submittedAt
     },
     walletId: "0.0.9049549",
-    paymentIntentId: umRequest.id,
+    paymentIntentId,
     transactionId: "testnet-1",
     ...overrides
   };

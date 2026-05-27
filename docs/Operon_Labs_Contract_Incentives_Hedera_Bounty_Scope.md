@@ -24,7 +24,7 @@ Week 5 positioning:
 
 Source references:
 
-- Hedera AI Bounty page: https://ai-bounties.hedera.com/
+- Hedera AI Agent Bounty Campaign page: https://ai-bounties.hedera.com/
 - Terms and Conditions: https://ai-bounties.hedera.com/terms-and-conditions
 - Hedera Agent Kit Hooks and Policies: https://docs.hedera.com/hedera/open-source-solutions/ai-studio-on-hedera/hedera-ai-agent-kit/hooks-and-polices
 
@@ -278,6 +278,8 @@ For Week 5, the project should:
 ### Safety Requirements
 
 The agent must be designed so it cannot access, use, transfer, or drain user funds without explicit prior consent. In this demo, consent is represented by a plan-administered contract policy that pre-authorizes bounded testnet auto-settlement for eligible events. Mainnet or higher-risk policies should use human approval or equivalent safeguards.
+
+The demo prevents duplicate payments at the exact settlement intent boundary, not at the healthcare request boundary. Settlement ids are deterministic controls: `businessEvaluationId = ie_sha256(umRequestId | businessPolicyId)` and `paymentIntentId = pi_sha256(umRequestId | businessPolicyId | paymentPolicyId)`. The readable PA/UM request id stays in `umRequestId`, `caseId`, and the Hedera transaction memo. That lets the same UM request produce separate Provider Documentation and Delegate UM incentives while still blocking a repeat of the same `umRequestId + businessPolicyId + paymentPolicyId` payment.
 
 Implementation requirements for safety:
 

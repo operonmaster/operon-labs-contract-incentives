@@ -1,4 +1,9 @@
-import type { PaymentIntent, PaymentIntentStore } from "@operon-labs/hedera-executor";
+import {
+  buildBusinessEvaluationId,
+  buildPaymentIntentId,
+  type PaymentIntent,
+  type PaymentIntentStore
+} from "@operon-labs/hedera-executor";
 import type { FirestoreDatabase } from "./pas-persistence";
 
 export type PaymentIntentStoreBackend = "firestore" | "memory";
@@ -165,27 +170,37 @@ class FirestorePaymentIntentStore implements PaymentIntentPersistenceStore {
 }
 
 function validatePaymentIntentIds(intent: PaymentIntent): void {
-  const caseId = intent.caseId?.trim();
-  const incentiveEvaluationId = intent.incentiveEvaluationId?.trim();
-  const canonicalId = incentiveEvaluationId || caseId;
+  assertCanonicalPaId(intent.umRequestId, "umRequestId");
+  assertMatchingCanonicalId(intent.caseId, intent.umRequestId, "caseId");
 
-  if (!canonicalId) {
-    return;
-  }
-
-  if (!canonicalId.startsWith("PA-")) {
-    throw new Error("PAYMENT_INTENT_ID_NOT_CANONICAL");
-  }
-
-  if (caseId && caseId !== canonicalId) {
-    throw new Error("PAYMENT_INTENT_ID_MISMATCH:caseId");
-  }
-
-  if (incentiveEvaluationId && incentiveEvaluationId !== canonicalId) {
+  const expectedEvaluationId = buildBusinessEvaluationId({
+    umRequestId: intent.umRequestId,
+    businessPolicyId: intent.businessPolicyId
+  });
+  if (intent.incentiveEvaluationId !== expectedEvaluationId) {
     throw new Error("PAYMENT_INTENT_ID_MISMATCH:incentiveEvaluationId");
   }
 
-  if (intent.id !== canonicalId) {
+  const expectedIntentId = buildPaymentIntentId({
+    umRequestId: intent.umRequestId,
+    caseId: intent.caseId,
+    incentiveEvaluationId: intent.incentiveEvaluationId,
+    businessPolicyId: intent.businessPolicyId,
+    paymentPolicyId: intent.paymentPolicyId
+  });
+  if (intent.id !== expectedIntentId) {
     throw new Error("PAYMENT_INTENT_ID_MISMATCH:id");
+  }
+}
+
+function assertCanonicalPaId(value: string, fieldName: string): void {
+  if (!value.startsWith("PA-")) {
+    throw new Error(`PAYMENT_INTENT_ID_NOT_CANONICAL:${fieldName}`);
+  }
+}
+
+function assertMatchingCanonicalId(value: string, expected: string, fieldName: string): void {
+  if (value !== expected) {
+    throw new Error(`PAYMENT_INTENT_ID_MISMATCH:${fieldName}`);
   }
 }

@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { executePolicyBoundPayment } from "@operon-labs/hedera-executor";
+import {
+  buildBusinessEvaluationId,
+  buildPaymentIntentId,
+  executePolicyBoundPayment,
+  type PaymentApprovalRequest
+} from "@operon-labs/hedera-executor";
 import {
   buildProviderDocumentationEvidence,
   createInMemoryUmPlatform,
@@ -11,19 +16,31 @@ import { createDelegateUmWorkflow, type DelegatePlanAuditRow } from "./delegate-
 import type { PersistedIncentiveWorklistRow, StoredPasSubmission, UmPasPersistenceStore } from "./pas-persistence";
 import { createInMemoryPolicyStore, defaultIncentivePolicies, type PolicyStore } from "./policy-store";
 
-vi.mock("@operon-labs/hedera-executor", () => ({
-  executePolicyBoundPayment: vi.fn(async (request: { auditId: string; currency: string }) => ({
-    status: "simulated",
-    network: "testnet",
-    transactionId: `testnet-${request.auditId}-${request.currency.toLowerCase()}`
-  }))
-}));
+vi.mock("@operon-labs/hedera-executor", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@operon-labs/hedera-executor")>();
+
+  return {
+    ...actual,
+    executePolicyBoundPayment: vi.fn()
+  };
+});
 
 const executePolicyBoundPaymentMock = vi.mocked(executePolicyBoundPayment);
 
 describe("delegate UM workflow", () => {
   beforeEach(() => {
-    executePolicyBoundPaymentMock.mockClear();
+    executePolicyBoundPaymentMock.mockReset();
+    executePolicyBoundPaymentMock.mockImplementation(async (request: PaymentApprovalRequest) => {
+      const paymentIntentId = buildPaymentIntentId(request);
+
+      return {
+        status: "simulated",
+        network: "testnet",
+        transactionId: `testnet-${request.auditId}-${request.currency.toLowerCase()}`,
+        runtime: "hedera-agent-kit-policy",
+        paymentIntentId
+      };
+    });
   });
 
   it("lists pharmacy benefit UMRequests in the delegate workqueue by request type and starts review", async () => {
@@ -106,6 +123,11 @@ describe("delegate UM workflow", () => {
       denialReasonCode: "NOT_MEDICALLY_NECESSARY"
     });
     const [row] = await workflow.listPlanRows();
+    const businessPolicyId = "delegate-um-sla-bonus-v1";
+    const businessEvaluationId = buildBusinessEvaluationId({
+      umRequestId: umRequest.id,
+      businessPolicyId
+    });
 
     expect(determined).toMatchObject({
       id: umRequest.id,
@@ -114,7 +136,7 @@ describe("delegate UM workflow", () => {
     });
     expect(row).toMatchObject({
       umRequestId: umRequest.id,
-      id: umRequest.id,
+      id: businessEvaluationId,
       outcomeStatus: "denied",
       incentiveStatus: "paid",
       paymentStatus: "auto_executed",
@@ -186,14 +208,21 @@ describe("delegate UM workflow", () => {
     );
     expect(executePolicyBoundPaymentMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        incentiveEvaluationId: umRequest.id,
+        umRequestId: umRequest.id,
         caseId: umRequest.id,
+        incentiveEvaluationId: businessEvaluationId,
+        businessPolicyId,
+        paymentPolicyId: umRequest.planId,
+        policyId: businessPolicyId,
         triggerEvent: "UM_REQUEST_DETERMINED",
         amount: 5,
-        walletId: "0.0.9049550"
+        walletId: "0.0.9049549"
       }),
       expect.any(Object)
     );
+    const paymentRequest = executePolicyBoundPaymentMock.mock.calls[0]![0]!;
+    expect(row.id).toBe(paymentRequest.incentiveEvaluationId);
+    expect(row.paymentIntentId).toBe(buildPaymentIntentId(paymentRequest));
   });
 
   it("loads persisted paid delegate rows after workflow re-instantiation", async () => {
@@ -560,6 +589,18 @@ describe("delegate UM workflow", () => {
 
 function buildPaidDelegateRow(request: UMRequest): DelegatePlanAuditRow {
   const determinedAt = new Date().toISOString();
+  const businessPolicyId = "delegate-um-sla-bonus-v1";
+  const businessEvaluationId = buildBusinessEvaluationId({
+    umRequestId: request.id,
+    businessPolicyId
+  });
+  const paymentIntentId = buildPaymentIntentId({
+    umRequestId: request.id,
+    caseId: request.id,
+    incentiveEvaluationId: businessEvaluationId,
+    businessPolicyId,
+    paymentPolicyId: request.planId
+  });
 
   return {
     evaluationType: "delegate_um_sla_bonus",
@@ -570,7 +611,7 @@ function buildPaidDelegateRow(request: UMRequest): DelegatePlanAuditRow {
       determinedAt
     },
     umRequestId: request.id,
-    id: request.id,
+    id: businessEvaluationId,
     planId: request.planId,
     planDisplay: request.planDisplay,
     delegateVendorId: requireTestDelegateVendorId(request),
@@ -591,7 +632,7 @@ function buildPaidDelegateRow(request: UMRequest): DelegatePlanAuditRow {
     settlementToken: { symbol: "HBAR" },
     reason: "Concurrent payment already settled",
     reasonCodes: [],
-    policyId: "delegate-um-sla-bonus-v1",
+    policyId: businessPolicyId,
     policyControls: [
       "Allowed delegate vendor wallet",
       "Request type limited to policy scope",
@@ -604,15 +645,15 @@ function buildPaidDelegateRow(request: UMRequest): DelegatePlanAuditRow {
     audit: {
       id: `audit-test-${request.id}`,
       requestHash: `hash-${request.id}`,
-      policyId: "delegate-um-sla-bonus-v1",
+      policyId: businessPolicyId,
       policyVersion: "v1",
       decision: "approved",
       reasonCodes: [],
       transactionId: `testnet-concurrent-${request.id}`,
       createdAt: new Date().toISOString()
     },
-    walletId: "0.0.9049550",
-    paymentIntentId: request.id,
+    walletId: "0.0.9049549",
+    paymentIntentId,
     transactionId: `testnet-concurrent-${request.id}`
   };
 }
@@ -683,8 +724,15 @@ class FakeDelegatePersistenceStore implements UmPasPersistenceStore {
     return [...this.rows.values()].map((row) => structuredClone(row) as unknown as PersistedIncentiveWorklistRow);
   }
 
-  async getIncentiveRow(umRequestId: string): Promise<PersistedIncentiveWorklistRow | null> {
+  async getIncentiveRow(
+    umRequestId: string,
+    businessPolicyId?: string
+  ): Promise<PersistedIncentiveWorklistRow | null> {
     const row = this.rows.get(umRequestId);
+    if (row && businessPolicyId && row.policyId !== businessPolicyId) {
+      return null;
+    }
+
     return row ? structuredClone(row) as unknown as PersistedIncentiveWorklistRow : null;
   }
 }

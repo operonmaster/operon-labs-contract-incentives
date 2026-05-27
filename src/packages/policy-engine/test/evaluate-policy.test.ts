@@ -89,7 +89,7 @@ const delegatePolicy: IncentivePolicy = {
   },
   settlement: {
     mode: "auto",
-    recipientWalletId: "0.0.9049550",
+    recipientWalletId: "0.0.9049549",
     requiresHumanApproval: false
   }
 };
@@ -353,13 +353,13 @@ describe("evaluatePolicy", () => {
       decision: "approved",
       amount: 5,
       currency: "HBAR",
-      walletId: "0.0.9049550",
+      walletId: "0.0.9049549",
       reasonCodes: []
     });
     expect(denied).toMatchObject({
       decision: "approved",
       amount: 5,
-      walletId: "0.0.9049550",
+      walletId: "0.0.9049549",
       reasonCodes: []
     });
   });
@@ -380,7 +380,7 @@ describe("evaluatePolicy", () => {
     expect(result).toMatchObject({
       decision: "approved",
       amount: 5,
-      walletId: "0.0.9049550",
+      walletId: "0.0.9049549",
       reasonCodes: []
     });
   });

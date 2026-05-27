@@ -1,3 +1,4 @@
+import { buildBusinessEvaluationId, buildPaymentIntentId } from "@operon-labs/hedera-executor";
 import { describe, expect, it } from "vitest";
 import type { FirestoreDatabase } from "./pas-persistence";
 import {
@@ -5,6 +6,11 @@ import {
   createPaymentPolicyEvidenceStoreFromEnv,
   type PaymentPolicyEvidence
 } from "./payment-policy-evidence-store";
+
+type HashedPaymentPolicyEvidence = PaymentPolicyEvidence & {
+  umRequestId: string;
+  paymentIntentId: string;
+};
 
 describe("payment policy evidence store", () => {
   it("uses Firestore by default for payment-policy audit evidence", () => {
@@ -15,7 +21,7 @@ describe("payment policy evidence store", () => {
     expect(createPaymentPolicyEvidenceStoreFromEnv({ PAYMENT_POLICY_EVIDENCE_STORE_BACKEND: "memory" })).toBeUndefined();
   });
 
-  it("stores payment-policy evidence by incentive evaluation id", async () => {
+  it("stores payment-policy evidence by payment intent id", async () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePaymentPolicyEvidenceStore(
       {
@@ -24,13 +30,7 @@ describe("payment policy evidence store", () => {
       },
       firestore
     );
-    const evidence: PaymentPolicyEvidence = {
-      incentiveEvaluationId: "PA-260525-1949-ML6LAWFP",
-      caseId: "PA-260525-1949-ML6LAWFP",
-      planId: "summit-health-hmo",
-      paymentPolicyId: "summit-health-hmo",
-      businessPolicyId: "plcy_9Q3S6V1X8Z2B5D7F0H4K",
-      runtime: "hedera-agent-kit-policy",
+    const evidence = buildPaymentPolicyEvidence({
       outcome: "blocked",
       failureCode: "HEDERA_PAYMENT_AMOUNT_EXCEEDS_PLAN_MAX",
       requestedPayment: {
@@ -53,16 +53,15 @@ describe("payment policy evidence store", () => {
           failureCode: "HEDERA_PAYMENT_AMOUNT_EXCEEDS_PLAN_MAX"
         }
       ],
-      paymentIntentId: "PA-260525-1949-ML6LAWFP",
-      transactionId: null,
-      createdAt: "2026-05-26T00:00:00.000Z",
-      updatedAt: "2026-05-26T00:00:00.000Z"
-    };
+      transactionId: null
+    });
 
     await store.saveEvidence(evidence);
 
-    await expect(store.getEvidence("PA-260525-1949-ML6LAWFP")).resolves.toEqual(evidence);
-    expect((await firestore.collection("paymentPolicyEvidences").get()).docs).toHaveLength(1);
+    await expect(store.getEvidence(evidence.paymentIntentId)).resolves.toEqual(evidence);
+    const docs = (await firestore.collection("paymentPolicyEvidences").get()).docs;
+    expect(docs).toHaveLength(1);
+    expect(docs[0]?.id).toBe(evidence.paymentIntentId);
   });
 
   it("removes undefined optional control fields before writing to Firestore", async () => {
@@ -74,12 +73,7 @@ describe("payment policy evidence store", () => {
       },
       firestore
     );
-    const evidence: PaymentPolicyEvidence = {
-      incentiveEvaluationId: "PA-260525-2022-9HTU2UDY",
-      caseId: "PA-260525-2022-9HTU2UDY",
-      planId: "summit-health-hmo",
-      paymentPolicyId: "summit-health-hmo",
-      businessPolicyId: "plcy_9Q3S6V1X8Z2B5D7F0H4K",
+    const evidence = buildPaymentPolicyEvidence({
       runtime: "hedera-agent-kit-policy",
       outcome: "blocked",
       failureCode: "HEDERA_PAYMENT_AMOUNT_EXCEEDS_PLAN_MAX",
@@ -96,15 +90,13 @@ describe("payment policy evidence store", () => {
           failureCode: undefined
         }
       ],
-      paymentIntentId: null,
       transactionId: null,
-      createdAt: "2026-05-26T00:00:00.000Z",
-      updatedAt: "2026-05-26T00:00:00.000Z"
-    };
+      createdAt: "2026-05-26T00:00:00.000Z"
+    });
 
     await store.saveEvidence(evidence);
 
-    const stored = await store.getEvidence("PA-260525-2022-9HTU2UDY");
+    const stored = await store.getEvidence(evidence.paymentIntentId);
     expect(stored?.controls[0]).toEqual({
       id: "businessEvaluationAttestation",
       label: "Business evaluation attestation",
@@ -112,7 +104,7 @@ describe("payment policy evidence store", () => {
     });
   });
 
-  it("rejects noncanonical payment-policy evidence ids", async () => {
+  it("rejects noncanonical payment-policy evidence ids and tuple mismatches", async () => {
     const store = createFirestorePaymentPolicyEvidenceStore(
       {
         projectId: "operon-labs-nonprod",
@@ -125,11 +117,9 @@ describe("payment policy evidence store", () => {
     await expect(
       store.saveEvidence({
         ...evidence,
-        incentiveEvaluationId: "UMR-260525-1949-ML6LAWFP",
-        caseId: "UMR-260525-1949-ML6LAWFP",
-        paymentIntentId: "UMR-260525-1949-ML6LAWFP"
+        umRequestId: "UMR-260525-1949-ML6LAWFP"
       })
-    ).rejects.toThrow("PAYMENT_POLICY_EVIDENCE_ID_NOT_CANONICAL:evidence.incentiveEvaluationId");
+    ).rejects.toThrow("PAYMENT_POLICY_EVIDENCE_ID_NOT_CANONICAL:evidence.umRequestId");
 
     await expect(
       store.saveEvidence({
@@ -141,19 +131,48 @@ describe("payment policy evidence store", () => {
     await expect(
       store.saveEvidence({
         ...evidence,
-        paymentIntentId: "pi_test"
+        incentiveEvaluationId: "ie_bad"
+      })
+    ).rejects.toThrow("PAYMENT_POLICY_EVIDENCE_ID_MISMATCH:evidence.incentiveEvaluationId");
+
+    await expect(
+      store.saveEvidence({
+        ...evidence,
+        paymentIntentId: "pi_bad"
       })
     ).rejects.toThrow("PAYMENT_POLICY_EVIDENCE_ID_MISMATCH:evidence.paymentIntentId");
+
+    await expect(
+      store.saveEvidence({
+        ...evidence,
+        paymentIntentId: null
+      } as unknown as PaymentPolicyEvidence)
+    ).rejects.toThrow("PAYMENT_POLICY_EVIDENCE_ID_REQUIRED:evidence.paymentIntentId");
   });
 });
 
-function buildPaymentPolicyEvidence(): PaymentPolicyEvidence {
+function buildPaymentPolicyEvidence(
+  overrides: Partial<HashedPaymentPolicyEvidence> = {}
+): HashedPaymentPolicyEvidence {
+  const umRequestId = "PA-260525-1949-ML6LAWFP";
+  const businessPolicyId = "plcy_9Q3S6V1X8Z2B5D7F0H4K";
+  const paymentPolicyId = "summit-health-hmo";
+  const incentiveEvaluationId = buildBusinessEvaluationId({ umRequestId, businessPolicyId });
+  const paymentIntentId = buildPaymentIntentId({
+    umRequestId,
+    caseId: umRequestId,
+    incentiveEvaluationId,
+    businessPolicyId,
+    paymentPolicyId
+  });
+
   return {
-    incentiveEvaluationId: "PA-260525-1949-ML6LAWFP",
-    caseId: "PA-260525-1949-ML6LAWFP",
-    planId: "summit-health-hmo",
-    paymentPolicyId: "summit-health-hmo",
-    businessPolicyId: "plcy_9Q3S6V1X8Z2B5D7F0H4K",
+    incentiveEvaluationId,
+    umRequestId,
+    caseId: umRequestId,
+    planId: paymentPolicyId,
+    paymentPolicyId,
+    businessPolicyId,
     runtime: "hedera-agent-kit-policy",
     outcome: "paid",
     failureCode: null,
@@ -169,10 +188,11 @@ function buildPaymentPolicyEvidence(): PaymentPolicyEvidence {
         status: "passed"
       }
     ],
-    paymentIntentId: "PA-260525-1949-ML6LAWFP",
+    paymentIntentId,
     transactionId: "0.0.6870566@1779686274.765050870",
     createdAt: "2026-05-26T00:00:00.000Z",
-    updatedAt: "2026-05-26T00:00:00.000Z"
+    updatedAt: "2026-05-26T00:00:00.000Z",
+    ...overrides
   };
 }
 

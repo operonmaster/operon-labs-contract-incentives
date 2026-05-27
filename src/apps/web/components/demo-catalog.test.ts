@@ -23,6 +23,13 @@ describe("demo catalog", () => {
     expect(styles).toMatch(/\.card > em \{[^}]*color: var\(--op-amber-2\);/);
   });
 
+  it("labels the homepage for the Hedera AI Agent Bounty Campaign", () => {
+    const homePage = readFileSync(path.join(process.cwd(), "src/apps/web/app/page.tsx"), "utf8");
+
+    expect(homePage).toContain('meta="Hedera AI Agent Bounty Campaign"');
+    expect(homePage).not.toMatch(/hackat(h)?on/i);
+  });
+
   it("keeps Firestore-backed demo policy pages dynamically rendered", () => {
     for (const route of ["delegate-um", "appeals", "provider-directory"]) {
       const source = readFileSync(path.join(process.cwd(), "src/apps/web/app", route, "page.tsx"), "utf8");

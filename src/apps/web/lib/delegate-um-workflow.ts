@@ -1,5 +1,10 @@
 import { createAuditRecord, type AuditRecord } from "@operon-labs/audit-log";
-import { executePolicyBoundPayment, type PaymentIntentStore } from "@operon-labs/hedera-executor";
+import {
+  buildBusinessEvaluationId,
+  executePolicyBoundPayment,
+  type PaymentApprovalRequest,
+  type PaymentIntentStore
+} from "@operon-labs/hedera-executor";
 import { evaluateDelegateUmSlaEvent, type DelegateUmSlaEvidence } from "@operon-labs/incentive-agent";
 import type { Currency, SettlementToken } from "@operon-labs/policy-engine";
 import {
@@ -96,7 +101,7 @@ export function createDelegateUmWorkflow(
     umRequestId: string,
     request?: UMRequest | null
   ): Promise<DelegatePlanAuditRow | null> {
-    return rows.get(umRequestId) ?? normalizePersistedDelegateRow(await persistence?.getIncentiveRow(umRequestId), request ?? undefined);
+    return rows.get(umRequestId) ?? (await getPersistedDelegateRow(persistence, umRequestId, request ?? undefined));
   }
 
   return {
@@ -349,9 +354,14 @@ async function settleDetermination(
       result,
       transactionId: null
     });
+    const businessEvaluationId = buildBusinessEvaluationId({
+      umRequestId: request.id,
+      businessPolicyId: result.policyId
+    });
 
     return {
       ...buildPendingRow(request),
+      id: businessEvaluationId,
       slaStatus: buildDeterminedSlaStatus(request),
       incentiveStatus: "not_eligible",
       paymentStatus: "blocked_by_policy",
@@ -385,8 +395,14 @@ async function settleDetermination(
     result: evaluation.result,
     transactionId: null
   });
+  const businessPolicyId = evaluation.result.policyId;
+  const businessEvaluationId = buildBusinessEvaluationId({
+    umRequestId: request.id,
+    businessPolicyId
+  });
   const baseRow: DelegatePlanAuditRow = {
     ...buildPendingRow(request),
+    id: businessEvaluationId,
     slaStatus: buildDeterminedSlaStatus(request),
     incentiveStatus: evaluation.result.decision === "approved" ? "paid" : "not_eligible",
     paymentStatus: evaluation.result.decision === "approved" ? "auto_executed" : "blocked_by_policy",
@@ -395,7 +411,7 @@ async function settleDetermination(
     settlementToken: evaluation.result.settlementToken,
     reason: summarizeDelegateReason(evaluation.result.reasonCodes),
     reasonCodes: evaluation.result.reasonCodes,
-    policyId: evaluation.result.policyId,
+    policyId: businessPolicyId,
     policyControls: buildDelegatePolicyControls(),
     policyCriteria: buildDelegatePolicyCriteria(evaluation),
     audit,
@@ -414,36 +430,43 @@ async function settleDetermination(
       throw new Error("HEDERA_PLAN_POLICY_NOT_FOUND");
     }
 
+    const paymentRequest = {
+      auditId: audit.id,
+      umRequestId: request.id,
+      caseId: request.id,
+      incentiveEvaluationId: businessEvaluationId,
+      planId: evidence.planId,
+      paymentPolicyId: paymentPolicy.planId,
+      amount: evaluation.result.amount,
+      currency: evaluation.result.currency,
+      walletId: evaluation.result.walletId,
+      policyId: businessPolicyId,
+      businessPolicyId,
+      policyVersion: evaluation.result.policyVersion,
+      triggerEvent: "UM_REQUEST_DETERMINED",
+      policyControls: buildDelegatePolicyControls()
+    } satisfies PaymentApprovalRequest;
+
     const payment = await executePolicyBoundPayment(
-      {
-        auditId: audit.id,
-        incentiveEvaluationId: request.id,
-        planId: evidence.planId,
-        amount: evaluation.result.amount,
-        currency: evaluation.result.currency,
-        walletId: evaluation.result.walletId,
-        policyId: evaluation.result.policyId,
-        policyVersion: evaluation.result.policyVersion,
-        caseId: request.id,
-        triggerEvent: "UM_REQUEST_DETERMINED",
-        policyControls: buildDelegatePolicyControls()
-      },
+      paymentRequest,
       {
         paymentIntentStore: dependencies.paymentIntentStore,
         planPolicy: paymentPolicy,
         businessEvaluationStore: createBusinessEvaluationAttestationStore(
           {
-            async getIncentiveRow(incentiveEvaluationId) {
-              const row = dependencies.rows.get(incentiveEvaluationId);
+            async getIncentiveRow(lookupUmRequestId, lookupBusinessPolicyId) {
+              const row = dependencies.rows.get(lookupUmRequestId);
 
-              return row
-                ? {
-                    ...row,
-                    caseId: row.umRequestId,
-                    policyId: row.policyId ?? "",
-                    audit: row.audit ?? audit
-                  }
-                : null;
+              if (!row || (lookupBusinessPolicyId && row.policyId !== lookupBusinessPolicyId)) {
+                return null;
+              }
+
+              return {
+                ...row,
+                caseId: row.umRequestId,
+                policyId: row.policyId ?? "",
+                audit: row.audit ?? audit
+              };
             }
           },
           dependencies.policyStore
@@ -461,7 +484,12 @@ async function settleDetermination(
       }
     };
   } catch {
-    const paidRow = normalizePersistedDelegateRow(await dependencies.persistence?.getIncentiveRow(request.id), request);
+    const paidRow = await getPersistedDelegateRow(
+      dependencies.persistence,
+      request.id,
+      request,
+      businessPolicyId
+    );
     if (paidRow && isImmutablePaidDelegateRow(paidRow)) {
       return paidRow;
     }
@@ -491,6 +519,32 @@ async function loadPersistedDelegateRows(
       rows.set(row.umRequestId, row);
     }
   }
+}
+
+async function getPersistedDelegateRow(
+  persistence: UmPasPersistenceStore | undefined,
+  umRequestId: string,
+  request?: UMRequest,
+  businessPolicyId?: string
+): Promise<DelegatePlanAuditRow | null> {
+  if (!persistence) {
+    return null;
+  }
+
+  if (businessPolicyId) {
+    return normalizePersistedDelegateRow(
+      await persistence.getIncentiveRow(umRequestId, businessPolicyId),
+      request
+    );
+  }
+
+  const persistedRows = await persistence.listIncentiveRows();
+  const persistedRow = persistedRows.find((row) => (
+    row.umRequestId === umRequestId &&
+    (row as { evaluationType?: string }).evaluationType === "delegate_um_sla_bonus"
+  ));
+
+  return normalizePersistedDelegateRow(persistedRow, request);
 }
 
 async function saveDelegateRow(
@@ -579,7 +633,7 @@ function withUmRequest(row: DelegatePlanAuditRow, request: UMRequest): DelegateP
     ...row,
     umRequest: request,
     umRequestId: request.id,
-    id: request.id,
+    id: row.id,
     planId: request.planId,
     planDisplay: request.planDisplay,
     delegateVendorId: requireDelegateVendorId(request),
