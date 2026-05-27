@@ -72,6 +72,7 @@ const DEFAULT_PAS_STORE_BACKEND = "firestore";
 const DEFAULT_GCP_PROJECT_ID = "operon-labs-nonprod";
 const DEFAULT_FIRESTORE_DATABASE_ID = "(default)";
 const PAS_CLAIMS_COLLECTION = "pasClaims";
+const UM_REQUESTS_COLLECTION = "umRequests";
 const AUDIT_EVENTS_COLLECTION = "auditEvents";
 const INCENTIVE_EVALUATIONS_COLLECTION = "incentiveEvaluations";
 
@@ -113,13 +114,20 @@ export interface FirestoreDatabase {
 }
 /* eslint-enable no-unused-vars */
 
-interface StoredPasClaimDocument {
+interface StoredPasClaimDocument extends Partial<PasFhirBundle> {
   umRequest?: UMRequest;
   record?: UMRequest;
-  evidence: ProviderDocumentationEvidence;
-  fhirBundle: PasFhirBundle;
+  evidence?: ProviderDocumentationEvidence;
+  fhirBundle?: PasFhirBundle;
   storedAt?: string;
 }
+
+type StoredUmRequestDocument = UMRequest & {
+  umRequest?: UMRequest;
+  record?: UMRequest;
+  storedAt?: string;
+  updatedAt?: string;
+};
 
 export function createPasPersistenceStoreFromEnv(env: PasPersistenceEnv = process.env): UmPasPersistenceStore | undefined {
   const backend = env.PAS_STORE_BACKEND?.trim().toLowerCase() || DEFAULT_PAS_STORE_BACKEND;
@@ -174,12 +182,9 @@ class FirestorePasPersistenceStore implements UmPasPersistenceStore {
 
     const firestore = await this.getFirestore();
     const claimRef = firestore.collection(PAS_CLAIMS_COLLECTION).doc(request.umRequest.id);
-    const claimValue = {
-      umRequest: request.umRequest,
-      evidence: buildStoredEvidence(request.evidence, request.umRequest),
-      fhirBundle: request.fhirBundle,
-      storedAt
-    };
+    const umRequestRef = firestore.collection(UM_REQUESTS_COLLECTION).doc(request.umRequest.id);
+    const claimValue = request.fhirBundle;
+    const umRequestValue = request.umRequest;
     const eventValues = events.map((event) => ({
       ...event,
       submittedAt: request.umRequest.submittedAt,
@@ -187,7 +192,7 @@ class FirestorePasPersistenceStore implements UmPasPersistenceStore {
     }));
 
     if (firestore.batch) {
-      let batch = firestore.batch().set(claimRef, claimValue);
+      let batch = firestore.batch().set(claimRef, claimValue).set(umRequestRef, umRequestValue);
       for (const eventValue of eventValues) {
         const eventRef = firestore.collection(AUDIT_EVENTS_COLLECTION).doc(
           `${request.umRequest.id}-${eventValue.eventType}`
@@ -201,6 +206,7 @@ class FirestorePasPersistenceStore implements UmPasPersistenceStore {
 
     await Promise.all([
       claimRef.set(claimValue),
+      umRequestRef.set(umRequestValue),
       ...eventValues.map((eventValue) =>
         firestore
           .collection(AUDIT_EVENTS_COLLECTION)
@@ -214,36 +220,65 @@ class FirestorePasPersistenceStore implements UmPasPersistenceStore {
     validateUmRequestIds(umRequest);
 
     const firestore = await this.getFirestore();
-    const ref = firestore.collection(PAS_CLAIMS_COLLECTION).doc(umRequest.id);
-    const snapshot = await ref.get();
+    const existing = await this.getUmRequest(umRequest.id);
 
-    if (!snapshot.exists) {
+    if (!existing) {
       throw new Error(`UM_REQUEST_NOT_FOUND:${umRequest.id}`);
     }
 
-    await ref.set({
-      ...(snapshot.data() as Record<string, unknown>),
-      umRequest,
-      storedAt: new Date().toISOString()
-    });
+    await firestore.collection(UM_REQUESTS_COLLECTION).doc(umRequest.id).set(umRequest);
   }
 
   async listUmRequests(): Promise<UMRequest[]> {
     const firestore = await this.getFirestore();
-    const snapshot = await firestore.collection(PAS_CLAIMS_COLLECTION).get();
-    return snapshot.docs
-      .map((doc) => extractStoredUmRequest(doc.data() as StoredPasClaimDocument, doc.id))
-      .filter((umRequest): umRequest is UMRequest => Boolean(umRequest))
+    const nativeSnapshot = await firestore.collection(UM_REQUESTS_COLLECTION).get();
+    const requestsById = new Map<string, UMRequest>();
+
+    for (const doc of nativeSnapshot.docs) {
+      const umRequest = extractStoredNativeUmRequest(doc.data() as StoredUmRequestDocument, doc.id);
+      if (umRequest) {
+        requestsById.set(umRequest.id, umRequest);
+      }
+    }
+
+    const legacySnapshot = await firestore.collection(PAS_CLAIMS_COLLECTION).get();
+    for (const doc of legacySnapshot.docs) {
+      const legacyUmRequest = extractStoredUmRequest(doc.data() as StoredPasClaimDocument, doc.id);
+      if (legacyUmRequest && !requestsById.has(legacyUmRequest.id)) {
+        await this.saveMigratedNativeUmRequest(legacyUmRequest);
+        requestsById.set(legacyUmRequest.id, legacyUmRequest);
+      }
+    }
+
+    return [...requestsById.values()]
       .sort((left, right) => right.submittedAt.localeCompare(left.submittedAt));
   }
 
   async getUmRequest(umRequestId: string): Promise<UMRequest | null> {
-    const data = await this.getStoredPasSubmissionDataByUmRequestId(umRequestId);
+    const nativeUmRequest = await this.getStoredNativeUmRequestById(umRequestId);
+    if (nativeUmRequest) {
+      return nativeUmRequest;
+    }
 
-    return data ? extractStoredUmRequest(data, umRequestId) : null;
+    const data = await this.getStoredPasSubmissionDataByUmRequestId(umRequestId);
+    if (!data) {
+      return null;
+    }
+
+    const legacyUmRequest = extractStoredUmRequest(data, umRequestId);
+    if (legacyUmRequest) {
+      await this.saveMigratedNativeUmRequest(legacyUmRequest);
+    }
+
+    return legacyUmRequest;
   }
 
   async getEvidence(umRequestId: string): Promise<ProviderDocumentationEvidence | null> {
+    const nativeUmRequest = await this.getUmRequest(umRequestId);
+    if (nativeUmRequest) {
+      return canonicalizeStoredEvidence(buildProviderDocumentationEvidence(nativeUmRequest), nativeUmRequest.id);
+    }
+
     const data = await this.getStoredPasSubmissionDataByUmRequestId(umRequestId);
 
     if (!data) {
@@ -255,7 +290,7 @@ class FirestorePasPersistenceStore implements UmPasPersistenceStore {
       return canonicalizeStoredEvidence(buildProviderDocumentationEvidence(umRequest), umRequest.id);
     }
 
-    return canonicalizeStoredEvidence(data.evidence, umRequestId);
+    return data.evidence ? canonicalizeStoredEvidence(data.evidence, umRequestId) : null;
   }
 
   async listUmEvents(): Promise<UMPlatformEvent[]> {
@@ -297,6 +332,22 @@ class FirestorePasPersistenceStore implements UmPasPersistenceStore {
     }
 
     return null;
+  }
+
+  private async getStoredNativeUmRequestById(umRequestId: string): Promise<UMRequest | null> {
+    const firestore = await this.getFirestore();
+    const snapshot = await firestore.collection(UM_REQUESTS_COLLECTION).doc(umRequestId).get();
+
+    if (snapshot.exists) {
+      return extractStoredNativeUmRequest(snapshot.data() as StoredUmRequestDocument, umRequestId);
+    }
+
+    return null;
+  }
+
+  private async saveMigratedNativeUmRequest(umRequest: UMRequest): Promise<void> {
+    const firestore = await this.getFirestore();
+    await firestore.collection(UM_REQUESTS_COLLECTION).doc(umRequest.id).set(umRequest);
   }
 
   async saveIncentiveRow(row: PersistedIncentiveWorklistRow): Promise<void> {
@@ -449,23 +500,29 @@ function getCanonicalPaIdentifierSystemName(system: string): "prior-auth-case-id
   return system.endsWith("/prior-auth-case-id") ? "prior-auth-case-id" : "um-request-id";
 }
 
-function buildStoredEvidence(
-  evidence: ProviderDocumentationEvidence,
-  umRequest: UMRequest
-): StoredProviderDocumentationEvidence {
-  return {
-    ...evidence,
-    id: umRequest.id,
-    caseId: umRequest.id,
-    umRequestId: umRequest.id,
-    sourceCaseId: umRequest.id
-  };
-}
-
 function extractStoredUmRequest(data: StoredPasClaimDocument, fallbackCanonicalId: string | undefined): UMRequest | null {
   const umRequest = data.umRequest ?? data.record ?? null;
 
   return umRequest ? canonicalizeStoredUmRequest(umRequest, fallbackCanonicalId) : null;
+}
+
+function extractStoredNativeUmRequest(
+  data: StoredUmRequestDocument,
+  fallbackCanonicalId: string | undefined
+): UMRequest | null {
+  const candidate = data.umRequest ?? data.record ?? data;
+
+  return isStoredUmRequest(candidate) ? canonicalizeStoredUmRequest(candidate, fallbackCanonicalId) : null;
+}
+
+function isStoredUmRequest(candidate: unknown): candidate is UMRequest {
+  return (
+    Boolean(candidate) &&
+    typeof candidate === "object" &&
+    typeof (candidate as UMRequest).id === "string" &&
+    typeof (candidate as UMRequest).submittedAt === "string" &&
+    typeof (candidate as UMRequest).state === "string"
+  );
 }
 
 function canonicalizeStoredUmRequest(umRequest: UMRequest, fallbackCanonicalId: string | undefined): UMRequest {

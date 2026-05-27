@@ -7,7 +7,12 @@ import {
   type FirestoreDatabase,
   type FirestoreDocumentReference
 } from "./pas-persistence";
-import { createInMemoryUmPlatform, buildPasFhirBundle, type UMRequest } from "@operon-labs/um-platform";
+import {
+  createInMemoryUmPlatform,
+  buildPasFhirBundle,
+  startClinicalReviewForRequest,
+  type UMRequest
+} from "@operon-labs/um-platform";
 
 describe("PAS persistence store selection", () => {
   it("uses Firestore in operon-labs-nonprod when no PAS store backend is configured", () => {
@@ -101,18 +106,23 @@ describe("PAS persistence store selection", () => {
       transactionId: "testnet-1"
     });
 
-    const snapshot = await firestore.collection("pasClaims").doc(umRequest.id).get();
-    expect(snapshot.data()).toMatchObject({
-      umRequest: {
-        id: umRequest.id
-      },
-      evidence: {
-        id: umRequest.id,
-        umRequestId: umRequest.id
-      },
-      fhirBundle: {
-        id: umRequest.id
-      }
+    const pasClaimSnapshot = await firestore.collection("pasClaims").doc(umRequest.id).get();
+    expect(pasClaimSnapshot.data()).toMatchObject({
+      resourceType: "Bundle",
+      id: umRequest.id,
+      entry: expect.any(Array)
+    });
+    expect(pasClaimSnapshot.data()).not.toHaveProperty("umRequest");
+    expect(pasClaimSnapshot.data()).not.toHaveProperty("record");
+    expect(pasClaimSnapshot.data()).not.toHaveProperty("evidence");
+    const nativeUmRequestSnapshot = await firestore.collection("umRequests").doc(umRequest.id).get();
+    expect(nativeUmRequestSnapshot.exists).toBe(true);
+    expect(nativeUmRequestSnapshot.data()).toMatchObject({
+      id: umRequest.id,
+      caseId: umRequest.id,
+      sourceCaseId: umRequest.id,
+      state: "pend",
+      outcomeStatus: null
     });
     await expect(store.getUmRequest(umRequest.id)).resolves.toMatchObject({
       id: umRequest.id
@@ -142,9 +152,52 @@ describe("PAS persistence store selection", () => {
       })
     ]);
     expect(firestore.collectionNames()).toEqual(
-      expect.arrayContaining(["pasClaims", "auditEvents", "incentiveEvaluations"])
+      expect.arrayContaining(["pasClaims", "umRequests", "auditEvents", "incentiveEvaluations"])
     );
     expect(firestore.collectionNames()).not.toEqual(expect.arrayContaining(["pasRequests", "pasEvents"]));
+  });
+
+  it("updates workflow state in umRequests without mutating the submitted PAS FHIR claim", async () => {
+    const firestore = createFakeFirestore();
+    const store = createFirestorePasPersistenceStore(
+      {
+        projectId: "operon-labs-nonprod",
+        databaseId: "(default)"
+      },
+      firestore
+    );
+    const platform = createInMemoryUmPlatform();
+    const umRequest = platform.submitPriorAuth({
+      requestType: "pharmacy_benefit",
+      serviceCode: "wegovy_semaglutide"
+    });
+    const evidence = platform.getEvidence(umRequest.id)!;
+
+    await store.savePasSubmission({
+      umRequest,
+      evidence,
+      fhirBundle: buildPasFhirBundle(umRequest, evidence)
+    });
+
+    const submittedPasClaim = (await firestore.collection("pasClaims").doc(umRequest.id).get()).data();
+    const inReview = startClinicalReviewForRequest(umRequest, "reviewer-ana");
+
+    await store.saveUmRequest(inReview);
+
+    expect((await firestore.collection("pasClaims").doc(umRequest.id).get()).data()).toEqual(submittedPasClaim);
+    expect((await firestore.collection("umRequests").doc(umRequest.id).get()).data()).toMatchObject({
+      id: umRequest.id,
+      state: "in_clinical_review",
+      reviewStartedAt: inReview.reviewStartedAt,
+      clinicalReview: expect.objectContaining({
+        reviewerId: "reviewer-ana"
+      })
+    });
+    await expect(store.getUmRequest(umRequest.id)).resolves.toMatchObject({
+      id: umRequest.id,
+      state: "in_clinical_review",
+      reviewStartedAt: inReview.reviewStartedAt
+    });
   });
 
   it("saves the PAS Claim and submitted event in one Firestore batch", async () => {
@@ -232,6 +285,11 @@ describe("PAS persistence store selection", () => {
         sourceCaseId: umRequest.id
       })
     ]);
+    expect((await firestore.collection("umRequests").doc(umRequest.id).get()).data()).toMatchObject({
+      id: umRequest.id,
+      caseId: umRequest.id,
+      sourceCaseId: umRequest.id
+    });
     await expect(store.getEvidence(umRequest.id)).resolves.toMatchObject({
       caseId: umRequest.id,
       umRequestId: umRequest.id,
