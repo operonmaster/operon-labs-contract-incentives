@@ -290,8 +290,7 @@ function buildDelegateUmSlaBonusDetailSections(policy: IncentivePolicy, token: s
         "Outcome status is present: Yes",
         `Outcome value affects payment: ${formatBoolean(!policy.eligibilityCriteria.prohibitsOutcomeBasedPayment)}`,
         `Clinical review checklist complete: ${formatBoolean(Boolean(policy.eligibilityCriteria.requiresClinicalReviewCompletion))}`,
-        `Completed within SLA: ${delegateUmSlaHours} hours`,
-        "PHI in payment metadata: No"
+        `Completed within SLA: ${delegateUmSlaHours} hours`
       ]
     },
     {

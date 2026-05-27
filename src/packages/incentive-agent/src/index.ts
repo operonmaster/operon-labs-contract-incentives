@@ -36,7 +36,6 @@ export interface DelegateUmSlaEvidence {
   policyCriteriaChecked: boolean;
   rationaleCaptured: boolean;
   auditReady: boolean;
-  containsPhi: false;
 }
 
 export interface DelegateUmSlaEvaluationDependencies {
@@ -173,8 +172,7 @@ export function evaluateDelegateUmSlaEvent(
       medicalNecessityReviewed: evidence.medicalNecessityReviewed,
       policyCriteriaChecked: evidence.policyCriteriaChecked,
       rationaleCaptured: evidence.rationaleCaptured,
-      auditReady: evidence.auditReady,
-      containsPhi: evidence.containsPhi
+      auditReady: evidence.auditReady
     }
   };
 
@@ -250,8 +248,7 @@ const demoRequests: Record<string, EvaluationRequest> = {
       medicalNecessityReviewed: true,
       policyCriteriaChecked: true,
       rationaleCaptured: true,
-      auditReady: true,
-      containsPhi: false
+      auditReady: true
     }
   },
   provider_documentation_completeness: {

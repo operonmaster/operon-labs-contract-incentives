@@ -114,8 +114,7 @@ const approvedDelegateRequest: EvaluationRequest = {
     medicalNecessityReviewed: true,
     policyCriteriaChecked: true,
     rationaleCaptured: true,
-    auditReady: true,
-    containsPhi: false
+    auditReady: true
   }
 };
 
@@ -358,6 +357,27 @@ describe("evaluatePolicy", () => {
       reasonCodes: []
     });
     expect(denied).toMatchObject({
+      decision: "approved",
+      amount: 5,
+      walletId: "0.0.9049550",
+      reasonCodes: []
+    });
+  });
+
+  it("does not block delegate UM SLA bonus policies based on UM request PHI markers", () => {
+    const result = evaluatePolicy({
+      policy: delegatePolicy,
+      request: {
+        ...approvedDelegateRequest,
+        requestObject: {
+          ...approvedDelegateRequest.requestObject,
+          containsPhi: true
+        }
+      },
+      monthToDateAmount: 0
+    });
+
+    expect(result).toMatchObject({
       decision: "approved",
       amount: 5,
       walletId: "0.0.9049550",

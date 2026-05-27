@@ -172,10 +172,10 @@ describe("policy view model", () => {
         "Outcome value affects payment: No",
         "Clinical review checklist complete: Yes",
         "Completed within SLA: 24 hours",
-        "PHI in payment metadata: No",
         "Eligible request types: Pharmacy Benefit (pharmacy_benefit)"
       ])
     );
+    expect(pharmacyCard.detailSections.flatMap((section) => section.items)).not.toContain("PHI in payment metadata: No");
     const outpatientCard = cards.find((card) => card.id === "delegate-um-acme-outpatient-sla-bonus-v1")!;
     expect(outpatientCard.detailSections.flatMap((section) => section.items)).toContain("Eligible request types: Outpatient Service (outpatient_service)");
   });

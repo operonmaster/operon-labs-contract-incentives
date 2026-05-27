@@ -6,7 +6,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import type { DelegateUmRow } from "../../lib/delegate-um-workflow";
+import type { UMRequest } from "@operon-labs/um-platform";
 import { DelegateReviewModal } from "./DelegateReviewModal";
 
 describe("DelegateVendorConsole source", () => {
@@ -25,7 +25,7 @@ describe("DelegateVendorConsole source", () => {
     expect(modalSource).toContain('document.addEventListener("keydown", handleKeyDown)');
     expect(modalSource).toContain('document.removeEventListener("keydown", handleKeyDown)');
     expect(modalSource).toContain("useState(false)");
-    expect(modalSource).toContain("row.outcomeStatus ?? null");
+    expect(modalSource).toContain("request.outcomeStatus ?? null");
     expect(modalSource).toContain("const canChooseOutcome = checklistComplete");
     expect(modalSource).toContain("const canSubmit = canChooseOutcome && outcomeStatus !== null && !submitting");
     expect(modalSource).toContain("disabled={!canChooseOutcome}");
@@ -51,7 +51,7 @@ describe("DelegateVendorConsole source", () => {
     const markup = renderToStaticMarkup(
       createElement(DelegateReviewModal, {
         requestApiBase: "/api/delegate-um/requests/",
-        row: buildDelegateRow("in_clinical_review", "approved"),
+        request: buildDelegateRequest("in_clinical_review", "approved"),
         onClose: () => undefined,
         onCompleted: () => undefined
       })
@@ -71,11 +71,57 @@ describe("DelegateVendorConsole source", () => {
     expect(markup).not.toContain("<select");
   });
 
+  it("renders service details and the submitted assessment in the review modal", () => {
+    const markup = renderToStaticMarkup(
+      createElement(DelegateReviewModal, {
+        requestApiBase: "/api/delegate-um/requests/",
+        request: buildDelegateRequest("in_clinical_review", null, "complete"),
+        onClose: () => undefined,
+        onCompleted: () => undefined
+      })
+    );
+
+    expect(markup).toContain("Service details");
+    expect(markup).toContain("Patient");
+    expect(markup).toContain("Maya Chen");
+    expect(markup).toContain("Health plan");
+    expect(markup).toContain("Acme Health PPO");
+    expect(markup).toContain("SLA");
+    expect(markup).toMatch(/PA-260526-0900-REVIEW1[\s\S]*op-badge[\s\S]*In clinical review/);
+    expect(markup).not.toContain("Requested item");
+    expect(markup).not.toContain("<dt>Status</dt>");
+    expect(markup).toContain("Request type");
+    expect(markup).toContain("Medication code");
+    expect(markup).toContain("NDC 0169-4525-14");
+    expect(markup).toContain("Coverage confirmed; PA required");
+    expect(markup).not.toContain("Required documentation");
+    expect(markup).not.toContain("diagnosis and indication");
+    expect(markup).not.toContain("<dt>Assessment</dt>");
+    expect(markup).toContain("View assessment");
+    expect(markup).toContain("Is prior therapy, contraindication, or step-therapy history documented when required?");
+    expect(markup).toContain("Yes");
+    expect(markup).toContain("No");
+  });
+
+  it("states explicitly when assessment data was not provided", () => {
+    const markup = renderToStaticMarkup(
+      createElement(DelegateReviewModal, {
+        requestApiBase: "/api/delegate-um/requests/",
+        request: buildDelegateRequest("in_clinical_review", null, "not_provided"),
+        onClose: () => undefined,
+        onCompleted: () => undefined
+      })
+    );
+
+    expect(markup).toContain("Assessment not provided");
+    expect(markup).not.toContain("View assessment");
+  });
+
   it("locks outcome selection until clinical checklist is complete", () => {
     const markup = renderToStaticMarkup(
       createElement(DelegateReviewModal, {
         requestApiBase: "/api/delegate-um/requests/",
-        row: buildDelegateRow("in_clinical_review"),
+        request: buildDelegateRequest("in_clinical_review"),
         onClose: () => undefined,
         onCompleted: () => undefined
       })
@@ -101,7 +147,7 @@ describe("DelegateVendorConsole source", () => {
         root?.render(
           createElement(DelegateReviewModal, {
             requestApiBase: "/api/delegate-um/requests/",
-            row: buildDelegateRow("in_clinical_review"),
+            request: buildDelegateRequest("in_clinical_review"),
             onClose: () => undefined,
             onCompleted: () => undefined
           })
@@ -150,7 +196,7 @@ describe("DelegateVendorConsole source", () => {
         root?.render(
           createElement(DelegateReviewModal, {
             requestApiBase: "/api/delegate-um/requests/",
-            row: buildDelegateRow("pend"),
+            request: buildDelegateRequest("pend"),
             onClose: () => undefined,
             onCompleted: () => undefined
           })
@@ -192,7 +238,7 @@ describe("DelegateVendorConsole source", () => {
       }
 
       if (target.includes("/determination")) {
-        return new Response(JSON.stringify(buildDelegateRow("determined", "approved")), { status: 200 });
+        return new Response(JSON.stringify(buildDelegateRequest("determined", "approved")), { status: 200 });
       }
 
       return new Response(JSON.stringify({ error: "unexpected" }), { status: 404 });
@@ -205,7 +251,7 @@ describe("DelegateVendorConsole source", () => {
         root?.render(
           createElement(DelegateReviewModal, {
             requestApiBase: "/api/delegate-um/requests/",
-            row: buildDelegateRow("pend"),
+            request: buildDelegateRequest("pend"),
             onClose: () => undefined,
             onCompleted
           })
@@ -246,7 +292,7 @@ describe("DelegateVendorConsole source", () => {
     const markup = renderToStaticMarkup(
       createElement(DelegateReviewModal, {
         requestApiBase: "/api/delegate-um/requests/",
-        row: buildDelegateRow("in_clinical_review", "denied"),
+        request: buildDelegateRequest("in_clinical_review", "denied"),
         onClose: () => undefined,
         onCompleted: () => undefined
       })
@@ -260,38 +306,90 @@ describe("DelegateVendorConsole source", () => {
   });
 });
 
-function buildDelegateRow(
-  state: DelegateUmRow["state"] = "pend",
-  outcomeStatus: DelegateUmRow["outcomeStatus"] = null
-): DelegateUmRow {
+function buildDelegateRequest(
+  state: UMRequest["state"] = "pend",
+  outcomeStatus: UMRequest["outcomeStatus"] = null,
+  assessmentStatus: "complete" | "not_provided" = "not_provided"
+): UMRequest {
+  const assessmentProvided = assessmentStatus === "complete";
+
   return {
-    evaluationType: "delegate_um_sla_bonus",
-    umRequestId: "PA-260526-0900-REVIEW1",
     id: "PA-260526-0900-REVIEW1",
+    source: "pas_fhir",
+    sourceCaseId: "PA-260526-0900-REVIEW1",
+    caseId: "PA-260526-0900-REVIEW1",
+    patientId: "patient-maya-chen",
+    patientDisplay: "Maya Chen",
     planId: "acme-health-ppo",
     planDisplay: "Acme Health PPO",
+    providerId: "lakeside-provider-admin",
+    providerDisplay: "Lakeside Provider Admin",
+    providerGroupId: "lakeside-provider-admin",
+    providerGroupDisplay: "Lakeside Provider Admin",
     delegateVendorId: "northstar-um",
     requestType: "pharmacy_benefit",
+    serviceCode: "wegovy_semaglutide",
     serviceLabel: "Wegovy (semaglutide) injection",
+    codingSystem: "NDC",
+    billingCode: "0169-4525-14",
     submittedAt: "2026-05-26T09:00:00.000Z",
     pendStartedAt: "2026-05-26T09:00:00.000Z",
+    reviewStartedAt: state === "pend" ? null : "2026-05-26T09:05:00.000Z",
     slaDeadlineAt: "2026-05-27T09:00:00.000Z",
-    determinedAt: null,
-    timeRemainingMs: 86_400_000,
+    determinedAt: state === "determined" ? "2026-05-26T10:00:00.000Z" : null,
+    slaHours: 24,
     state,
     outcomeStatus,
-    slaStatus: "pending",
-    incentiveStatus: "pending",
-    paymentStatus: "pending",
-    incentiveValue: 0,
-    currency: "HBAR",
-    settlementToken: { symbol: "HBAR" },
-    reason: "Pending determination",
-    reasonCodes: [],
-    policyId: null,
-    audit: null,
-    walletId: null,
-    paymentIntentId: null,
-    transactionId: null
+    coverage: {
+      requestType: "pharmacy_benefit",
+      serviceCode: "wegovy_semaglutide",
+      serviceLabel: "Wegovy (semaglutide) injection",
+      codingSystem: "NDC",
+      billingCode: "0169-4525-14",
+      coveredBenefit: true,
+      priorAuthRequired: true,
+      documentationTemplateId: "pharmacy-weight-management-pa-v1",
+      requiredDocumentation: [
+        "diagnosis and indication",
+        "BMI or comorbidity criteria",
+        "prior therapy or lifestyle program documentation",
+        "clinical note attachment"
+      ],
+      reasonCode: null
+    },
+    dtr: null,
+    dtrQuestionnaireResponse: assessmentProvided
+      ? {
+          questionnaireId: "pharmacy-weight-management-pa-v1",
+          answers: [
+            { questionId: "drug_indication", value: "yes" },
+            { questionId: "dose_quantity_duration", value: "yes" },
+            { questionId: "prior_therapy", value: "no" },
+            { questionId: "pharmacy_notes", value: "yes" }
+          ]
+        }
+      : null,
+    documentation: {
+      coverageChecked: true,
+      coveredBenefit: true,
+      dtrRequested: true,
+      dtrCompleted: assessmentProvided,
+      attachmentChecklistComplete: assessmentProvided,
+      fhirFieldsPresent: assessmentProvided
+    },
+    clinicalReview: {
+      reviewerId: state === "pend" ? null : "delegate-reviewer",
+      medicalNecessityReviewed: false,
+      policyCriteriaChecked: false,
+      rationaleCaptured: false,
+      approvalReasonCode: null,
+      denialReasonCode: null
+    },
+    auditRefs: {
+      pasClaimBundleId: "PA-260526-0900-REVIEW1",
+      pasClaimResponseBundleId: null
+    },
+    pasSubmitted: true,
+    submittedBeforeInitialDecision: true
   };
 }

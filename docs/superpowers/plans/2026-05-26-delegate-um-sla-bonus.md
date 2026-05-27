@@ -942,8 +942,7 @@ const approvedDelegateRequest: EvaluationRequest = {
     medicalNecessityReviewed: true,
     policyCriteriaChecked: true,
     rationaleCaptured: true,
-    auditReady: true,
-    containsPhi: false
+    auditReady: true
   }
 };
 
@@ -1081,7 +1080,6 @@ function evaluateDelegateUmSlaPolicy(input: EvaluatePolicyInput): PolicyEvaluati
   if (policy.eligibilityCriteria.prohibitsOutcomeBasedPayment && request.requestObject.outcomeStatusUsedForPayment !== false) {
     reasonCodes.push("PROHIBITED_OUTCOME_METRIC");
   }
-  if (request.requestObject.containsPhi !== false) reasonCodes.push("PHI_IN_PAYMENT_METADATA");
   if (monthToDateAmount + policy.payout.amountPerEligibleRequest > policy.payout.monthlyCap) {
     reasonCodes.push("MONTHLY_CAP_EXCEEDED");
   }
@@ -1218,8 +1216,7 @@ const evidence: DelegateUmSlaEvidence = {
   medicalNecessityReviewed: true,
   policyCriteriaChecked: true,
   rationaleCaptured: true,
-  auditReady: true,
-  containsPhi: false
+  auditReady: true
 };
 
 describe("evaluateDelegateUmSlaEvent", () => {
@@ -1296,7 +1293,6 @@ export interface DelegateUmSlaEvidence {
   policyCriteriaChecked: boolean;
   rationaleCaptured: boolean;
   auditReady: boolean;
-  containsPhi: false;
 }
 
 export interface DelegateUmSlaEvaluationDependencies {
@@ -1337,8 +1333,7 @@ export function evaluateDelegateUmSlaEvent(
       medicalNecessityReviewed: evidence.medicalNecessityReviewed,
       policyCriteriaChecked: evidence.policyCriteriaChecked,
       rationaleCaptured: evidence.rationaleCaptured,
-      auditReady: evidence.auditReady,
-      containsPhi: evidence.containsPhi
+      auditReady: evidence.auditReady
     }
   };
   const result = evaluatePolicy({
@@ -1513,7 +1508,8 @@ export type DelegateIncentiveStatus = "pending" | "not_eligible" | "paid" | "pay
 export type DelegatePaymentStatus = "pending" | "auto_executed" | "blocked_by_policy" | "execution_failed";
 export type DelegateSlaStatus = "pending" | "within_sla" | "breached";
 
-export interface DelegateUmRow {
+export interface DelegatePlanAuditRow {
+  umRequest: UMRequest;
   umRequestId: string;
   id: string;
   planId: string;
@@ -1554,7 +1550,7 @@ export function createDelegateUmWorkflow(
   paymentIntentStore: PaymentIntentStore | undefined = createPaymentIntentStoreFromEnv(),
   paymentPolicyStore: PaymentPolicyStore = createPaymentPolicyStoreFromEnv()
 ) {
-  const rows = new Map<string, DelegateUmRow>();
+  const rows = new Map<string, DelegatePlanAuditRow>();
 
   async function listRequests(): Promise<UMRequest[]> {
     return persistence ? persistence.listUmRequests() : platform.listUmRequests();
@@ -1633,13 +1629,13 @@ function buildDelegateEvidence(request: UMRequest): DelegateUmSlaEvidence {
     medicalNecessityReviewed: request.clinicalReview.medicalNecessityReviewed,
     policyCriteriaChecked: request.clinicalReview.policyCriteriaChecked,
     rationaleCaptured: request.clinicalReview.rationaleCaptured,
-    auditReady: Boolean(request.auditRefs.pasClaimBundleId),
-    containsPhi: false
+    auditReady: Boolean(request.auditRefs.pasClaimBundleId)
   };
 }
 
-function buildPendingRow(request: UMRequest): DelegateUmRow {
+function buildPendingRow(request: UMRequest): DelegatePlanAuditRow {
   return {
+    umRequest: request,
     umRequestId: request.id,
     id: request.id,
     planId: request.planId,
@@ -1971,19 +1967,11 @@ Create `DelegateVendorConsole.tsx` as a client component that:
 - opens `DelegateReviewModal`
 - refreshes after start review and determination
 
-Use this row type:
+Use the native UM request from the workqueue response. Do not define a separate delegate-vendor row type:
 
 ```ts
-interface DelegateUmRow {
-  umRequestId: string;
-  id: string;
-  planDisplay: string;
-  serviceLabel: string;
-  submittedAt: string;
-  slaDeadlineAt: string;
-  timeRemainingMs: number;
-  state: "pend" | "in_clinical_review" | "determined";
-  outcomeStatus: "approved" | "denied" | null;
+interface DelegateWorkqueueResponse {
+  rows: UMRequest[];
 }
 ```
 
@@ -2128,8 +2116,7 @@ Add `buildDelegateUmBusinessPolicyCards(policy)` with title `Delegate UM SLA Bon
     "Outcome status is present: Yes",
     "Outcome value affects payment: No",
     "Clinical review checklist complete: Yes",
-    "Completed within SLA: 24 hours",
-    "PHI in payment metadata: No"
+    "Completed within SLA: 24 hours"
   ]
 }
 ```

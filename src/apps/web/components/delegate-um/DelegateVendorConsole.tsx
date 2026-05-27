@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { DelegateUmRow } from "../../lib/delegate-um-workflow";
+import type { UMRequest } from "@operon-labs/um-platform";
 import { LabsBadge, LabsHero, LabsPageShell } from "../labs-ui";
 import { DelegateReviewModal } from "./DelegateReviewModal";
 import { DelegateUseCaseNavigation } from "./DelegateUseCaseNavigation";
-import { formatOutcomeStatus, formatRequestType, formatSlaStatus, formatUmState } from "./delegate-formatters";
+import { formatOutcomeStatus, formatRequestType, formatUmRequestSlaStatus, formatUmState } from "./delegate-formatters";
 
-interface DelegateRowsResponse {
-  rows: DelegateUmRow[];
+interface DelegateWorkqueueResponse {
+  rows: UMRequest[];
 }
 
 type RefreshSource = "initial" | "manual";
@@ -17,7 +17,7 @@ type RefreshSource = "initial" | "manual";
 const delegateRequestApiBase = "/api/delegate-um/requests/";
 
 export function DelegateVendorConsole() {
-  const [rows, setRows] = useState<DelegateUmRow[]>([]);
+  const [requests, setRequests] = useState<UMRequest[]>([]);
   const [selectedUmRequestId, setSelectedUmRequestId] = useState<string | null>(null);
   const [reviewUmRequestId, setReviewUmRequestId] = useState<string | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -27,9 +27,9 @@ export function DelegateVendorConsole() {
   const refreshSequenceRef = useRef(0);
   const lastReviewButtonRef = useRef<HTMLButtonElement | null>(null);
 
-  const reviewRow = rows.find((row) => row.umRequestId === reviewUmRequestId) ?? null;
+  const reviewRequest = requests.find((request) => request.id === reviewUmRequestId) ?? null;
 
-  const refreshRows = useCallback(async (source: RefreshSource = "manual") => {
+  const refreshWorkqueue = useCallback(async (source: RefreshSource = "manual") => {
     const requestId = refreshSequenceRef.current + 1;
     refreshSequenceRef.current = requestId;
 
@@ -45,7 +45,7 @@ export function DelegateVendorConsole() {
       const response = await fetch("/api/delegate-um/workqueue", {
         cache: "no-store"
       });
-      const payload = (await response.json()) as DelegateRowsResponse | { error?: string };
+      const payload = (await response.json()) as DelegateWorkqueueResponse | { error?: string };
 
       if (!mountedRef.current || requestId !== refreshSequenceRef.current) {
         return;
@@ -56,13 +56,13 @@ export function DelegateVendorConsole() {
         return;
       }
 
-      setRows(payload.rows);
+      setRequests(payload.rows);
       setSelectedUmRequestId((currentUmRequestId) => {
-        if (currentUmRequestId && payload.rows.some((row) => row.umRequestId === currentUmRequestId)) {
+        if (currentUmRequestId && payload.rows.some((request) => request.id === currentUmRequestId)) {
           return currentUmRequestId;
         }
 
-        return payload.rows[0]?.umRequestId ?? null;
+        return payload.rows[0]?.id ?? null;
       });
     } catch {
       if (mountedRef.current && requestId === refreshSequenceRef.current) {
@@ -82,18 +82,18 @@ export function DelegateVendorConsole() {
   useEffect(() => {
     mountedRef.current = true;
     const initialRefreshId = window.setTimeout(() => {
-      void refreshRows("initial");
+      void refreshWorkqueue("initial");
     }, 0);
 
     return () => {
       mountedRef.current = false;
       window.clearTimeout(initialRefreshId);
     };
-  }, [refreshRows]);
+  }, [refreshWorkqueue]);
 
-  function handleCompleted(row: DelegateUmRow) {
-    setRows((currentRows) => currentRows.filter((candidate) => candidate.umRequestId !== row.umRequestId));
-    setSelectedUmRequestId(row.umRequestId);
+  function handleCompleted(request: UMRequest) {
+    setRequests((currentRequests) => currentRequests.filter((candidate) => candidate.id !== request.id));
+    setSelectedUmRequestId(request.id);
     setReviewUmRequestId(null);
   }
 
@@ -119,13 +119,13 @@ export function DelegateVendorConsole() {
         <div className="toolbar">
           <div>
             <h2>Open delegated requests</h2>
-            <p>{rows.length === 1 ? "1 pharmacy request loaded" : `${rows.length} pharmacy requests loaded`}</p>
+            <p>{requests.length === 1 ? "1 pharmacy request loaded" : `${requests.length} pharmacy requests loaded`}</p>
           </div>
           <button
             className="primary-button secondary-button"
             disabled={refreshing}
             type="button"
-            onClick={() => void refreshRows("manual")}
+            onClick={() => void refreshWorkqueue("manual")}
           >
             {refreshing ? "Refreshing..." : "Refresh workqueue"}
           </button>
@@ -162,25 +162,35 @@ export function DelegateVendorConsole() {
                   </td>
                 </tr>
               ) : null}
-              {rows.map((row) => (
-                <tr key={row.umRequestId} className={row.umRequestId === selectedUmRequestId ? "selected" : ""}>
-                  <td className="mono-cell">{row.umRequestId}</td>
-                  <td>{row.planDisplay}</td>
-                  <td>{formatRequestType(row.requestType)}</td>
-                  <td>{row.serviceLabel}</td>
-                  <td>{formatUmState(row.state)}</td>
+              {requests.map((request) => (
+                <tr key={request.id} className={request.id === selectedUmRequestId ? "selected" : ""}>
+                  <td className="mono-cell">{request.id}</td>
+                  <td>{request.planDisplay}</td>
+                  <td>{formatRequestType(request.requestType)}</td>
+                  <td>{request.serviceLabel}</td>
+                  <td>{formatUmState(request.state)}</td>
                   <td className="badge-cell">
-                    <LabsBadge variant={row.slaStatus === "breached" ? "warning" : "info"}>{formatSlaStatus(row)}</LabsBadge>
+                    <LabsBadge
+                      variant={
+                        request.state === "determined" &&
+                        request.determinedAt &&
+                        new Date(request.determinedAt).getTime() > new Date(request.slaDeadlineAt).getTime()
+                          ? "warning"
+                          : "info"
+                      }
+                    >
+                      {formatUmRequestSlaStatus(request)}
+                    </LabsBadge>
                   </td>
-                  <td>{formatOutcomeStatus(row.outcomeStatus)}</td>
+                  <td>{formatOutcomeStatus(request.outcomeStatus)}</td>
                   <td>
                     <button
                       className="row-action"
                       type="button"
                       onClick={(event) => {
-                        setSelectedUmRequestId(row.umRequestId);
+                        setSelectedUmRequestId(request.id);
                         lastReviewButtonRef.current = event.currentTarget;
-                        setReviewUmRequestId(row.umRequestId);
+                        setReviewUmRequestId(request.id);
                       }}
                     >
                       Review
@@ -188,7 +198,7 @@ export function DelegateVendorConsole() {
                   </td>
                 </tr>
               ))}
-              {!initialLoading && rows.length === 0 ? (
+              {!initialLoading && requests.length === 0 ? (
                 <tr>
                   <td className="empty-state" colSpan={8}>
                     No delegated pharmacy prior authorizations are waiting for vendor review.
@@ -200,10 +210,10 @@ export function DelegateVendorConsole() {
         </div>
       </section>
 
-      {reviewRow ? (
+      {reviewRequest ? (
         <DelegateReviewModal
           requestApiBase={delegateRequestApiBase}
-          row={reviewRow}
+          request={reviewRequest}
           onClose={closeReviewModal}
           onCompleted={handleCompleted}
         />

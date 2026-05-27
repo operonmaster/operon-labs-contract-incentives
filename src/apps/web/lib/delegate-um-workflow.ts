@@ -15,14 +15,16 @@ import { createPasPersistenceStoreFromEnv, type UmPasPersistenceStore } from "./
 import { createPaymentIntentStoreFromEnv } from "./payment-intent-store";
 import { createPaymentPolicyStoreFromEnv, type PaymentPolicyStore } from "./payment-policy-store";
 import { createPolicyStoreFromEnv, type PolicyStore } from "./policy-store";
+import type { PolicyCriterionMatch } from "./provider-documentation-workflow";
 import { umPlatform } from "./um-platform-singleton";
 
 export type DelegateIncentiveStatus = "pending" | "not_eligible" | "paid" | "payment_failed";
 export type DelegatePaymentStatus = "pending" | "auto_executed" | "blocked_by_policy" | "execution_failed";
 export type DelegateSlaStatus = "pending" | "within_sla" | "breached";
 
-export interface DelegateUmRow {
+export interface DelegatePlanAuditRow {
   evaluationType: "delegate_um_sla_bonus";
+  umRequest: UMRequest;
   umRequestId: string;
   id: string;
   planId: string;
@@ -46,6 +48,8 @@ export interface DelegateUmRow {
   reason: string;
   reasonCodes: string[];
   policyId: string | null;
+  policyControls: string[];
+  policyCriteria: PolicyCriterionMatch[];
   audit: AuditRecord | null;
   walletId: string | null;
   paymentIntentId: string | null;
@@ -54,15 +58,16 @@ export interface DelegateUmRow {
 
 /* eslint-disable no-unused-vars -- TypeScript function signatures require parameter names. */
 export interface DelegateUmWorkflow {
-  listWorkqueue(): Promise<DelegateUmRow[]>;
-  listPlanRows(): Promise<DelegateUmRow[]>;
+  listWorkqueue(): Promise<UMRequest[]>;
+  listPlanRows(): Promise<DelegatePlanAuditRow[]>;
   startReview: (umRequestId: string, reviewerId: string) => Promise<UMRequest>;
-  completeDetermination: (umRequestId: string, input: CompleteClinicalReviewInput) => Promise<DelegateUmRow>;
+  completeDetermination: (umRequestId: string, input: CompleteClinicalReviewInput) => Promise<UMRequest>;
 }
 /* eslint-enable no-unused-vars */
 
-type PersistedDelegateUmRow = DelegateUmRow & {
+type PersistedDelegatePlanAuditRow = Omit<DelegatePlanAuditRow, "umRequest"> & {
   caseId: string;
+  umRequest?: UMRequest;
 };
 
 export function createDelegateUmWorkflow(
@@ -72,8 +77,8 @@ export function createDelegateUmWorkflow(
   paymentIntentStore: PaymentIntentStore | undefined = createPaymentIntentStoreFromEnv(),
   paymentPolicyStore: PaymentPolicyStore = createPaymentPolicyStoreFromEnv()
 ): DelegateUmWorkflow {
-  const rows = new Map<string, DelegateUmRow>();
-  const settlementsInFlight = new Map<string, Promise<DelegateUmRow>>();
+  const rows = new Map<string, DelegatePlanAuditRow>();
+  const settlementsInFlight = new Map<string, Promise<DelegatePlanAuditRow>>();
 
   async function listRequests(): Promise<UMRequest[]> {
     return persistence ? persistence.listUmRequests() : platform.listUmRequests();
@@ -87,23 +92,29 @@ export function createDelegateUmWorkflow(
     await persistence?.saveUmRequest(umRequest);
   }
 
-  async function getStoredDelegateRow(umRequestId: string): Promise<DelegateUmRow | null> {
-    return rows.get(umRequestId) ?? normalizePersistedDelegateRow(await persistence?.getIncentiveRow(umRequestId));
+  async function getStoredDelegateRow(
+    umRequestId: string,
+    request?: UMRequest | null
+  ): Promise<DelegatePlanAuditRow | null> {
+    return rows.get(umRequestId) ?? normalizePersistedDelegateRow(await persistence?.getIncentiveRow(umRequestId), request ?? undefined);
   }
 
   return {
     async listWorkqueue() {
       return (await listRequests())
         .filter((request) => Boolean(request.delegateVendorId) && request.state !== "determined")
-        .map((request) => buildPendingRow(request))
         .sort((left, right) => left.slaDeadlineAt.localeCompare(right.slaDeadlineAt));
     },
     async listPlanRows() {
-      await loadPersistedDelegateRows(persistence, rows);
+      const requests = await listRequests();
+      await loadPersistedDelegateRows(persistence, rows, requests);
 
-      return (await listRequests())
+      return requests
         .filter((request) => Boolean(request.delegateVendorId))
-        .map((request) => rows.get(request.id) ?? buildPendingRow(request))
+        .map((request) => {
+          const row = rows.get(request.id);
+          return row ? withUmRequest(row, request) : buildPendingRow(request);
+        })
         .sort((left, right) => right.submittedAt.localeCompare(left.submittedAt));
     },
     async startReview(umRequestId, reviewerId) {
@@ -119,21 +130,21 @@ export function createDelegateUmWorkflow(
       return started;
     },
     async completeDetermination(umRequestId, input) {
-      const existingRow = await getStoredDelegateRow(umRequestId);
-      if (existingRow && isImmutablePaidDelegateRow(existingRow)) {
-        rows.set(umRequestId, existingRow);
-        return existingRow;
+      const request = await getRequest(umRequestId);
+      const existingRow = await getStoredDelegateRow(umRequestId, request);
+      if (request && existingRow && isImmutablePaidDelegateRow(existingRow)) {
+        rows.set(umRequestId, withUmRequest(existingRow, request));
+        return request;
       }
 
-      const request = await getRequest(umRequestId);
       if (request?.state === "determined" && existingRow && isTerminalDelegateRow(existingRow)) {
-        rows.set(umRequestId, existingRow);
-        return existingRow;
+        rows.set(umRequestId, withUmRequest(existingRow, request));
+        return request;
       }
 
       const existingSettlement = settlementsInFlight.get(umRequestId);
       if (existingSettlement) {
-        return existingSettlement;
+        return (await existingSettlement).umRequest;
       }
 
       const settlement = completeAndSettleDetermination({
@@ -151,7 +162,7 @@ export function createDelegateUmWorkflow(
       settlementsInFlight.set(umRequestId, settlement);
 
       try {
-        return await settlement;
+        return (await settlement).umRequest;
       } finally {
         settlementsInFlight.delete(umRequestId);
       }
@@ -169,7 +180,7 @@ interface CompleteAndSettleDependencies {
   saveRequest: (umRequest: UMRequest) => Promise<void>;
   platform: UmPlatform;
   persistence: UmPasPersistenceStore | undefined;
-  rows: Map<string, DelegateUmRow>;
+  rows: Map<string, DelegatePlanAuditRow>;
   policyStore: PolicyStore;
   paymentIntentStore: PaymentIntentStore | undefined;
   paymentPolicyStore: PaymentPolicyStore;
@@ -187,7 +198,7 @@ async function completeAndSettleDetermination({
   policyStore,
   paymentIntentStore,
   paymentPolicyStore
-}: CompleteAndSettleDependencies): Promise<DelegateUmRow> {
+}: CompleteAndSettleDependencies): Promise<DelegatePlanAuditRow> {
   const persisted = await getRequest(umRequestId);
   if (!persisted) {
     throw new Error(`UM_REQUEST_NOT_FOUND:${umRequestId}`);
@@ -238,14 +249,14 @@ function buildDelegateEvidence(request: UMRequest): DelegateUmSlaEvidence {
     medicalNecessityReviewed: request.clinicalReview.medicalNecessityReviewed,
     policyCriteriaChecked: request.clinicalReview.policyCriteriaChecked,
     rationaleCaptured: request.clinicalReview.rationaleCaptured,
-    auditReady: Boolean(request.auditRefs.pasClaimBundleId),
-    containsPhi: false
+    auditReady: Boolean(request.auditRefs.pasClaimBundleId)
   };
 }
 
-function buildPendingRow(request: UMRequest): DelegateUmRow {
+function buildPendingRow(request: UMRequest): DelegatePlanAuditRow {
   return {
     evaluationType: "delegate_um_sla_bonus",
+    umRequest: request,
     umRequestId: request.id,
     id: request.id,
     planId: request.planId,
@@ -269,6 +280,8 @@ function buildPendingRow(request: UMRequest): DelegateUmRow {
     reason: "Pending determination",
     reasonCodes: [],
     policyId: null,
+    policyControls: [],
+    policyCriteria: [],
     audit: null,
     walletId: null,
     paymentIntentId: null,
@@ -287,13 +300,13 @@ function requireDelegateVendorId(request: UMRequest): string {
 async function settleDetermination(
   request: UMRequest,
   dependencies: {
-    rows: Map<string, DelegateUmRow>;
+    rows: Map<string, DelegatePlanAuditRow>;
     persistence: UmPasPersistenceStore | undefined;
     policyStore: PolicyStore;
     paymentIntentStore: PaymentIntentStore | undefined;
     paymentPolicyStore: PaymentPolicyStore;
   }
-): Promise<DelegateUmRow> {
+): Promise<DelegatePlanAuditRow> {
   const evidence = buildDelegateEvidence(request);
   const policies = await dependencies.policyStore.findPolicies({
     evaluationType: "delegate_um_sla_bonus",
@@ -330,6 +343,7 @@ async function settleDetermination(
       walletId: null,
       reasonCodes: ["MULTIPLE_POLICY_MATCHES"]
     };
+    const blockedEvaluation = { ...evaluation, result };
     const audit = createAuditRecord({
       request: evaluation.request,
       result,
@@ -347,6 +361,8 @@ async function settleDetermination(
       reason: summarizeDelegateReason(result.reasonCodes),
       reasonCodes: result.reasonCodes,
       policyId: result.policyId,
+      policyControls: buildDelegatePolicyControls(),
+      policyCriteria: buildDelegatePolicyCriteria(blockedEvaluation),
       audit,
       walletId: null
     };
@@ -369,7 +385,7 @@ async function settleDetermination(
     result: evaluation.result,
     transactionId: null
   });
-  const baseRow: DelegateUmRow = {
+  const baseRow: DelegatePlanAuditRow = {
     ...buildPendingRow(request),
     slaStatus: buildDeterminedSlaStatus(request),
     incentiveStatus: evaluation.result.decision === "approved" ? "paid" : "not_eligible",
@@ -380,6 +396,8 @@ async function settleDetermination(
     reason: summarizeDelegateReason(evaluation.result.reasonCodes),
     reasonCodes: evaluation.result.reasonCodes,
     policyId: evaluation.result.policyId,
+    policyControls: buildDelegatePolicyControls(),
+    policyCriteria: buildDelegatePolicyCriteria(evaluation),
     audit,
     walletId: evaluation.result.walletId
   };
@@ -443,7 +461,7 @@ async function settleDetermination(
       }
     };
   } catch {
-    const paidRow = normalizePersistedDelegateRow(await dependencies.persistence?.getIncentiveRow(request.id));
+    const paidRow = normalizePersistedDelegateRow(await dependencies.persistence?.getIncentiveRow(request.id), request);
     if (paidRow && isImmutablePaidDelegateRow(paidRow)) {
       return paidRow;
     }
@@ -461,12 +479,14 @@ async function settleDetermination(
 
 async function loadPersistedDelegateRows(
   persistence: UmPasPersistenceStore | undefined,
-  rows: Map<string, DelegateUmRow>
+  rows: Map<string, DelegatePlanAuditRow>,
+  requests: UMRequest[] = []
 ): Promise<void> {
   const persistedRows = (await persistence?.listIncentiveRows()) ?? [];
+  const requestsById = new Map(requests.map((request) => [request.id, request]));
 
   for (const persistedRow of persistedRows) {
-    const row = normalizePersistedDelegateRow(persistedRow);
+    const row = normalizePersistedDelegateRow(persistedRow, getPersistedDelegateRequest(requestsById, persistedRow));
     if (row) {
       rows.set(row.umRequestId, row);
     }
@@ -475,37 +495,64 @@ async function loadPersistedDelegateRows(
 
 async function saveDelegateRow(
   persistence: UmPasPersistenceStore | undefined,
-  row: DelegateUmRow
+  row: DelegatePlanAuditRow
 ): Promise<void> {
   await persistence?.saveIncentiveRow(toPersistedDelegateRow(row) as unknown as Parameters<UmPasPersistenceStore["saveIncentiveRow"]>[0]);
 }
 
-function toPersistedDelegateRow(row: DelegateUmRow): PersistedDelegateUmRow {
+function toPersistedDelegateRow(row: DelegatePlanAuditRow): PersistedDelegatePlanAuditRow {
   return {
     ...row,
     caseId: row.umRequestId
   };
 }
 
-function normalizePersistedDelegateRow(value: unknown): DelegateUmRow | null {
-  if (!isDelegateUmRowShape(value)) {
+function normalizePersistedDelegateRow(value: unknown, request?: UMRequest): DelegatePlanAuditRow | null {
+  if (!isDelegatePlanAuditRowShape(value)) {
+    return null;
+  }
+
+  const umRequest = isUmRequestShape(value.umRequest)
+    ? structuredClone(value.umRequest)
+    : request
+      ? structuredClone(request)
+      : null;
+
+  if (!umRequest) {
     return null;
   }
 
   return {
     ...value,
+    umRequest,
     audit: value.audit ? { ...value.audit } : null,
     reasonCodes: [...value.reasonCodes],
+    policyControls: Array.isArray(value.policyControls) ? [...value.policyControls] : [],
+    policyCriteria: Array.isArray(value.policyCriteria)
+      ? value.policyCriteria.map((criterion) => ({ ...criterion }))
+      : [],
     settlementToken: { ...value.settlementToken }
   };
 }
 
-function isDelegateUmRowShape(value: unknown): value is DelegateUmRow {
+function getPersistedDelegateRequest(
+  requestsById: Map<string, UMRequest>,
+  value: unknown
+): UMRequest | undefined {
+  if (typeof value !== "object" || value === null) {
+    return undefined;
+  }
+
+  const umRequestId = (value as Partial<Pick<DelegatePlanAuditRow, "umRequestId">>).umRequestId;
+  return typeof umRequestId === "string" ? requestsById.get(umRequestId) : undefined;
+}
+
+function isDelegatePlanAuditRowShape(value: unknown): value is PersistedDelegatePlanAuditRow {
   if (typeof value !== "object" || value === null) {
     return false;
   }
 
-  const candidate = value as Partial<DelegateUmRow>;
+  const candidate = value as Partial<PersistedDelegatePlanAuditRow>;
 
   return (
     typeof candidate.umRequestId === "string" &&
@@ -523,11 +570,37 @@ function isDelegateUmRowShape(value: unknown): value is DelegateUmRow {
   );
 }
 
-function isImmutablePaidDelegateRow(row: DelegateUmRow): boolean {
+function isUmRequestShape(value: unknown): value is UMRequest {
+  return typeof value === "object" && value !== null && typeof (value as Partial<UMRequest>).id === "string";
+}
+
+function withUmRequest(row: DelegatePlanAuditRow, request: UMRequest): DelegatePlanAuditRow {
+  return {
+    ...row,
+    umRequest: request,
+    umRequestId: request.id,
+    id: request.id,
+    planId: request.planId,
+    planDisplay: request.planDisplay,
+    delegateVendorId: requireDelegateVendorId(request),
+    requestType: request.requestType,
+    serviceLabel: request.serviceLabel,
+    submittedAt: request.submittedAt,
+    pendStartedAt: request.pendStartedAt,
+    slaDeadlineAt: request.slaDeadlineAt,
+    determinedAt: request.determinedAt,
+    timeRemainingMs: Math.max(0, new Date(request.slaDeadlineAt).getTime() - Date.now()),
+    state: request.state,
+    outcomeStatus: request.outcomeStatus,
+    slaStatus: request.state === "determined" ? buildDeterminedSlaStatus(request) : row.slaStatus
+  };
+}
+
+function isImmutablePaidDelegateRow(row: DelegatePlanAuditRow): boolean {
   return row.incentiveStatus === "paid" && Boolean(row.transactionId || row.paymentIntentId);
 }
 
-function isTerminalDelegateRow(row: DelegateUmRow): boolean {
+function isTerminalDelegateRow(row: DelegatePlanAuditRow): boolean {
   return row.incentiveStatus === "paid" || row.incentiveStatus === "not_eligible" || row.incentiveStatus === "payment_failed";
 }
 
@@ -608,4 +681,158 @@ function buildDelegatePolicyControls(): string[] {
     "Outcome status not used for payment",
     "PAS audit reference required"
   ];
+}
+
+function buildDelegatePolicyCriteria(
+  evaluation: ReturnType<typeof evaluateDelegateUmSlaEvent>
+): PolicyCriterionMatch[] {
+  const evidence = evaluation.request.requestObject;
+  const reasonCodes = evaluation.result.reasonCodes;
+  const eligibleRequestTypes = evaluation.policy.incentiveScope.eligibleRequestTypes ?? [];
+  const excludedRequestTypes = evaluation.policy.incentiveScope.excludedRequestTypes ?? [];
+  const usesEligibleRequestTypes = eligibleRequestTypes.length > 0;
+  const requestTypeReasonCode = usesEligibleRequestTypes ? "REQUEST_TYPE_NOT_ELIGIBLE" : "REQUEST_TYPE_EXCLUDED";
+  const requestType = formatPolicyValue(evidence.requestType);
+  const requestTypeInScope = usesEligibleRequestTypes
+    ? eligibleRequestTypes.includes(requestType)
+    : !excludedRequestTypes.includes(requestType);
+  const slaHours = typeof evidence.slaHours === "number" ? evidence.slaHours : Number(evidence.slaHours ?? 24);
+  const slaLabel = Number.isFinite(slaHours) ? `${slaHours}h` : "configured";
+
+  return [
+    criterion({
+      id: "plan",
+      label: "Plan is in the delegate contract",
+      expected: evaluation.policy.contractPair.planId,
+      actual: formatPolicyValue(evidence.planId),
+      reasonCode: "PLAN_NOT_IN_CONTRACT",
+      passed: evidence.planId === evaluation.policy.contractPair.planId && !reasonCodes.includes("PLAN_NOT_IN_CONTRACT")
+    }),
+    criterion({
+      id: "delegateVendor",
+      label: "Delegate vendor is in the contract",
+      expected: evaluation.policy.contractPair.providerId,
+      actual: formatPolicyValue(evidence.delegateVendorId),
+      reasonCode: "DELEGATE_VENDOR_NOT_IN_CONTRACT",
+      passed:
+        evidence.delegateVendorId === evaluation.policy.contractPair.providerId &&
+        evaluation.request.submitter.id === evaluation.policy.contractPair.providerId &&
+        !reasonCodes.includes("DELEGATE_VENDOR_NOT_IN_CONTRACT")
+    }),
+    criterion({
+      id: "wallet",
+      label: "Recipient wallet is approved",
+      expected: evaluation.policy.settlement.recipientWalletId,
+      actual: evaluation.result.walletId ?? "Not assigned",
+      reasonCode: "WALLET_NOT_APPROVED",
+      passed: evaluation.result.walletId === evaluation.policy.settlement.recipientWalletId
+    }),
+    criterion({
+      id: "requestType",
+      label: usesEligibleRequestTypes ? "Request type is eligible" : "Request type is not excluded",
+      expected: (usesEligibleRequestTypes ? eligibleRequestTypes : excludedRequestTypes)
+        .map((policyRequestType) => formatDelegateRequestType(policyRequestType))
+        .join(" or "),
+      actual: formatDelegateRequestType(requestType),
+      reasonCode: requestTypeReasonCode,
+      passed: requestTypeInScope && !reasonCodes.includes(requestTypeReasonCode)
+    }),
+    evidenceCriterion(
+      evidence,
+      "state",
+      "UM request is determined",
+      "determined",
+      "UM_REQUEST_NOT_DETERMINED",
+      reasonCodes
+    ),
+    evidenceCriterion(
+      evidence,
+      "outcomeStatusPresent",
+      "Determination outcome is captured",
+      true,
+      "OUTCOME_STATUS_MISSING",
+      reasonCodes
+    ),
+    criterion({
+      id: "sla",
+      label: "Determination completed within SLA",
+      expected: `Within ${slaLabel} SLA`,
+      actual: evidence.completedWithinSla === true ? `Within ${slaLabel} SLA` : `Exceeded ${slaLabel} SLA`,
+      reasonCode: "SLA_EXCEEDED",
+      passed: evidence.completedWithinSla === true && !reasonCodes.includes("SLA_EXCEEDED")
+    }),
+    evidenceCriterion(
+      evidence,
+      "clinicalReviewCompleted",
+      "Clinical review checklist is complete",
+      true,
+      "CLINICAL_REVIEW_INCOMPLETE",
+      reasonCodes
+    ),
+    evidenceCriterion(
+      evidence,
+      "auditReady",
+      "PAS audit reference is available",
+      true,
+      "PAS_AUDIT_RECORD_MISSING",
+      reasonCodes
+    ),
+    criterion({
+      id: "outcomeNotPaymentMetric",
+      label: "Outcome status is not used for payment",
+      expected: "false",
+      actual: formatPolicyValue(evidence.outcomeStatusUsedForPayment),
+      reasonCode: "PROHIBITED_OUTCOME_METRIC",
+      passed: evidence.outcomeStatusUsedForPayment === false && !reasonCodes.includes("PROHIBITED_OUTCOME_METRIC")
+    })
+  ];
+}
+
+function evidenceCriterion(
+  evidence: Record<string, unknown>,
+  field: string,
+  label: string,
+  expected: string | boolean,
+  reasonCode: string,
+  reasonCodes: string[]
+): PolicyCriterionMatch {
+  const actual = evidence[field];
+
+  return criterion({
+    id: field,
+    label,
+    expected: String(expected),
+    actual: formatPolicyValue(actual),
+    reasonCode,
+    passed: actual === expected && !reasonCodes.includes(reasonCode)
+  });
+}
+
+function criterion(input: PolicyCriterionMatch): PolicyCriterionMatch {
+  return input;
+}
+
+function formatPolicyValue(value: unknown): string {
+  if (value === undefined) {
+    return "Missing";
+  }
+
+  if (value === null) {
+    return "null";
+  }
+
+  return String(value);
+}
+
+function formatDelegateRequestType(requestType: string): string {
+  switch (requestType) {
+    case "outpatient_service":
+      return "Outpatient Service";
+    case "pharmacy_benefit":
+      return "Pharmacy Benefit";
+    case "inpatient_admission":
+      return "Inpatient Admission";
+    default:
+      return requestType;
+  }
 }

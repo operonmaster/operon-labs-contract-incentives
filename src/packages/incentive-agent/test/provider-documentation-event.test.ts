@@ -39,9 +39,9 @@ describe("evaluateProviderDocumentationEvent", () => {
       medicalNecessityReviewed: true,
       policyCriteriaChecked: true,
       rationaleCaptured: true,
-      auditReady: true,
-      containsPhi: false
+      auditReady: true
     });
+    expect(evaluation.request.requestObject).not.toHaveProperty("containsPhi");
     expect(evaluation.result).toMatchObject({
       decision: "approved",
       amount: 5,

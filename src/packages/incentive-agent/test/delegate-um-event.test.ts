@@ -42,8 +42,7 @@ const evidence: DelegateUmSlaEvidence = {
   medicalNecessityReviewed: true,
   policyCriteriaChecked: true,
   rationaleCaptured: true,
-  auditReady: true,
-  containsPhi: false
+  auditReady: true
 };
 
 describe("evaluateDelegateUmSlaEvent", () => {
@@ -75,10 +74,10 @@ describe("evaluateDelegateUmSlaEvent", () => {
         medicalNecessityReviewed: true,
         policyCriteriaChecked: true,
         rationaleCaptured: true,
-        auditReady: true,
-        containsPhi: false
+        auditReady: true
       }
     });
+    expect(evaluation.request.requestObject).not.toHaveProperty("containsPhi");
     expect(evaluation.result).toMatchObject({
       decision: "approved",
       amount: 5,

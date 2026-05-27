@@ -1,16 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { DelegateUmRow } from "../../lib/delegate-um-workflow";
+import { getDtrQuestionnaire, type DtrAnswerValue, type UMRequest } from "@operon-labs/um-platform";
 import { LabsBadge, LabsSelect, type LabsSelectOption } from "../labs-ui";
-import { formatRequestType, formatSlaStatus, formatUmState } from "./delegate-formatters";
+import { formatRequestType, formatUmRequestSlaStatus, formatUmState } from "./delegate-formatters";
 
 interface DelegateReviewModalProps {
   requestApiBase: string;
-  row: DelegateUmRow;
+  request: UMRequest;
   onClose: () => void;
   // eslint-disable-next-line no-unused-vars -- Callback parameter name documents the completed delegate row.
-  onCompleted: (row: DelegateUmRow) => void;
+  onCompleted: (request: UMRequest) => void;
 }
 
 const approvalReasonOptions: LabsSelectOption[] = [
@@ -49,10 +49,10 @@ const denialReasonOptions: LabsSelectOption[] = [
   }
 ];
 
-export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, row }: DelegateReviewModalProps) {
+export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, request }: DelegateReviewModalProps) {
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
-  const [reviewStarted, setReviewStarted] = useState(row.state === "in_clinical_review");
-  const [outcomeStatus, setOutcomeStatus] = useState<"approved" | "denied" | null>(row.outcomeStatus ?? null);
+  const [reviewStarted, setReviewStarted] = useState(request.state === "in_clinical_review");
+  const [outcomeStatus, setOutcomeStatus] = useState<"approved" | "denied" | null>(request.outcomeStatus ?? null);
   const [medicalNecessityReviewed, setMedicalNecessityReviewed] = useState(false);
   const [policyCriteriaChecked, setPolicyCriteriaChecked] = useState(false);
   const [rationaleCaptured, setRationaleCaptured] = useState(false);
@@ -69,6 +69,8 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, row 
   const activeReasonCode = outcomeStatus === "denied" ? denialReasonCode : approvalReasonCode;
   const activeReasonLabel = outcomeStatus === "denied" ? "Denial reason" : "Approval reason";
   const outcomeGuidanceId = "delegate-outcome-guidance";
+  const assessment = buildAssessmentView(request);
+  const currentState = reviewStarted ? "in_clinical_review" : request.state;
 
   useEffect(() => {
     closeButtonRef.current?.focus();
@@ -90,7 +92,7 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, row 
       return true;
     }
     try {
-      const response = await fetch(`${requestApiBase}${encodeURIComponent(row.umRequestId)}/start-review`, {
+      const response = await fetch(`${requestApiBase}${encodeURIComponent(request.id)}/start-review`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reviewerId: "delegate-reviewer" })
@@ -137,7 +139,7 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, row 
         return;
       }
 
-      const response = await fetch(`${requestApiBase}${encodeURIComponent(row.umRequestId)}/determination`, {
+      const response = await fetch(`${requestApiBase}${encodeURIComponent(request.id)}/determination`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -149,9 +151,9 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, row 
           denialReasonCode: outcomeStatus === "denied" ? denialReasonCode : null
         })
       });
-      const payload = (await response.json()) as DelegateUmRow | { error?: string };
+      const payload = (await response.json()) as UMRequest | { error?: string };
 
-      if (!response.ok || !("umRequestId" in payload)) {
+      if (!response.ok || !("id" in payload)) {
         setError("error" in payload && payload.error ? payload.error : "Unable to submit determination");
         return;
       }
@@ -177,33 +179,78 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, row 
           <div>
             <span className="eyebrow">Delegate review</span>
             <h2 id="delegate-review-title">Pharmacy prior authorization</h2>
-            <p>{row.umRequestId}</p>
+            <p className="delegate-review-id-line">
+              <span>{request.id}</span>
+              <LabsBadge variant={isSlaBreached(request) ? "warning" : "info"}>{formatUmState(currentState)}</LabsBadge>
+            </p>
           </div>
           <button ref={closeButtonRef} className="row-action" type="button" onClick={onClose}>
             Close
           </button>
         </div>
 
-        <dl className="detail-grid plan-audit-grid">
+        <dl className="detail-grid delegate-review-meta-grid">
           <div>
-            <dt>Requested item</dt>
-            <dd>{row.serviceLabel}</dd>
+            <dt>Patient</dt>
+            <dd>{request.patientDisplay}</dd>
           </div>
           <div>
-            <dt>Request type</dt>
-            <dd>{formatRequestType(row.requestType)}</dd>
-          </div>
-          <div>
-            <dt>Status</dt>
-            <dd>{formatUmState(reviewStarted ? "in_clinical_review" : row.state)}</dd>
+            <dt>Health plan</dt>
+            <dd>{request.planDisplay}</dd>
           </div>
           <div>
             <dt>SLA</dt>
             <dd>
-              <LabsBadge variant={row.slaStatus === "breached" ? "warning" : "info"}>{formatSlaStatus(row)}</LabsBadge>
+              <LabsBadge variant={isSlaBreached(request) ? "warning" : "info"}>{formatUmRequestSlaStatus(request)}</LabsBadge>
             </dd>
           </div>
         </dl>
+
+        <section className="delegate-service-panel">
+          <h3>Service details</h3>
+          <p className="delegate-service-title">{request.serviceLabel}</p>
+          <dl className="detail-grid delegate-service-grid">
+            <div>
+              <dt>Request type</dt>
+              <dd>{formatRequestType(request.requestType)}</dd>
+            </div>
+            <div>
+              <dt>{request.codingSystem === "NDC" ? "Medication code" : "Procedure"}</dt>
+              <dd>
+                {request.codingSystem} {request.billingCode}
+              </dd>
+            </div>
+            <div>
+              <dt>Coverage result</dt>
+              <dd>{formatCoverageResult(request)}</dd>
+            </div>
+          </dl>
+          {assessment.answers.length > 0 ? (
+            <details className="policy-criteria-toggle delegate-assessment-toggle">
+              <summary>View assessment</summary>
+              <div className="policy-criteria-table-wrap">
+                <table className="policy-criteria-table">
+                  <thead>
+                    <tr>
+                      <th>Question</th>
+                      <th>Answer</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {assessment.answers.map((answer) => (
+                      <tr key={answer.questionId}>
+                        <td>{answer.prompt}</td>
+                        <td>{formatAssessmentAnswer(answer.value)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          ) : (
+            <p className={`action-status ${assessment.status === "not_required" ? "" : "warning-copy"}`}>{assessment.label}</p>
+          )}
+        </section>
 
         {actionStatus ? <p className="action-status">{actionStatus}</p> : null}
         {error ? (
@@ -300,5 +347,87 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, row 
         </div>
       </section>
     </div>
+  );
+}
+
+interface AssessmentAnswerView {
+  questionId: string;
+  prompt: string;
+  value: DtrAnswerValue | "not_answered";
+}
+
+interface AssessmentView {
+  status: "complete" | "incomplete" | "not_provided" | "not_required";
+  label: string;
+  answers: AssessmentAnswerView[];
+}
+
+function buildAssessmentView(request: UMRequest): AssessmentView {
+  const questionnaireId = request.coverage.documentationTemplateId;
+
+  if (!questionnaireId) {
+    return {
+      status: "not_required",
+      label: "Assessment not required",
+      answers: []
+    };
+  }
+
+  if (!request.dtrQuestionnaireResponse) {
+    return {
+      status: "not_provided",
+      label: "Assessment not provided",
+      answers: []
+    };
+  }
+
+  const questionnaire = getDtrQuestionnaire(questionnaireId);
+  const responseAnswers = new Map<string, DtrAnswerValue>(
+    request.dtrQuestionnaireResponse.answers.map((answer) => [answer.questionId, answer.value])
+  );
+  const answers: AssessmentAnswerView[] =
+    questionnaire?.questions.map((question) => ({
+      questionId: question.id,
+      prompt: question.prompt,
+      value: responseAnswers.get(question.id) ?? "not_answered"
+    })) ??
+    request.dtrQuestionnaireResponse.answers.map((answer) => ({
+      questionId: answer.questionId,
+      prompt: answer.questionId,
+      value: answer.value
+    }));
+  const complete = answers.length > 0 && answers.every((answer) => answer.value === "yes" || answer.value === "no");
+
+  return {
+    status: complete ? "complete" : "incomplete",
+    label: complete ? "Assessment complete" : "Assessment incomplete",
+    answers
+  };
+}
+
+function formatAssessmentAnswer(value: AssessmentAnswerView["value"]) {
+  switch (value) {
+    case "yes":
+      return "Yes";
+    case "no":
+      return "No";
+    case "not_answered":
+      return "Not answered";
+  }
+}
+
+function formatCoverageResult(request: UMRequest) {
+  if (!request.coverage.coveredBenefit) {
+    return "Not covered benefit";
+  }
+
+  return request.coverage.priorAuthRequired ? "Coverage confirmed; PA required" : "Coverage confirmed; PA not required";
+}
+
+function isSlaBreached(request: UMRequest) {
+  return Boolean(
+    request.state === "determined" &&
+      request.determinedAt &&
+      new Date(request.determinedAt).getTime() > new Date(request.slaDeadlineAt).getTime()
   );
 }

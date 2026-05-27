@@ -21,13 +21,13 @@ describe("delegate UM API routes", () => {
     const submitted = (await submittedResponse.json()) as { id: string };
 
     const workqueueResponse = await listWorkqueue();
-    const workqueue = (await workqueueResponse.json()) as { rows: Array<{ umRequestId: string; requestType: string }> };
+    const workqueue = (await workqueueResponse.json()) as { rows: Array<{ id: string; requestType: string }> };
 
     expect(workqueueResponse.status).toBe(200);
     expect(workqueue.rows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          umRequestId: submitted.id,
+          id: submitted.id,
           requestType: "pharmacy_benefit"
         })
       ])
@@ -60,30 +60,32 @@ describe("delegate UM API routes", () => {
       }),
       { params: Promise.resolve({ umRequestId: submitted.id }) }
     );
-    const row = (await determinationResponse.json()) as {
-      umRequestId: string;
+    const determined = (await determinationResponse.json()) as {
       id: string;
-      incentiveStatus: string;
-      paymentStatus: string;
+      state: string;
+      outcomeStatus: string;
     };
 
     expect(determinationResponse.status).toBe(200);
-    expect(row).toMatchObject({
-      umRequestId: submitted.id,
+    expect(determined).toMatchObject({
       id: submitted.id,
-      incentiveStatus: "paid",
-      paymentStatus: "auto_executed"
+      state: "determined",
+      outcomeStatus: "approved"
     });
 
     const planResponse = await listPlanRows();
-    const planRows = (await planResponse.json()) as { rows: Array<{ umRequestId: string; id: string }> };
+    const planRows = (await planResponse.json()) as {
+      rows: Array<{ umRequestId: string; id: string; incentiveStatus: string; paymentStatus: string }>;
+    };
 
     expect(planResponse.status).toBe(200);
     expect(planRows.rows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           umRequestId: submitted.id,
-          id: submitted.id
+          id: submitted.id,
+          incentiveStatus: "paid",
+          paymentStatus: "auto_executed"
         })
       ])
     );

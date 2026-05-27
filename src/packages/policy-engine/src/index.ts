@@ -238,10 +238,6 @@ function evaluateDelegateUmSlaPolicy(input: EvaluatePolicyInput): PolicyEvaluati
     reasonCodes.push("PROHIBITED_OUTCOME_METRIC");
   }
 
-  if (request.requestObject.containsPhi !== false) {
-    reasonCodes.push("PHI_IN_PAYMENT_METADATA");
-  }
-
   if (monthToDateAmount + policy.payout.amountPerEligibleRequest > policy.payout.monthlyCap) {
     reasonCodes.push("MONTHLY_CAP_EXCEEDED");
   }

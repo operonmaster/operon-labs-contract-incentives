@@ -1364,6 +1364,10 @@ main {
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
+.policy-event-summary-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
 .policy-detail-grid {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
@@ -1385,6 +1389,18 @@ main {
 .policy-modal-section h3 {
   font-size: 16px;
   margin: 0;
+}
+
+.policy-event-section-heading {
+  align-items: start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.policy-event-section-heading > div {
+  display: grid;
+  gap: 4px;
 }
 
 .policy-modal-section ul {
@@ -2179,6 +2195,36 @@ body {
   width: min(100%, 980px);
 }
 
+.delegate-review-id-line {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 10px 0 0;
+}
+
+.delegate-review-meta-grid,
+.delegate-service-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.delegate-service-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.delegate-service-panel h3 {
+  font-size: 18px;
+  margin: 0;
+}
+
+.delegate-service-title {
+  color: var(--op-ink);
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0;
+}
+
 .delegate-review-grid {
   display: grid;
   gap: 14px;
@@ -2231,6 +2277,11 @@ body {
 }
 
 @media (max-width: 720px) {
+  .delegate-review-meta-grid,
+  .delegate-service-grid {
+    grid-template-columns: 1fr;
+  }
+
   .delegate-review-grid {
     grid-template-columns: 1fr;
   }

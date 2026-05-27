@@ -2,30 +2,31 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { DelegateUmRow } from "../../lib/delegate-um-workflow";
+import type { DelegatePlanAuditRow } from "../../lib/delegate-um-workflow";
 import { LabsBadge, LabsHero, LabsPageShell } from "../labs-ui";
+import { DelegatePlanAuditDetailsModal } from "./DelegatePlanAuditDetailsModal";
 import { DelegateUseCaseNavigation } from "./DelegateUseCaseNavigation";
 import {
-  formatCurrency,
-  formatIncentiveStatus,
+  businessPolicyStatusBadgeVariant,
+  formatBusinessPolicyStatus,
   formatOutcomeStatus,
   formatPaymentStatus,
   formatRequestType,
   formatSlaStatus,
-  formatUmState,
-  incentiveBadgeVariant
+  paymentStatusBadgeVariant
 } from "./delegate-formatters";
 
 interface DelegateRowsResponse {
-  rows: DelegateUmRow[];
+  rows: DelegatePlanAuditRow[];
 }
 
 type RefreshSource = "initial" | "manual";
 
 export function DelegatePlanConsole({ initialUmRequestId = null }: { initialUmRequestId?: string | null }) {
   const requestedUmRequestId = initialUmRequestId;
-  const [rows, setRows] = useState<DelegateUmRow[]>([]);
+  const [rows, setRows] = useState<DelegatePlanAuditRow[]>([]);
   const [selectedUmRequestId, setSelectedUmRequestId] = useState<string | null>(null);
+  const [detailsUmRequestId, setDetailsUmRequestId] = useState<string | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -98,7 +99,7 @@ export function DelegatePlanConsole({ initialUmRequestId = null }: { initialUmRe
     };
   }, [refreshRows]);
 
-  const selectedRow = rows.find((row) => row.umRequestId === selectedUmRequestId) ?? null;
+  const detailsRow = rows.find((row) => row.umRequestId === detailsUmRequestId) ?? null;
 
   return (
     <LabsPageShell className="workspace delegate-console delegate-plan-console">
@@ -142,11 +143,11 @@ export function DelegatePlanConsole({ initialUmRequestId = null }: { initialUmRe
                 <th>UM request ID</th>
                 <th>Vendor</th>
                 <th>Request type</th>
-                <th>State</th>
                 <th>Outcome status</th>
                 <th className="badge-cell">SLA</th>
-                <th className="badge-cell">Policy</th>
-                <th>Settlement</th>
+                <th className="badge-cell">Business Policy</th>
+                <th className="badge-cell">Payment Policy</th>
+                <th>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -162,29 +163,35 @@ export function DelegatePlanConsole({ initialUmRequestId = null }: { initialUmRe
               ) : null}
               {rows.map((row) => (
                 <tr key={row.umRequestId} className={row.umRequestId === selectedUmRequestId ? "selected" : ""}>
-                  <td>
-                    <button
-                      aria-pressed={row.umRequestId === selectedUmRequestId}
-                      className="row-action mono-cell"
-                      type="button"
-                      onClick={() => setSelectedUmRequestId(row.umRequestId)}
-                    >
-                      {row.umRequestId}
-                    </button>
-                  </td>
+                  <td className="mono-cell">{row.umRequestId}</td>
                   <td>{row.delegateVendorId}</td>
                   <td>{formatRequestType(row.requestType)}</td>
-                  <td>{formatUmState(row.state)}</td>
                   <td>{formatOutcomeStatus(row.outcomeStatus)}</td>
                   <td className="badge-cell">
                     <LabsBadge variant={row.slaStatus === "breached" ? "warning" : "info"}>{formatSlaStatus(row)}</LabsBadge>
                   </td>
                   <td className="badge-cell">
-                    <LabsBadge variant={incentiveBadgeVariant(row.incentiveStatus)}>
-                      {formatIncentiveStatus(row.incentiveStatus)}
+                    <LabsBadge variant={businessPolicyStatusBadgeVariant(row.incentiveStatus)}>
+                      {formatBusinessPolicyStatus(row.incentiveStatus)}
                     </LabsBadge>
                   </td>
-                  <td>{formatPaymentStatus(row.paymentStatus)}</td>
+                  <td className="badge-cell">
+                    <LabsBadge variant={paymentStatusBadgeVariant(row.paymentStatus)}>
+                      {formatPaymentStatus(row.paymentStatus)}
+                    </LabsBadge>
+                  </td>
+                  <td>
+                    <button
+                      className="row-action"
+                      type="button"
+                      onClick={() => {
+                        setSelectedUmRequestId(row.umRequestId);
+                        setDetailsUmRequestId(row.umRequestId);
+                      }}
+                    >
+                      View details
+                    </button>
+                  </td>
                 </tr>
               ))}
               {!initialLoading && rows.length === 0 ? (
@@ -199,53 +206,7 @@ export function DelegatePlanConsole({ initialUmRequestId = null }: { initialUmRe
         </div>
       </section>
 
-      {selectedRow ? (
-        <section className="panel detail-panel">
-          <div className="toolbar">
-            <div>
-              <h2>Selected request</h2>
-              <p>{selectedRow.serviceLabel}</p>
-            </div>
-            <LabsBadge variant={incentiveBadgeVariant(selectedRow.incentiveStatus)}>
-              {formatIncentiveStatus(selectedRow.incentiveStatus)}
-            </LabsBadge>
-          </div>
-          <dl className="detail-grid plan-audit-grid">
-            <div>
-              <dt>Outcome status</dt>
-              <dd>{formatOutcomeStatus(selectedRow.outcomeStatus)}</dd>
-            </div>
-            <div>
-              <dt>SLA</dt>
-              <dd>{formatSlaStatus(selectedRow)}</dd>
-            </div>
-            <div>
-              <dt>Payment status</dt>
-              <dd>{formatPaymentStatus(selectedRow.paymentStatus)}</dd>
-            </div>
-            <div>
-              <dt>Incentive value</dt>
-              <dd>{formatCurrency(selectedRow)}</dd>
-            </div>
-            <div>
-              <dt>Policy ID</dt>
-              <dd className="mono-cell">{selectedRow.policyId ?? "Pending determination"}</dd>
-            </div>
-            <div>
-              <dt>Transaction</dt>
-              <dd className="mono-cell">{selectedRow.transactionId ?? "Not recorded"}</dd>
-            </div>
-            <div>
-              <dt>Reason</dt>
-              <dd>{selectedRow.reason}</dd>
-            </div>
-            <div>
-              <dt>Reason codes</dt>
-              <dd>{selectedRow.reasonCodes.length > 0 ? selectedRow.reasonCodes.join(", ") : "None"}</dd>
-            </div>
-          </dl>
-        </section>
-      ) : null}
+      {detailsRow ? <DelegatePlanAuditDetailsModal row={detailsRow} onClose={() => setDetailsUmRequestId(null)} /> : null}
     </LabsPageShell>
   );
 }

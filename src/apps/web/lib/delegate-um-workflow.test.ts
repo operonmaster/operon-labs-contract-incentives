@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { executePolicyBoundPayment } from "@operon-labs/hedera-executor";
-import { buildProviderDocumentationEvidence, createInMemoryUmPlatform, type UMPlatformEvent, type UMRequest } from "@operon-labs/um-platform";
-import { createDelegateUmWorkflow, type DelegateUmRow } from "./delegate-um-workflow";
+import {
+  buildProviderDocumentationEvidence,
+  createInMemoryUmPlatform,
+  getDtrQuestionnaire,
+  type UMPlatformEvent,
+  type UMRequest
+} from "@operon-labs/um-platform";
+import { createDelegateUmWorkflow, type DelegatePlanAuditRow } from "./delegate-um-workflow";
 import type { PersistedIncentiveWorklistRow, StoredPasSubmission, UmPasPersistenceStore } from "./pas-persistence";
 import { createInMemoryPolicyStore, defaultIncentivePolicies, type PolicyStore } from "./policy-store";
 
@@ -32,17 +38,40 @@ describe("delegate UM workflow", () => {
     });
     const umRequest = platform.submitPriorAuth({
       requestType: "pharmacy_benefit",
-      serviceCode: "wegovy_semaglutide"
+      serviceCode: "wegovy_semaglutide",
+      dtrQuestionnaireResponse: {
+        questionnaireId: "pharmacy-weight-management-pa-v1",
+        answers: getDtrQuestionnaire("pharmacy-weight-management-pa-v1")!.questions.map((question, index) => ({
+          questionId: question.id,
+          value: index === 2 ? "no" : "yes"
+        }))
+      }
     });
 
     expect(outpatient.delegateVendorId).toBeNull();
     await expect(workflow.listWorkqueue()).resolves.toEqual([
       expect.objectContaining({
-        umRequestId: umRequest.id,
         id: umRequest.id,
         requestType: "pharmacy_benefit",
+        serviceCode: "wegovy_semaglutide",
+        codingSystem: "NDC",
+        billingCode: "0169-4525-14",
         state: "pend",
-        slaStatus: "pending"
+        coverage: expect.objectContaining({
+          coveredBenefit: true,
+          priorAuthRequired: true,
+          documentationTemplateId: "pharmacy-weight-management-pa-v1",
+          requiredDocumentation: expect.arrayContaining(["diagnosis and indication"])
+        }),
+        dtrQuestionnaireResponse: expect.objectContaining({
+          questionnaireId: "pharmacy-weight-management-pa-v1",
+          answers: expect.arrayContaining([
+            expect.objectContaining({
+              questionId: "prior_therapy",
+              value: "no"
+            })
+          ])
+        })
       })
     ]);
 
@@ -69,14 +98,20 @@ describe("delegate UM workflow", () => {
     });
     await workflow.startReview(umRequest.id, "reviewer-ana");
 
-    const row = await workflow.completeDetermination(umRequest.id, {
+    const determined = await workflow.completeDetermination(umRequest.id, {
       outcomeStatus: "denied",
       medicalNecessityReviewed: true,
       policyCriteriaChecked: true,
       rationaleCaptured: true,
       denialReasonCode: "NOT_MEDICALLY_NECESSARY"
     });
+    const [row] = await workflow.listPlanRows();
 
+    expect(determined).toMatchObject({
+      id: umRequest.id,
+      state: "determined",
+      outcomeStatus: "denied"
+    });
     expect(row).toMatchObject({
       umRequestId: umRequest.id,
       id: umRequest.id,
@@ -86,6 +121,69 @@ describe("delegate UM workflow", () => {
       incentiveValue: 5,
       reasonCodes: []
     });
+    expect(row.policyControls).toEqual([
+      "Allowed delegate vendor wallet",
+      "Request type limited to policy scope",
+      "Determination completed within SLA",
+      "Clinical review completion required",
+      "Outcome status not used for payment",
+      "PAS audit reference required"
+    ]);
+    expect(row.policyCriteria).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "plan",
+        label: "Plan is in the delegate contract",
+        expected: "acme-health-ppo",
+        passed: true,
+        reasonCode: "PLAN_NOT_IN_CONTRACT"
+      }),
+      expect.objectContaining({
+        id: "delegateVendor",
+        label: "Delegate vendor is in the contract",
+        expected: "northstar-um",
+        actual: "northstar-um",
+        passed: true,
+        reasonCode: "DELEGATE_VENDOR_NOT_IN_CONTRACT"
+      }),
+      expect.objectContaining({
+        id: "requestType",
+        label: "Request type is eligible",
+        expected: "Pharmacy Benefit",
+        actual: "Pharmacy Benefit",
+        passed: true,
+        reasonCode: "REQUEST_TYPE_NOT_ELIGIBLE"
+      }),
+      expect.objectContaining({
+        id: "sla",
+        label: "Determination completed within SLA",
+        expected: "Within 24h SLA",
+        passed: true,
+        reasonCode: "SLA_EXCEEDED"
+      }),
+      expect.objectContaining({
+        id: "clinicalReviewCompleted",
+        label: "Clinical review checklist is complete",
+        expected: "true",
+        actual: "true",
+        passed: true,
+        reasonCode: "CLINICAL_REVIEW_INCOMPLETE"
+      }),
+      expect.objectContaining({
+        id: "outcomeNotPaymentMetric",
+        label: "Outcome status is not used for payment",
+        expected: "false",
+        actual: "false",
+        passed: true,
+        reasonCode: "PROHIBITED_OUTCOME_METRIC"
+      })
+    ]));
+    expect(row.policyCriteria).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          reasonCode: "PHI_IN_PAYMENT_METADATA"
+        })
+      ])
+    );
     expect(executePolicyBoundPaymentMock).toHaveBeenCalledWith(
       expect.objectContaining({
         incentiveEvaluationId: umRequest.id,
@@ -115,11 +213,17 @@ describe("delegate UM workflow", () => {
     await persistence.saveUmRequest(umRequest);
     await workflow.startReview(umRequest.id, "reviewer-ana");
 
-    const paid = await workflow.completeDetermination(umRequest.id, {
+    await workflow.completeDetermination(umRequest.id, {
       outcomeStatus: "approved",
       medicalNecessityReviewed: true,
       policyCriteriaChecked: true,
       rationaleCaptured: true
+    });
+    const [paidRow] = await workflow.listPlanRows();
+    expect(paidRow).toMatchObject({
+      umRequestId: umRequest.id,
+      incentiveStatus: "paid",
+      paymentStatus: "auto_executed"
     });
 
     const restartedWorkflow = createDelegateUmWorkflow(
@@ -137,9 +241,48 @@ describe("delegate UM workflow", () => {
         paymentStatus: "auto_executed",
         audit: expect.objectContaining({
           policyId: "delegate-um-sla-bonus-v1",
-          transactionId: paid.transactionId
+          transactionId: paidRow?.transactionId
         }),
-        transactionId: paid.transactionId
+        transactionId: paidRow?.transactionId
+      })
+    ]);
+  });
+
+  it("reattaches UMRequest details when loading legacy persisted delegate rows", async () => {
+    const platform = createInMemoryUmPlatform({ generateCaseId: () => "PA-260526-0900-LEGACY1" });
+    const persistence = new FakeDelegatePersistenceStore();
+    const umRequest = platform.submitPriorAuth({
+      requestType: "pharmacy_benefit",
+      serviceCode: "wegovy_semaglutide"
+    });
+    const paidRow = buildPaidDelegateRow(umRequest);
+    const legacyPersistedRow: Record<string, unknown> = {
+      ...paidRow,
+      caseId: paidRow.umRequestId
+    };
+    delete legacyPersistedRow.umRequest;
+    await persistence.saveUmRequest(paidRow.umRequest);
+    await persistence.saveIncentiveRow(legacyPersistedRow as unknown as PersistedIncentiveWorklistRow);
+
+    const restartedWorkflow = createDelegateUmWorkflow(
+      createInMemoryUmPlatform(),
+      persistence,
+      createInMemoryPolicyStore({
+        delegate_um_acme_sla_bonus: defaultIncentivePolicies.delegate_um_acme_sla_bonus
+      })
+    );
+
+    await expect(restartedWorkflow.listPlanRows()).resolves.toEqual([
+      expect.objectContaining({
+        umRequestId: umRequest.id,
+        incentiveStatus: "paid",
+        paymentStatus: "auto_executed",
+        transactionId: paidRow.transactionId,
+        umRequest: expect.objectContaining({
+          id: umRequest.id,
+          state: "determined",
+          outcomeStatus: "approved"
+        })
       })
     ]);
   });
@@ -168,12 +311,24 @@ describe("delegate UM workflow", () => {
       rationaleCaptured: true
     };
     const first = await workflow.completeDetermination(umRequest.id, input);
+    const [firstRow] = await workflow.listPlanRows();
     const second = await workflow.completeDetermination(umRequest.id, input);
+    const [secondRow] = await workflow.listPlanRows();
 
+    expect(first).toMatchObject({
+      id: umRequest.id,
+      state: "determined",
+      outcomeStatus: "approved"
+    });
     expect(second).toMatchObject({
+      id: umRequest.id,
+      state: "determined",
+      outcomeStatus: "approved"
+    });
+    expect(secondRow).toMatchObject({
       umRequestId: umRequest.id,
       incentiveStatus: "paid",
-      transactionId: first.transactionId
+      transactionId: firstRow?.transactionId
     });
     expect(executePolicyBoundPaymentMock).toHaveBeenCalledTimes(1);
   });
@@ -201,11 +356,18 @@ describe("delegate UM workflow", () => {
     });
     await workflow.startReview(umRequest.id, "reviewer-ana");
 
-    const row = await workflow.completeDetermination(umRequest.id, {
+    const determined = await workflow.completeDetermination(umRequest.id, {
       outcomeStatus: "approved",
       medicalNecessityReviewed: true,
       policyCriteriaChecked: true,
       rationaleCaptured: true
+    });
+    const [row] = await workflow.listPlanRows();
+
+    expect(determined).toMatchObject({
+      id: umRequest.id,
+      state: "determined",
+      outcomeStatus: "approved"
     });
     expect(row).toMatchObject({
       umRequestId: umRequest.id,
@@ -238,19 +400,25 @@ describe("delegate UM workflow", () => {
     });
     await workflow.startReview(umRequest.id, "reviewer-ana");
 
-    const row = await workflow.completeDetermination(umRequest.id, {
+    const determined = await workflow.completeDetermination(umRequest.id, {
       outcomeStatus: "approved",
       medicalNecessityReviewed: true,
       policyCriteriaChecked: true,
       rationaleCaptured: true
     });
-    const retried = await workflow.completeDetermination(umRequest.id, {
+    await workflow.completeDetermination(umRequest.id, {
       outcomeStatus: "approved",
       medicalNecessityReviewed: true,
       policyCriteriaChecked: true,
       rationaleCaptured: true
     });
+    const [row] = await workflow.listPlanRows();
 
+    expect(determined).toMatchObject({
+      id: umRequest.id,
+      state: "determined",
+      outcomeStatus: "approved"
+    });
     expect(row).toMatchObject({
       umRequestId: umRequest.id,
       slaStatus: "breached",
@@ -259,7 +427,6 @@ describe("delegate UM workflow", () => {
       reasonCodes: ["SLA_EXCEEDED"],
       transactionId: null
     });
-    expect(retried).toEqual(row);
     expect(executePolicyBoundPaymentMock).not.toHaveBeenCalled();
   });
 
@@ -277,19 +444,25 @@ describe("delegate UM workflow", () => {
     });
     await workflow.startReview(umRequest.id, "reviewer-ana");
 
-    const row = await workflow.completeDetermination(umRequest.id, {
+    const determined = await workflow.completeDetermination(umRequest.id, {
       outcomeStatus: "approved",
       medicalNecessityReviewed: true,
       policyCriteriaChecked: true,
       rationaleCaptured: true
     });
-    const retried = await workflow.completeDetermination(umRequest.id, {
+    await workflow.completeDetermination(umRequest.id, {
       outcomeStatus: "approved",
       medicalNecessityReviewed: true,
       policyCriteriaChecked: true,
       rationaleCaptured: true
     });
+    const [row] = await workflow.listPlanRows();
 
+    expect(determined).toMatchObject({
+      id: umRequest.id,
+      state: "determined",
+      outcomeStatus: "approved"
+    });
     expect(row).toMatchObject({
       umRequestId: umRequest.id,
       incentiveStatus: "not_eligible",
@@ -297,7 +470,6 @@ describe("delegate UM workflow", () => {
       reasonCodes: ["POLICY_NOT_FOUND"],
       transactionId: null
     });
-    expect(retried).toEqual(row);
     expect(executePolicyBoundPaymentMock).not.toHaveBeenCalled();
   });
 
@@ -360,13 +532,19 @@ describe("delegate UM workflow", () => {
       throw new Error("DUPLICATE_PAYMENT_BLOCKED");
     });
 
-    const row = await workflow.completeDetermination(umRequest.id, {
+    const determined = await workflow.completeDetermination(umRequest.id, {
       outcomeStatus: "approved",
       medicalNecessityReviewed: true,
       policyCriteriaChecked: true,
       rationaleCaptured: true
     });
+    const [row] = await workflow.listPlanRows();
 
+    expect(determined).toMatchObject({
+      id: umRequest.id,
+      state: "determined",
+      outcomeStatus: "approved"
+    });
     expect(row).toMatchObject({
       umRequestId: umRequest.id,
       incentiveStatus: "paid",
@@ -380,9 +558,17 @@ describe("delegate UM workflow", () => {
   });
 });
 
-function buildPaidDelegateRow(request: UMRequest): DelegateUmRow {
+function buildPaidDelegateRow(request: UMRequest): DelegatePlanAuditRow {
+  const determinedAt = new Date().toISOString();
+
   return {
     evaluationType: "delegate_um_sla_bonus",
+    umRequest: {
+      ...request,
+      state: "determined",
+      outcomeStatus: "approved",
+      determinedAt
+    },
     umRequestId: request.id,
     id: request.id,
     planId: request.planId,
@@ -393,7 +579,7 @@ function buildPaidDelegateRow(request: UMRequest): DelegateUmRow {
     submittedAt: request.submittedAt,
     pendStartedAt: request.pendStartedAt,
     slaDeadlineAt: request.slaDeadlineAt,
-    determinedAt: new Date().toISOString(),
+    determinedAt,
     timeRemainingMs: 0,
     state: "determined",
     outcomeStatus: "approved",
@@ -406,6 +592,15 @@ function buildPaidDelegateRow(request: UMRequest): DelegateUmRow {
     reason: "Concurrent payment already settled",
     reasonCodes: [],
     policyId: "delegate-um-sla-bonus-v1",
+    policyControls: [
+      "Allowed delegate vendor wallet",
+      "Request type limited to policy scope",
+      "Determination completed within SLA",
+      "Clinical review completion required",
+      "Outcome status not used for payment",
+      "PAS audit reference required"
+    ],
+    policyCriteria: [],
     audit: {
       id: `audit-test-${request.id}`,
       requestHash: `hash-${request.id}`,
@@ -433,7 +628,7 @@ function requireTestDelegateVendorId(request: UMRequest): string {
 class FakeDelegatePersistenceStore implements UmPasPersistenceStore {
   readonly backend = "firestore" as const;
   private readonly requests = new Map<string, UMRequest>();
-  private readonly rows = new Map<string, DelegateUmRow>();
+  private readonly rows = new Map<string, DelegatePlanAuditRow>();
 
   async savePasSubmission(request: StoredPasSubmission): Promise<void> {
     await this.saveUmRequest(request.umRequest);
@@ -481,7 +676,7 @@ class FakeDelegatePersistenceStore implements UmPasPersistenceStore {
   }
 
   async saveIncentiveRow(row: PersistedIncentiveWorklistRow): Promise<void> {
-    this.rows.set(row.umRequestId, structuredClone(row as unknown as DelegateUmRow));
+    this.rows.set(row.umRequestId, structuredClone(row as unknown as DelegatePlanAuditRow));
   }
 
   async listIncentiveRows(): Promise<PersistedIncentiveWorklistRow[]> {

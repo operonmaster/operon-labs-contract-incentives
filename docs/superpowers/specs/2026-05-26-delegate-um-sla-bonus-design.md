@@ -244,8 +244,7 @@ Delegate SLA policy evidence:
     medicalNecessityReviewed: true,
     policyCriteriaChecked: true,
     rationaleCaptured: true,
-    auditReady: true,
-    containsPhi: false
+    auditReady: true
   }
 }
 ```
@@ -301,7 +300,6 @@ Hard-coded first-iteration criteria:
 - Outcome value is not used to determine payment amount.
 - Clinical review checklist is complete.
 - Determination completed within 24 hours of `pendStartedAt`.
-- No PHI in payment metadata.
 - No denial-rate, approval-rate, utilization, or savings metric is used in payment basis.
 
 Initial payout is `5 HBAR` per eligible request with a monthly cap that matches the current business policy pattern.

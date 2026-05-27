@@ -1,6 +1,7 @@
-import type { DelegateUmRow } from "../../lib/delegate-um-workflow";
+import type { UMRequest } from "@operon-labs/um-platform";
+import type { DelegatePlanAuditRow } from "../../lib/delegate-um-workflow";
 
-export function formatRequestType(requestType: DelegateUmRow["requestType"]) {
+export function formatRequestType(requestType: UMRequest["requestType"]) {
   switch (requestType) {
     case "outpatient_service":
       return "Outpatient Service";
@@ -11,7 +12,7 @@ export function formatRequestType(requestType: DelegateUmRow["requestType"]) {
   }
 }
 
-export function formatUmState(state: DelegateUmRow["state"]) {
+export function formatUmState(state: UMRequest["state"]) {
   switch (state) {
     case "pend":
       return "Pended";
@@ -22,7 +23,7 @@ export function formatUmState(state: DelegateUmRow["state"]) {
   }
 }
 
-export function formatOutcomeStatus(outcomeStatus: DelegateUmRow["outcomeStatus"]) {
+export function formatOutcomeStatus(outcomeStatus: UMRequest["outcomeStatus"]) {
   if (!outcomeStatus) {
     return "Pending";
   }
@@ -30,7 +31,7 @@ export function formatOutcomeStatus(outcomeStatus: DelegateUmRow["outcomeStatus"
   return outcomeStatus === "approved" ? "Approved" : "Denied";
 }
 
-export function formatSlaStatus(row: Pick<DelegateUmRow, "slaStatus" | "timeRemainingMs">) {
+export function formatSlaStatus(row: Pick<DelegatePlanAuditRow, "slaStatus" | "timeRemainingMs">) {
   if (row.slaStatus === "within_sla") {
     return "Within SLA";
   }
@@ -42,20 +43,29 @@ export function formatSlaStatus(row: Pick<DelegateUmRow, "slaStatus" | "timeRema
   return `${formatDuration(row.timeRemainingMs)} remaining`;
 }
 
-export function formatIncentiveStatus(status: DelegateUmRow["incentiveStatus"]) {
+export function formatUmRequestSlaStatus(request: Pick<UMRequest, "determinedAt" | "slaDeadlineAt" | "state">) {
+  if (request.state === "determined" && request.determinedAt) {
+    return new Date(request.determinedAt).getTime() <= new Date(request.slaDeadlineAt).getTime()
+      ? "Within SLA"
+      : "SLA breached";
+  }
+
+  return `${formatDuration(Math.max(0, new Date(request.slaDeadlineAt).getTime() - Date.now()))} remaining`;
+}
+
+export function formatBusinessPolicyStatus(status: DelegatePlanAuditRow["incentiveStatus"]) {
   switch (status) {
     case "pending":
       return "Pending";
     case "not_eligible":
       return "Not eligible";
     case "paid":
-      return "Paid";
     case "payment_failed":
-      return "Payment failed";
+      return "Passed";
   }
 }
 
-export function formatPaymentStatus(status: DelegateUmRow["paymentStatus"]) {
+export function formatPaymentStatus(status: DelegatePlanAuditRow["paymentStatus"]) {
   switch (status) {
     case "pending":
       return "Pending";
@@ -68,19 +78,31 @@ export function formatPaymentStatus(status: DelegateUmRow["paymentStatus"]) {
   }
 }
 
-export function formatCurrency(row: Pick<DelegateUmRow, "currency" | "incentiveValue" | "settlementToken">) {
+export function formatCurrency(row: Pick<DelegatePlanAuditRow, "currency" | "incentiveValue" | "settlementToken">) {
   return `${row.incentiveValue.toLocaleString("en-US", {
     maximumFractionDigits: 2,
     minimumFractionDigits: 2
   })} ${row.settlementToken?.symbol ?? row.currency}`;
 }
 
-export function incentiveBadgeVariant(status: DelegateUmRow["incentiveStatus"]): "success" | "warning" | "neutral" {
-  if (status === "paid") {
+export function businessPolicyStatusBadgeVariant(status: DelegatePlanAuditRow["incentiveStatus"]): "success" | "warning" | "neutral" {
+  if (status === "paid" || status === "payment_failed") {
     return "success";
   }
 
-  if (status === "not_eligible" || status === "payment_failed") {
+  if (status === "not_eligible") {
+    return "warning";
+  }
+
+  return "neutral";
+}
+
+export function paymentStatusBadgeVariant(status: DelegatePlanAuditRow["paymentStatus"]): "success" | "warning" | "neutral" {
+  if (status === "auto_executed") {
+    return "success";
+  }
+
+  if (status === "blocked_by_policy" || status === "execution_failed") {
     return "warning";
   }
 
