@@ -57,6 +57,68 @@ const approvedRequest: EvaluationRequest = {
   }
 };
 
+const delegatePolicy: IncentivePolicy = {
+  policyId: "delegate-um-sla-bonus-v1",
+  version: "v1",
+  status: "active",
+  evaluationType: "delegate_um_sla_bonus",
+  contractPair: {
+    planId: "acme-health-ppo",
+    planName: "Acme Health PPO",
+    providerId: "northstar-um",
+    providerName: "Northstar UM"
+  },
+  effectivePeriod: {
+    startsOn: "2026-05-01",
+    endsOn: null
+  },
+  incentiveScope: {
+    eligibleRequestTypes: ["outpatient_service", "pharmacy_benefit"]
+  },
+  eligibilityCriteria: {
+    appliesOnlyToCoveredBenefits: false,
+    requiresDtrCompletionWhenRequested: false,
+    requiresDeterminationWithinSla: true,
+    requiresClinicalReviewCompletion: true,
+    prohibitsOutcomeBasedPayment: true
+  },
+  payout: {
+    token: "HBAR",
+    amountPerEligibleRequest: 5,
+    monthlyCap: 500
+  },
+  settlement: {
+    mode: "auto",
+    recipientWalletId: "0.0.9049550",
+    requiresHumanApproval: false
+  }
+};
+
+const approvedDelegateRequest: EvaluationRequest = {
+  evaluationType: "delegate_um_sla_bonus",
+  submitter: {
+    id: "northstar-um"
+  },
+  requestObject: {
+    umRequestId: "PA-260526-0900-AAAA1111",
+    planId: "acme-health-ppo",
+    delegateVendorId: "northstar-um",
+    requestType: "outpatient_service",
+    state: "determined",
+    outcomeStatusPresent: true,
+    outcomeStatus: "approved",
+    outcomeStatusUsedForPayment: false,
+    completedWithinSla: true,
+    slaHours: 24,
+    clinicalReviewCompleted: true,
+    medicalNecessityReviewed: true,
+    policyCriteriaChecked: true,
+    rationaleCaptured: true,
+    auditReady: true,
+    containsPhi: false
+  }
+};
+
 describe("evaluatePolicy", () => {
   it("approves a pair-scoped DTR completion incentive and computes the flat payout", () => {
     const result = evaluatePolicy({
@@ -267,6 +329,75 @@ describe("evaluatePolicy", () => {
       decision: "blocked",
       amount: 0,
       reasonCodes: ["MONTHLY_CAP_EXCEEDED"]
+    });
+  });
+
+  it("approves delegate UM SLA bonus for approved and denied determinations when review evidence passes", () => {
+    const approved = evaluatePolicy({
+      policy: delegatePolicy,
+      request: approvedDelegateRequest,
+      monthToDateAmount: 0
+    });
+    const denied = evaluatePolicy({
+      policy: delegatePolicy,
+      request: {
+        ...approvedDelegateRequest,
+        requestObject: {
+          ...approvedDelegateRequest.requestObject,
+          outcomeStatus: "denied"
+        }
+      },
+      monthToDateAmount: 0
+    });
+
+    expect(approved).toMatchObject({
+      decision: "approved",
+      amount: 5,
+      currency: "HBAR",
+      walletId: "0.0.9049550",
+      reasonCodes: []
+    });
+    expect(denied).toMatchObject({
+      decision: "approved",
+      amount: 5,
+      walletId: "0.0.9049550",
+      reasonCodes: []
+    });
+  });
+
+  it("blocks delegate UM SLA bonus when SLA is exceeded or outcome is used as payment basis", () => {
+    const late = evaluatePolicy({
+      policy: delegatePolicy,
+      request: {
+        ...approvedDelegateRequest,
+        requestObject: {
+          ...approvedDelegateRequest.requestObject,
+          completedWithinSla: false
+        }
+      },
+      monthToDateAmount: 0
+    });
+    const outcomeBased = evaluatePolicy({
+      policy: delegatePolicy,
+      request: {
+        ...approvedDelegateRequest,
+        requestObject: {
+          ...approvedDelegateRequest.requestObject,
+          outcomeStatusUsedForPayment: true
+        }
+      },
+      monthToDateAmount: 0
+    });
+
+    expect(late).toMatchObject({
+      decision: "blocked",
+      amount: 0,
+      reasonCodes: expect.arrayContaining(["SLA_EXCEEDED"])
+    });
+    expect(outcomeBased).toMatchObject({
+      decision: "blocked",
+      amount: 0,
+      reasonCodes: expect.arrayContaining(["PROHIBITED_OUTCOME_METRIC"])
     });
   });
 });

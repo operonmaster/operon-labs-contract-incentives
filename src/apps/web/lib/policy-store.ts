@@ -74,6 +74,8 @@ const INCENTIVE_POLICIES_COLLECTION = "incentivePolicies";
 const POLICY_SEED_ACTOR = "operon-labs-contract-incentives";
 const PROVIDER_ID = "lakeside-provider-admin";
 const PROVIDER_WALLET_ID = "0.0.9049549";
+const DELEGATE_VENDOR_ID = "northstar-um";
+const DELEGATE_VENDOR_WALLET_ID = "0.0.9049550";
 
 export const defaultIncentivePolicies: Record<string, IncentivePolicy> = {
   provider_documentation_acme_outpatient: providerDocumentationPolicy({
@@ -116,7 +118,43 @@ export const defaultIncentivePolicies: Record<string, IncentivePolicy> = {
       cpt: [],
       ndc: ["0169-4525-14", "0074-0554-02"]
     }
-  })
+  }),
+  delegate_um_acme_sla_bonus: {
+    policyId: "delegate-um-sla-bonus-v1",
+    version: "v1",
+    status: "active",
+    evaluationType: "delegate_um_sla_bonus",
+    contractPair: {
+      planId: "acme-health-ppo",
+      planName: "Acme Health PPO",
+      providerId: DELEGATE_VENDOR_ID,
+      providerName: "Northstar UM"
+    },
+    effectivePeriod: {
+      startsOn: "2026-05-01",
+      endsOn: null
+    },
+    incentiveScope: {
+      eligibleRequestTypes: ["outpatient_service", "pharmacy_benefit"]
+    },
+    eligibilityCriteria: {
+      appliesOnlyToCoveredBenefits: false,
+      requiresDtrCompletionWhenRequested: false,
+      requiresDeterminationWithinSla: true,
+      requiresClinicalReviewCompletion: true,
+      prohibitsOutcomeBasedPayment: true
+    },
+    payout: {
+      token: "HBAR",
+      amountPerEligibleRequest: 5,
+      monthlyCap: 500
+    },
+    settlement: {
+      mode: "auto",
+      recipientWalletId: DELEGATE_VENDOR_WALLET_ID,
+      requiresHumanApproval: false
+    }
+  }
 };
 
 export function createPolicyStoreFromEnv(env: PolicyStoreEnv = process.env): PolicyStore {
@@ -628,6 +666,8 @@ function providerNameForId(providerId: string): string {
   switch (providerId) {
     case PROVIDER_ID:
       return "Lakeside Provider Admin";
+    case DELEGATE_VENDOR_ID:
+      return "Northstar UM";
     default:
       return providerId;
   }

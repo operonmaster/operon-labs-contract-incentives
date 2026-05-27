@@ -7,7 +7,7 @@ import {
 } from "./policy-store";
 
 describe("policy store", () => {
-  it("auto-seeds request-type-specific active incentive policies for every demo plan/provider pair into Firestore", async () => {
+  it("auto-seeds request-type-specific active incentive policies for every demo contract pair into Firestore", async () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePolicyStore(
       {
@@ -18,8 +18,33 @@ describe("policy store", () => {
     );
 
     const policies = await store.listPolicies("provider_documentation_completeness");
+    const delegatePolicies = await store.listPolicies("delegate_um_sla_bonus");
 
     expect(policies).toHaveLength(4);
+    expect(delegatePolicies).toHaveLength(1);
+    expect(delegatePolicies[0]).toMatchObject({
+      policyId: "delegate-um-sla-bonus-v1",
+      evaluationType: "delegate_um_sla_bonus",
+      contractPair: {
+        planId: "acme-health-ppo",
+        planName: "Acme Health PPO",
+        providerId: "northstar-um",
+        providerName: "Northstar UM"
+      },
+      incentiveScope: {
+        eligibleRequestTypes: ["outpatient_service", "pharmacy_benefit"]
+      },
+      payout: {
+        token: "HBAR",
+        amountPerEligibleRequest: 5,
+        monthlyCap: 500
+      },
+      settlement: {
+        mode: "auto",
+        recipientWalletId: "0.0.9049550",
+        requiresHumanApproval: false
+      }
+    });
     expect(policies.map((policy) => policy.policyId).sort()).toEqual([
       "plcy_2N7P5R8T0V4X6Z1B3D9F",
       "plcy_5R1T8W3Y6B0D9F2H4K7M",
@@ -73,7 +98,7 @@ describe("policy store", () => {
       ])
     );
     expect(policies.every((policy) => !("displayName" in policy))).toBe(true);
-    expect((await firestore.collection("incentivePolicies").get()).docs).toHaveLength(4);
+    expect((await firestore.collection("incentivePolicies").get()).docs).toHaveLength(5);
     expect(firestore.collectionNames()).toEqual(expect.arrayContaining(["incentivePolicies"]));
     expect(firestore.collectionNames()).not.toEqual(expect.arrayContaining(["policies", "policyYaml"]));
   });
@@ -114,6 +139,13 @@ describe("policy store", () => {
       providerId: "lakeside-provider-admin",
       submittedAt: "2026-05-25T12:00:00.000Z"
     });
+    const delegate = await store.findPolicy({
+      evaluationType: "delegate_um_sla_bonus",
+      planId: "acme-health-ppo",
+      providerId: "northstar-um",
+      requestType: "pharmacy_benefit",
+      submittedAt: "2026-05-25T12:00:00.000Z"
+    });
 
     expect(pairPolicies.map((policy) => policy.policyId).sort()).toEqual([
       "plcy_2N7P5R8T0V4X6Z1B3D9F",
@@ -121,6 +153,7 @@ describe("policy store", () => {
     ]);
     expect(outpatientPolicies.map((policy) => policy.policyId)).toEqual(["plcy_8K2M4Q6R9T1V3X5Z7B0C"]);
     expect(pharmacyPolicies.map((policy) => policy.policyId)).toEqual(["plcy_5R1T8W3Y6B0D9F2H4K7M"]);
+    expect(delegate?.policyId).toBe("delegate-um-sla-bonus-v1");
     expect(missing).toBeNull();
   });
 
@@ -271,7 +304,7 @@ describe("policy store", () => {
         }
       })
     ]));
-    expect(docs).toHaveLength(4);
+    expect(docs).toHaveLength(5);
   });
 
   it("stores either included or excluded scope lists, not both, for request types and service codes", async () => {
@@ -324,6 +357,7 @@ describe("policy store", () => {
     expect(policies).toHaveLength(4);
     expect(policies.every((policy) => !("displayName" in policy))).toBe(true);
     expect(policies.map((policy) => policy.policyId)).not.toContain("plcy_7M4K9Q2X8N1R5T6W3B0C");
+    expect(docs).toContain("delegate-um-sla-bonus-v1");
     expect(docs).not.toContain("plcy_7M4K9Q2X8N1R5T6W3B0C");
   });
 

@@ -42,6 +42,9 @@ export interface IncentivePolicy {
   eligibilityCriteria: {
     appliesOnlyToCoveredBenefits: boolean;
     requiresDtrCompletionWhenRequested: boolean;
+    requiresDeterminationWithinSla?: boolean;
+    requiresClinicalReviewCompletion?: boolean;
+    prohibitsOutcomeBasedPayment?: boolean;
   };
   payout: {
     token: TokenSymbol;
@@ -84,6 +87,10 @@ export function evaluatePolicy(input: EvaluatePolicyInput): PolicyEvaluationResu
   const { policy, request, monthToDateAmount } = input;
   const reasonCodes: string[] = [];
   const token = policy.payout.token;
+
+  if (policy.evaluationType === "delegate_um_sla_bonus") {
+    return evaluateDelegateUmSlaPolicy(input);
+  }
 
   if (request.evaluationType !== policy.evaluationType) {
     reasonCodes.push("EVALUATION_TYPE_MISMATCH");
@@ -157,6 +164,87 @@ export function evaluatePolicy(input: EvaluatePolicyInput): PolicyEvaluationResu
 
   return result({
     decision: blocked ? "blocked" : "approved",
+    policy,
+    reasonCodes,
+    token
+  });
+}
+
+function evaluateDelegateUmSlaPolicy(input: EvaluatePolicyInput): PolicyEvaluationResult {
+  const { policy, request, monthToDateAmount } = input;
+  const reasonCodes: string[] = [];
+  const token = policy.payout.token;
+
+  if (request.evaluationType !== policy.evaluationType) {
+    reasonCodes.push("EVALUATION_TYPE_MISMATCH");
+  }
+
+  if (policy.status !== "active") {
+    reasonCodes.push("POLICY_INACTIVE");
+  }
+
+  if (request.requestObject.planId !== policy.contractPair.planId) {
+    reasonCodes.push("PLAN_NOT_IN_CONTRACT");
+  }
+
+  if (request.submitter.id !== policy.contractPair.providerId || request.requestObject.delegateVendorId !== policy.contractPair.providerId) {
+    reasonCodes.push("DELEGATE_VENDOR_NOT_IN_CONTRACT");
+  }
+
+  const requestType = String(request.requestObject.requestType ?? "");
+  const eligibleRequestTypes = policy.incentiveScope.eligibleRequestTypes ?? [];
+  if (eligibleRequestTypes.length > 0 && !eligibleRequestTypes.includes(requestType)) {
+    reasonCodes.push("REQUEST_TYPE_NOT_ELIGIBLE");
+  }
+
+  if (request.requestObject.state !== "determined") {
+    reasonCodes.push("UM_REQUEST_NOT_DETERMINED");
+  }
+
+  if (request.requestObject.outcomeStatusPresent !== true || typeof request.requestObject.outcomeStatus !== "string") {
+    reasonCodes.push("OUTCOME_STATUS_MISSING");
+  }
+
+  if (policy.eligibilityCriteria.requiresDeterminationWithinSla && request.requestObject.completedWithinSla !== true) {
+    reasonCodes.push("SLA_EXCEEDED");
+  }
+
+  if (policy.eligibilityCriteria.requiresClinicalReviewCompletion) {
+    if (request.requestObject.clinicalReviewCompleted !== true) {
+      reasonCodes.push("CLINICAL_REVIEW_INCOMPLETE");
+    }
+
+    if (request.requestObject.medicalNecessityReviewed !== true) {
+      reasonCodes.push("MEDICAL_NECESSITY_NOT_REVIEWED");
+    }
+
+    if (request.requestObject.policyCriteriaChecked !== true) {
+      reasonCodes.push("POLICY_CRITERIA_NOT_CHECKED");
+    }
+
+    if (request.requestObject.rationaleCaptured !== true) {
+      reasonCodes.push("RATIONALE_NOT_CAPTURED");
+    }
+  }
+
+  if (request.requestObject.auditReady !== true) {
+    reasonCodes.push("PAS_AUDIT_RECORD_MISSING");
+  }
+
+  if (policy.eligibilityCriteria.prohibitsOutcomeBasedPayment && request.requestObject.outcomeStatusUsedForPayment !== false) {
+    reasonCodes.push("PROHIBITED_OUTCOME_METRIC");
+  }
+
+  if (request.requestObject.containsPhi !== false) {
+    reasonCodes.push("PHI_IN_PAYMENT_METADATA");
+  }
+
+  if (monthToDateAmount + policy.payout.amountPerEligibleRequest > policy.payout.monthlyCap) {
+    reasonCodes.push("MONTHLY_CAP_EXCEEDED");
+  }
+
+  return result({
+    decision: reasonCodes.length > 0 ? "blocked" : "approved",
     policy,
     reasonCodes,
     token
