@@ -52,7 +52,7 @@ const denialReasonOptions: LabsSelectOption[] = [
 export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, row }: DelegateReviewModalProps) {
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const [reviewStarted, setReviewStarted] = useState(row.state === "in_clinical_review");
-  const [outcomeStatus, setOutcomeStatus] = useState<"approved" | "denied">(row.outcomeStatus ?? "approved");
+  const [outcomeStatus, setOutcomeStatus] = useState<"approved" | "denied" | null>(row.outcomeStatus ?? null);
   const [medicalNecessityReviewed, setMedicalNecessityReviewed] = useState(false);
   const [policyCriteriaChecked, setPolicyCriteriaChecked] = useState(false);
   const [rationaleCaptured, setRationaleCaptured] = useState(false);
@@ -63,10 +63,12 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, row 
   const [error, setError] = useState<string | null>(null);
 
   const checklistComplete = medicalNecessityReviewed && policyCriteriaChecked && rationaleCaptured;
-  const canSubmit = reviewStarted && checklistComplete && !submitting;
-  const activeReasonOptions = outcomeStatus === "approved" ? approvalReasonOptions : denialReasonOptions;
-  const activeReasonCode = outcomeStatus === "approved" ? approvalReasonCode : denialReasonCode;
-  const activeReasonLabel = outcomeStatus === "approved" ? "Approval reason" : "Denial reason";
+  const canChooseOutcome = reviewStarted && checklistComplete;
+  const canSubmit = canChooseOutcome && outcomeStatus !== null && !submitting;
+  const activeReasonOptions = outcomeStatus === "denied" ? denialReasonOptions : approvalReasonOptions;
+  const activeReasonCode = outcomeStatus === "denied" ? denialReasonCode : approvalReasonCode;
+  const activeReasonLabel = outcomeStatus === "denied" ? "Denial reason" : "Approval reason";
+  const outcomeGuidanceId = "delegate-outcome-guidance";
 
   useEffect(() => {
     closeButtonRef.current?.focus();
@@ -110,6 +112,11 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, row 
   }
 
   async function submitDetermination() {
+    if (!outcomeStatus) {
+      setError("Choose an outcome before submitting determination");
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
 
@@ -226,11 +233,20 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, row 
 
           <section className="delegate-review-section">
             <h3>Outcome</h3>
-            <div className="radio-group" role="radiogroup" aria-label="Outcome status">
+            <div
+              aria-describedby={!canChooseOutcome ? outcomeGuidanceId : undefined}
+              className="radio-group"
+              role="radiogroup"
+              aria-label="Outcome status"
+            >
               {(["approved", "denied"] as const).map((outcome) => (
-                <label className={`radio-card ${outcomeStatus === outcome ? "selected" : ""}`} key={outcome}>
+                <label
+                  className={`radio-card ${outcomeStatus === outcome ? "selected" : ""} ${canChooseOutcome ? "" : "disabled"}`}
+                  key={outcome}
+                >
                   <input
                     checked={outcomeStatus === outcome}
+                    disabled={!canChooseOutcome}
                     name="delegate-outcome"
                     type="radio"
                     value={outcome}
@@ -240,16 +256,24 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, row 
                 </label>
               ))}
             </div>
-            <div className="form-row delegate-field">
-              <span>{activeReasonLabel}</span>
-              <LabsSelect
-                id={`delegate-${outcomeStatus}-reason`}
-                options={activeReasonOptions}
-                placeholder={`Select ${outcomeStatus} reason`}
-                value={activeReasonCode}
-                onChange={outcomeStatus === "approved" ? setApprovalReasonCode : setDenialReasonCode}
-              />
-            </div>
+            {!canChooseOutcome ? (
+              <p className="delegate-guidance" id={outcomeGuidanceId}>
+                Complete the clinical checklist before choosing an outcome.
+              </p>
+            ) : null}
+            {outcomeStatus ? (
+              <div className="form-row delegate-field">
+                <span>{activeReasonLabel}</span>
+                <LabsSelect
+                  id={`delegate-${outcomeStatus}-reason`}
+                  disabled={!canChooseOutcome}
+                  options={activeReasonOptions}
+                  placeholder={`Select ${outcomeStatus} reason`}
+                  value={activeReasonCode}
+                  onChange={outcomeStatus === "approved" ? setApprovalReasonCode : setDenialReasonCode}
+                />
+              </div>
+            ) : null}
           </section>
         </div>
 

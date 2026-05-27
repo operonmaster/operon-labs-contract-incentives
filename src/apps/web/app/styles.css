@@ -2135,6 +2135,11 @@ body {
   color: var(--op-blue-2);
 }
 
+.radio-card.disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
 .table-wrap {
   background: rgba(5, 8, 22, 0.64);
 }
@@ -2205,6 +2210,13 @@ body {
   font-size: 11px;
   font-weight: 500;
   text-transform: uppercase;
+}
+
+.delegate-guidance {
+  color: var(--op-muted);
+  font-size: 13px;
+  line-height: 1.4;
+  margin: 0;
 }
 
 .delegate-modal-actions {
