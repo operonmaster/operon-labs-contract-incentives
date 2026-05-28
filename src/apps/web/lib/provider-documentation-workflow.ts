@@ -38,6 +38,8 @@ import {
 
 export type IncentiveStatus = "not_eligible" | "paid" | "payment_failed";
 export type PaymentStatus = "auto_executed" | "blocked_by_policy" | "execution_failed";
+export type BusinessPolicyStatus = "approved" | "rejected";
+export type PaymentPolicyStatus = "paid" | "blocked";
 
 export interface PolicyCriterionMatch {
   id: string;
@@ -62,6 +64,8 @@ export interface IncentiveWorklistRow {
   serviceCode: ServiceCode;
   state: UMRequest["state"];
   outcomeStatus: UMRequest["outcomeStatus"];
+  businessPolicyStatus: BusinessPolicyStatus | null;
+  paymentPolicyStatus: PaymentPolicyStatus | null;
   incentiveStatus: IncentiveStatus;
   paymentStatus: PaymentStatus;
   incentiveValue: number;
@@ -77,7 +81,16 @@ export interface IncentiveWorklistRow {
   walletId: string | null;
   paymentIntentId: string | null;
   transactionId: string | null;
+  paymentPolicyId: string | null;
+  paymentPolicyControls: PaymentPolicyControlEvidence[];
 }
+
+const PROVIDER_DOCUMENTATION_IMPLEMENTATION_GUARDRAIL_CRITERIA = new Set([
+  "Plan is in the contract pair",
+  "Provider is in the contract pair",
+  "Recipient wallet is approved",
+  "Settlement token is policy-defined"
+]);
 
 export type ProviderDocumentationUmRequest = Omit<UMRequest, "paResult" | "denialReason">;
 
@@ -203,6 +216,8 @@ export function createProviderDocumentationWorkflow(
       serviceCode: record.serviceCode,
       state: record.state,
       outcomeStatus: record.outcomeStatus,
+      businessPolicyStatus: evaluation.result.decision === "approved" ? "approved" : "rejected",
+      paymentPolicyStatus: evaluation.result.decision === "approved" ? null : "blocked",
       incentiveStatus: evaluation.result.decision === "approved" ? "paid" : "not_eligible",
       paymentStatus: evaluation.result.decision === "approved" ? "auto_executed" : "blocked_by_policy",
       incentiveValue: evaluation.result.amount,
@@ -217,7 +232,9 @@ export function createProviderDocumentationWorkflow(
       audit,
       walletId: evaluation.result.walletId,
       paymentIntentId: null,
-      transactionId: null
+      transactionId: null,
+      paymentPolicyId: null,
+      paymentPolicyControls: []
     };
 
     if (evaluation.result.decision !== "approved" || !evaluation.result.walletId) {
@@ -280,10 +297,21 @@ export function createProviderDocumentationWorkflow(
         throw new Error("PAYMENT_INTENT_ID_REQUIRED");
       }
 
+      const paymentEvidence = buildPaymentPolicyEvidence({
+        row: baseRow,
+        paymentPolicy,
+        outcome: "paid",
+        failureCode: null,
+        paymentIntentId,
+        transactionId: payment.transactionId ?? null
+      });
       const paid: IncentiveWorklistRow = {
         ...baseRow,
+        paymentPolicyStatus: "paid",
         paymentIntentId,
         transactionId: payment.transactionId,
+        paymentPolicyId: paymentEvidence.paymentPolicyId,
+        paymentPolicyControls: paymentEvidence.controls,
         audit: {
           ...audit,
           transactionId: payment.transactionId
@@ -292,16 +320,7 @@ export function createProviderDocumentationWorkflow(
 
       rows.set(event.umRequestId, paid);
       await persistence?.saveIncentiveRow(paid);
-      await paymentPolicyEvidenceStore?.saveEvidence(
-        buildPaymentPolicyEvidence({
-          row: paid,
-          paymentPolicy,
-          outcome: payment.status === "simulated" ? "simulated" : "paid",
-          failureCode: null,
-          paymentIntentId,
-          transactionId: payment.transactionId ?? null
-        })
-      );
+      await paymentPolicyEvidenceStore?.saveEvidence(paymentEvidence);
       return paid;
     } catch (error) {
       const existing = await getStoredProviderDocumentationRow(event.umRequestId);
@@ -317,6 +336,8 @@ export function createProviderDocumentationWorkflow(
 
       const failed: IncentiveWorklistRow = {
         ...baseRow,
+        businessPolicyStatus: "approved",
+        paymentPolicyStatus: "blocked",
         incentiveStatus: "payment_failed",
         paymentStatus: "execution_failed",
         reason: "Policy approved, but Hedera transaction execution failed",
@@ -335,16 +356,24 @@ export function createProviderDocumentationWorkflow(
             businessPolicyId: failed.policyId,
             paymentPolicyId: paymentPolicy.planId
           });
-        await paymentPolicyEvidenceStore?.saveEvidence(
-          buildPaymentPolicyEvidence({
-            row: failed,
-            paymentPolicy,
-            outcome: "blocked",
-            failureCode: toPaymentPolicyFailureCode(error),
-            paymentIntentId: failedPaymentIntentId,
-            transactionId: null
-          })
-        );
+        const failedEvidence = buildPaymentPolicyEvidence({
+          row: failed,
+          paymentPolicy,
+          outcome: "blocked",
+          failureCode: toPaymentPolicyFailureCode(error),
+          paymentIntentId: failedPaymentIntentId,
+          transactionId: null
+        });
+        const failedWithControls = {
+          ...failed,
+          paymentIntentId: failedPaymentIntentId,
+          paymentPolicyId: failedEvidence.paymentPolicyId,
+          paymentPolicyControls: failedEvidence.controls
+        };
+        rows.set(event.umRequestId, failedWithControls);
+        await persistence?.saveIncentiveRow(failedWithControls);
+        await paymentPolicyEvidenceStore?.saveEvidence(failedEvidence);
+        return failedWithControls;
       }
       return failed;
     }
@@ -374,11 +403,61 @@ export function createProviderDocumentationWorkflow(
   async function getStoredProviderDocumentationRow(umRequestId: string): Promise<IncentiveWorklistRow | null> {
     const memoryRow = rows.get(umRequestId);
     if (memoryRow && isProviderDocumentationIncentiveRow(memoryRow)) {
-      return memoryRow;
+      return withDerivedLegacyPaymentControls(memoryRow);
     }
 
     const persistedRows = (await persistence?.listIncentiveRows()) ?? [];
-    return persistedRows.find((row) => row.umRequestId === umRequestId && isProviderDocumentationIncentiveRow(row)) ?? null;
+    const persistedRow =
+      persistedRows.find((row) => row.umRequestId === umRequestId && isProviderDocumentationIncentiveRow(row)) ?? null;
+    return persistedRow ? withDerivedLegacyPaymentControls(persistedRow) : null;
+  }
+
+  async function withDerivedLegacyPaymentControls(row: IncentiveWorklistRow | null): Promise<IncentiveWorklistRow | null> {
+    if (!row) {
+      return null;
+    }
+
+    const legacyRow = row as IncentiveWorklistRow & {
+      paymentPolicyId?: string | null;
+      paymentPolicyControls?: PaymentPolicyControlEvidence[];
+    };
+    const normalized: IncentiveWorklistRow = {
+      ...row,
+      policyCriteria: filterProviderDocumentationPolicyCriteria(row.policyCriteria),
+      paymentPolicyId: legacyRow.paymentPolicyId ?? null,
+      paymentPolicyControls: Array.isArray(legacyRow.paymentPolicyControls)
+        ? legacyRow.paymentPolicyControls.map((control) => ({ ...control }))
+        : []
+    };
+
+    if (normalized.paymentPolicyControls.length > 0 || !needsDerivedPaymentControls(normalized)) {
+      return normalized;
+    }
+
+    const paymentPolicy = await paymentPolicyStore.getPolicyForPlan(normalized.paymentPolicyId ?? normalized.planId ?? "");
+    if (!paymentPolicy) {
+      return normalized;
+    }
+
+    return {
+      ...normalized,
+      paymentPolicyId: normalized.paymentPolicyId ?? paymentPolicy.planId,
+      paymentPolicyControls: buildPaymentPolicyControlEvidence({
+        row: normalized,
+        paymentPolicy,
+        outcome: normalized.paymentPolicyStatus === "paid" || normalized.paymentStatus === "auto_executed" ? "paid" : "blocked",
+        failureCode: normalized.paymentStatus === "execution_failed" ? "PAYMENT_POLICY_EXECUTION_FAILED" : null
+      })
+    };
+  }
+
+  function needsDerivedPaymentControls(row: IncentiveWorklistRow): boolean {
+    return (
+      row.paymentPolicyStatus === "paid" ||
+      row.paymentStatus === "auto_executed" ||
+      row.paymentStatus === "execution_failed" ||
+      Boolean(row.paymentIntentId || row.transactionId)
+    );
   }
 
   return {
@@ -439,13 +518,22 @@ export function createProviderDocumentationWorkflow(
           continue;
         }
 
-        rows.set(row.umRequestId, row);
+        const normalizedRow = await withDerivedLegacyPaymentControls(row);
+        if (normalizedRow) {
+          rows.set(row.umRequestId, normalizedRow);
+        }
       }
 
       return Array.from(rows.values()).sort((left, right) => right.submittedAt.localeCompare(left.submittedAt));
     },
     getIncentiveRow
   };
+}
+
+function filterProviderDocumentationPolicyCriteria(criteria: PolicyCriterionMatch[]): PolicyCriterionMatch[] {
+  return criteria
+    .filter((criterion) => !PROVIDER_DOCUMENTATION_IMPLEMENTATION_GUARDRAIL_CRITERIA.has(criterion.label))
+    .map((criterion) => ({ ...criterion }));
 }
 
 function isUmRequestCreatedEvent(event: UMPlatformEvent): event is UMPlatformEvent & { eventType: "UM_REQUEST_CREATED" } {
@@ -498,12 +586,14 @@ function refreshIncentiveRowDisplayFields(row: IncentiveWorklistRow, record: UMR
     serviceCode: record.serviceCode,
     state: record.state,
     outcomeStatus: record.outcomeStatus,
+    businessPolicyStatus: row.businessPolicyStatus ?? businessPolicyStatusFromIncentiveStatus(row.incentiveStatus),
+    paymentPolicyStatus: row.paymentPolicyStatus ?? paymentPolicyStatusFromPaymentStatus(row),
     umEvidenceSignature: buildUmEvidenceSignature(record)
   };
 }
 
 function isImmutablePaidIncentiveRow(row: IncentiveWorklistRow): boolean {
-  return row.incentiveStatus === "paid" && Boolean(row.transactionId || row.paymentIntentId);
+  return (row.paymentPolicyStatus === "paid" || row.incentiveStatus === "paid") && Boolean(row.transactionId || row.paymentIntentId);
 }
 
 function hasIncentiveRowDisplayFieldChanges(left: IncentiveWorklistRow, right: IncentiveWorklistRow): boolean {
@@ -520,6 +610,8 @@ function hasIncentiveRowDisplayFieldChanges(left: IncentiveWorklistRow, right: I
     left.serviceCode !== right.serviceCode ||
     left.state !== right.state ||
     left.outcomeStatus !== right.outcomeStatus ||
+    left.businessPolicyStatus !== right.businessPolicyStatus ||
+    left.paymentPolicyStatus !== right.paymentPolicyStatus ||
     left.umEvidenceSignature !== right.umEvidenceSignature
   );
 }
@@ -540,6 +632,36 @@ function hasOnlyPaidLifecycleDisplayFieldChanges(left: IncentiveWorklistRow, rig
     left.serviceCode === right.serviceCode &&
     (left.state !== right.state || left.outcomeStatus !== right.outcomeStatus || left.umEvidenceSignature !== right.umEvidenceSignature)
   );
+}
+
+export function businessPolicyStatusFromIncentiveStatus(
+  status: IncentiveStatus | string | null | undefined
+): BusinessPolicyStatus | null {
+  switch (status) {
+    case "paid":
+    case "payment_failed":
+      return "approved";
+    case "not_eligible":
+      return "rejected";
+    default:
+      return null;
+  }
+}
+
+export function paymentPolicyStatusFromPaymentStatus(row: {
+  paymentStatus?: PaymentStatus | string | null;
+  transactionId?: string | null;
+  paymentIntentId?: string | null;
+}): PaymentPolicyStatus | null {
+  switch (row.paymentStatus) {
+    case "auto_executed":
+      return row.transactionId || row.paymentIntentId ? "paid" : null;
+    case "blocked_by_policy":
+    case "execution_failed":
+      return "blocked";
+    default:
+      return null;
+  }
 }
 
 function stripLegacyPaOutcomeFields(record: UMRequest): ProviderDocumentationUmRequest {
@@ -676,8 +798,6 @@ function buildProviderDocumentationPolicyCriteria(
 ): PolicyCriterionMatch[] {
   const evidence = evaluation.request.requestObject;
   const reasonCodes = evaluation.result.reasonCodes;
-  const expectedWalletId = evaluation.policy.settlement.recipientWalletId;
-  const actualWalletId = evaluation.result.walletId ?? "Not assigned";
   const codingGroup = String(evidence.codingSystem).toUpperCase() === "NDC" ? "ndc" : "cpt";
   const scopedServiceCodes =
     evaluation.policy.incentiveScope.includedServiceCodes?.[codingGroup] ??
@@ -699,40 +819,6 @@ function buildProviderDocumentationPolicyCriteria(
   const serviceCodeReasonCode = usesIncludedServiceCodes ? "SERVICE_CODE_NOT_INCLUDED" : "SERVICE_CODE_EXCLUDED";
 
   return [
-    criterion({
-      id: "plan",
-      label: "Plan is in the contract pair",
-      expected: evaluation.policy.contractPair.planId,
-      actual: formatPolicyValue(evidence.planId),
-      reasonCode: "PLAN_NOT_IN_CONTRACT",
-      passed: evidence.planId === evaluation.policy.contractPair.planId && !reasonCodes.includes("PLAN_NOT_IN_CONTRACT")
-    }),
-    criterion({
-      id: "provider",
-      label: "Provider is in the contract pair",
-      expected: evaluation.policy.contractPair.providerId,
-      actual: evaluation.request.submitter.id,
-      reasonCode: "PROVIDER_NOT_IN_CONTRACT",
-      passed:
-        evaluation.request.submitter.id === evaluation.policy.contractPair.providerId &&
-        !reasonCodes.includes("PROVIDER_NOT_IN_CONTRACT")
-    }),
-    criterion({
-      id: "wallet",
-      label: "Recipient wallet is approved",
-      expected: expectedWalletId,
-      actual: actualWalletId,
-      reasonCode: "WALLET_NOT_APPROVED",
-      passed: expectedWalletId === actualWalletId && !reasonCodes.includes("WALLET_NOT_APPROVED")
-    }),
-    criterion({
-      id: "settlement_token",
-      label: "Settlement token is policy-defined",
-      expected: evaluation.policy.payout.token,
-      actual: evaluation.result.currency,
-      reasonCode: "SETTLEMENT_TOKEN_CONFIGURED",
-      passed: evaluation.result.currency === evaluation.policy.payout.token
-    }),
     criterion({
       id: "requestType",
       label: usesEligibleRequestTypes ? "Request type is eligible" : "Request type is not excluded",
@@ -820,7 +906,7 @@ function buildPaymentPolicyControlEvidence({
 }): PaymentPolicyControlEvidence[] {
   const amount = row.incentiveValue;
   const token = row.currency;
-  const success = outcome === "paid" || outcome === "simulated";
+  const success = outcome === "paid";
 
   return [
     {

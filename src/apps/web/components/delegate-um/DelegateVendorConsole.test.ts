@@ -57,9 +57,10 @@ describe("DelegateVendorConsole source", () => {
       })
     );
 
-    expect(markup).toContain("Medical necessity reviewed");
-    expect(markup).toContain("Policy criteria checked");
-    expect(markup).toContain("Rationale captured");
+    expect(markup).toContain("Clinical documentation reviewed");
+    expect(markup).toContain("Medical necessity criteria met");
+    expect(markup).toContain("Plan policy requirements checked");
+    expect(markup).toContain("Decision rationale documented");
     expect(markup).toContain("Outcome status");
     expect(markup).toContain("labs-select");
     expect(markup).toContain("Approval reason");
@@ -157,7 +158,7 @@ describe("DelegateVendorConsole source", () => {
       const checklistInputs = Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'));
       const outcomeInputs = Array.from(container.querySelectorAll<HTMLInputElement>('input[name="delegate-outcome"]'));
 
-      expect(checklistInputs).toHaveLength(3);
+      expect(checklistInputs).toHaveLength(4);
       expect(outcomeInputs).toHaveLength(2);
       expect(outcomeInputs.every((input) => input.disabled)).toBe(true);
       expect(container.textContent).toContain("Complete the clinical checklist before choosing an outcome");
@@ -379,9 +380,10 @@ function buildDelegateRequest(
     },
     clinicalReview: {
       reviewerId: state === "pend" ? null : "delegate-reviewer",
-      medicalNecessityReviewed: false,
-      policyCriteriaChecked: false,
-      rationaleCaptured: false,
+      clinicalDocumentationReviewed: false,
+      medicalNecessityCriteriaMet: false,
+      planPolicyRequirementsChecked: false,
+      decisionRationaleDocumented: false,
       approvalReasonCode: null,
       denialReasonCode: null
     },

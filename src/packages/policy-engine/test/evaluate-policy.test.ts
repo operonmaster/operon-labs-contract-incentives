@@ -79,8 +79,7 @@ const delegatePolicy: IncentivePolicy = {
     appliesOnlyToCoveredBenefits: false,
     requiresDtrCompletionWhenRequested: false,
     requiresDeterminationWithinSla: true,
-    requiresClinicalReviewCompletion: true,
-    prohibitsOutcomeBasedPayment: true
+    requiresClinicalReviewCompletion: true
   },
   payout: {
     token: "HBAR",
@@ -107,13 +106,12 @@ const approvedDelegateRequest: EvaluationRequest = {
     state: "determined",
     outcomeStatusPresent: true,
     outcomeStatus: "approved",
-    outcomeStatusUsedForPayment: false,
     completedWithinSla: true,
     slaHours: 24,
-    clinicalReviewCompleted: true,
-    medicalNecessityReviewed: true,
-    policyCriteriaChecked: true,
-    rationaleCaptured: true,
+    clinicalDocumentationReviewed: true,
+    medicalNecessityCriteriaMet: true,
+    planPolicyRequirementsChecked: true,
+    decisionRationaleDocumented: true,
     auditReady: true
   }
 };
@@ -455,7 +453,7 @@ describe("evaluatePolicy", () => {
     });
   });
 
-  it("blocks delegate UM SLA bonus when SLA is exceeded or outcome is used as payment basis", () => {
+  it("blocks delegate UM SLA bonus when SLA is exceeded", () => {
     const late = evaluatePolicy({
       policy: delegatePolicy,
       request: {
@@ -467,27 +465,11 @@ describe("evaluatePolicy", () => {
       },
       monthToDateAmount: 0
     });
-    const outcomeBased = evaluatePolicy({
-      policy: delegatePolicy,
-      request: {
-        ...approvedDelegateRequest,
-        requestObject: {
-          ...approvedDelegateRequest.requestObject,
-          outcomeStatusUsedForPayment: true
-        }
-      },
-      monthToDateAmount: 0
-    });
 
     expect(late).toMatchObject({
       decision: "blocked",
       amount: 0,
       reasonCodes: expect.arrayContaining(["SLA_EXCEEDED"])
-    });
-    expect(outcomeBased).toMatchObject({
-      decision: "blocked",
-      amount: 0,
-      reasonCodes: expect.arrayContaining(["PROHIBITED_OUTCOME_METRIC"])
     });
   });
 });

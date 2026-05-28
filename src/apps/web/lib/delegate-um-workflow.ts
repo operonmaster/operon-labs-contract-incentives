@@ -1,6 +1,7 @@
 import { createAuditRecord, type AuditRecord } from "@operon-labs/audit-log";
 import {
   buildBusinessEvaluationId,
+  buildPaymentIntentId,
   executePolicyBoundPayment,
   type PaymentApprovalRequest,
   type PaymentIntentStore
@@ -18,9 +19,26 @@ import {
 import { createBusinessEvaluationAttestationStore } from "./business-evaluation-attestation-store";
 import { createPasPersistenceStoreFromEnv, type UmPasPersistenceStore } from "./pas-persistence";
 import { createPaymentIntentStoreFromEnv } from "./payment-intent-store";
-import { createPaymentPolicyStoreFromEnv, type PaymentPolicyStore } from "./payment-policy-store";
+import {
+  createPaymentPolicyStoreFromEnv,
+  type PaymentPlanPolicy,
+  type PaymentPolicyStore
+} from "./payment-policy-store";
+import {
+  createPaymentPolicyEvidenceStoreFromEnv,
+  type PaymentPolicyControlEvidence,
+  type PaymentPolicyEvidence,
+  type PaymentPolicyEvidenceOutcome,
+  type PaymentPolicyEvidenceStore
+} from "./payment-policy-evidence-store";
 import { createPolicyStoreFromEnv, type PolicyStore } from "./policy-store";
-import type { PolicyCriterionMatch } from "./provider-documentation-workflow";
+import {
+  businessPolicyStatusFromIncentiveStatus,
+  paymentPolicyStatusFromPaymentStatus,
+  type BusinessPolicyStatus,
+  type PaymentPolicyStatus,
+  type PolicyCriterionMatch
+} from "./provider-documentation-workflow";
 import { umPlatform } from "./um-platform-singleton";
 
 export type DelegateIncentiveStatus = "pending" | "not_eligible" | "paid" | "payment_failed";
@@ -45,6 +63,8 @@ export interface DelegatePlanAuditRow {
   state: UMRequest["state"];
   outcomeStatus: UMRequest["outcomeStatus"];
   slaStatus: DelegateSlaStatus;
+  businessPolicyStatus: BusinessPolicyStatus | null;
+  paymentPolicyStatus: PaymentPolicyStatus | null;
   incentiveStatus: DelegateIncentiveStatus;
   paymentStatus: DelegatePaymentStatus;
   incentiveValue: number;
@@ -55,6 +75,8 @@ export interface DelegatePlanAuditRow {
   policyId: string | null;
   policyControls: string[];
   policyCriteria: PolicyCriterionMatch[];
+  paymentPolicyId: string | null;
+  paymentPolicyControls: PaymentPolicyControlEvidence[];
   audit: AuditRecord | null;
   walletId: string | null;
   paymentIntentId: string | null;
@@ -75,12 +97,24 @@ type PersistedDelegatePlanAuditRow = Omit<DelegatePlanAuditRow, "umRequest"> & {
   umRequest?: UMRequest;
 };
 
+interface CanonicalDelegatePolicyCriteriaEvidence {
+  state?: unknown;
+  outcomeStatusPresent?: unknown;
+  clinicalDocumentationReviewed?: unknown;
+  medicalNecessityCriteriaMet?: unknown;
+  planPolicyRequirementsChecked?: unknown;
+  decisionRationaleDocumented?: unknown;
+  completedWithinSla?: unknown;
+  slaHours?: unknown;
+}
+
 export function createDelegateUmWorkflow(
   platform: UmPlatform = createInMemoryUmPlatform(),
   persistence: UmPasPersistenceStore | undefined = createPasPersistenceStoreFromEnv(),
   policyStore: PolicyStore = createPolicyStoreFromEnv(),
   paymentIntentStore: PaymentIntentStore | undefined = createPaymentIntentStoreFromEnv(),
-  paymentPolicyStore: PaymentPolicyStore = createPaymentPolicyStoreFromEnv()
+  paymentPolicyStore: PaymentPolicyStore = createPaymentPolicyStoreFromEnv(),
+  paymentPolicyEvidenceStore: PaymentPolicyEvidenceStore | undefined = createPaymentPolicyEvidenceStoreFromEnv()
 ): DelegateUmWorkflow {
   const rows = new Map<string, DelegatePlanAuditRow>();
   const settlementsInFlight = new Map<string, Promise<DelegatePlanAuditRow>>();
@@ -112,7 +146,7 @@ export function createDelegateUmWorkflow(
     },
     async listPlanRows() {
       const requests = await listRequests();
-      await loadPersistedDelegateRows(persistence, rows, requests);
+      await loadPersistedDelegateRows(persistence, rows, requests, paymentPolicyStore);
 
       return requests
         .filter((request) => Boolean(request.delegateVendorId))
@@ -162,7 +196,8 @@ export function createDelegateUmWorkflow(
         rows,
         policyStore,
         paymentIntentStore,
-        paymentPolicyStore
+        paymentPolicyStore,
+        paymentPolicyEvidenceStore
       });
       settlementsInFlight.set(umRequestId, settlement);
 
@@ -189,6 +224,7 @@ interface CompleteAndSettleDependencies {
   policyStore: PolicyStore;
   paymentIntentStore: PaymentIntentStore | undefined;
   paymentPolicyStore: PaymentPolicyStore;
+  paymentPolicyEvidenceStore: PaymentPolicyEvidenceStore | undefined;
 }
 /* eslint-enable no-unused-vars */
 
@@ -202,7 +238,8 @@ async function completeAndSettleDetermination({
   rows,
   policyStore,
   paymentIntentStore,
-  paymentPolicyStore
+  paymentPolicyStore,
+  paymentPolicyEvidenceStore
 }: CompleteAndSettleDependencies): Promise<DelegatePlanAuditRow> {
   const persisted = await getRequest(umRequestId);
   if (!persisted) {
@@ -223,7 +260,8 @@ async function completeAndSettleDetermination({
     persistence,
     policyStore,
     paymentIntentStore,
-    paymentPolicyStore
+    paymentPolicyStore,
+    paymentPolicyEvidenceStore
   });
   rows.set(request.id, row);
   await saveDelegateRow(persistence, row);
@@ -231,10 +269,7 @@ async function completeAndSettleDetermination({
 }
 
 function buildDelegateEvidence(request: UMRequest): DelegateUmSlaEvidence {
-  const clinicalReviewCompleted =
-    request.clinicalReview.medicalNecessityReviewed &&
-    request.clinicalReview.policyCriteriaChecked &&
-    request.clinicalReview.rationaleCaptured;
+  const clinicalReview = resolveClinicalReviewBooleans(request.clinicalReview);
 
   return {
     umRequestId: request.id,
@@ -245,16 +280,47 @@ function buildDelegateEvidence(request: UMRequest): DelegateUmSlaEvidence {
     state: request.state,
     outcomeStatus: request.outcomeStatus ?? "approved",
     outcomeStatusPresent: request.outcomeStatus !== null,
-    outcomeStatusUsedForPayment: false,
     completedWithinSla:
       request.determinedAt !== null &&
       new Date(request.determinedAt).getTime() <= new Date(request.slaDeadlineAt).getTime(),
     slaHours: request.slaHours,
-    clinicalReviewCompleted,
-    medicalNecessityReviewed: request.clinicalReview.medicalNecessityReviewed,
-    policyCriteriaChecked: request.clinicalReview.policyCriteriaChecked,
-    rationaleCaptured: request.clinicalReview.rationaleCaptured,
+    clinicalDocumentationReviewed: clinicalReview.clinicalDocumentationReviewed,
+    medicalNecessityCriteriaMet: clinicalReview.medicalNecessityCriteriaMet,
+    planPolicyRequirementsChecked: clinicalReview.planPolicyRequirementsChecked,
+    decisionRationaleDocumented: clinicalReview.decisionRationaleDocumented,
     auditReady: Boolean(request.auditRefs.pasClaimBundleId)
+  };
+}
+
+type LegacyClinicalReview = UMRequest["clinicalReview"] & {
+  medicalNecessityReviewed?: unknown;
+  policyCriteriaChecked?: unknown;
+  rationaleCaptured?: unknown;
+};
+
+function resolveClinicalReviewBooleans(review: LegacyClinicalReview) {
+  const legacyChecklistComplete =
+    review.medicalNecessityReviewed === true &&
+    review.policyCriteriaChecked === true &&
+    review.rationaleCaptured === true;
+
+  return {
+    clinicalDocumentationReviewed:
+      typeof review.clinicalDocumentationReviewed === "boolean"
+        ? review.clinicalDocumentationReviewed
+        : legacyChecklistComplete,
+    medicalNecessityCriteriaMet:
+      typeof review.medicalNecessityCriteriaMet === "boolean"
+        ? review.medicalNecessityCriteriaMet
+        : review.medicalNecessityReviewed === true,
+    planPolicyRequirementsChecked:
+      typeof review.planPolicyRequirementsChecked === "boolean"
+        ? review.planPolicyRequirementsChecked
+        : review.policyCriteriaChecked === true,
+    decisionRationaleDocumented:
+      typeof review.decisionRationaleDocumented === "boolean"
+        ? review.decisionRationaleDocumented
+        : review.rationaleCaptured === true
   };
 }
 
@@ -277,6 +343,8 @@ function buildPendingRow(request: UMRequest): DelegatePlanAuditRow {
     state: request.state,
     outcomeStatus: request.outcomeStatus,
     slaStatus: request.state === "determined" ? buildDeterminedSlaStatus(request) : "pending",
+    businessPolicyStatus: null,
+    paymentPolicyStatus: null,
     incentiveStatus: "pending",
     paymentStatus: "pending",
     incentiveValue: 0,
@@ -287,6 +355,8 @@ function buildPendingRow(request: UMRequest): DelegatePlanAuditRow {
     policyId: null,
     policyControls: [],
     policyCriteria: [],
+    paymentPolicyId: null,
+    paymentPolicyControls: [],
     audit: null,
     walletId: null,
     paymentIntentId: null,
@@ -310,6 +380,7 @@ async function settleDetermination(
     policyStore: PolicyStore;
     paymentIntentStore: PaymentIntentStore | undefined;
     paymentPolicyStore: PaymentPolicyStore;
+    paymentPolicyEvidenceStore: PaymentPolicyEvidenceStore | undefined;
   }
 ): Promise<DelegatePlanAuditRow> {
   const evidence = buildDelegateEvidence(request);
@@ -325,6 +396,8 @@ async function settleDetermination(
     return {
       ...buildPendingRow(request),
       slaStatus: buildDeterminedSlaStatus(request),
+      businessPolicyStatus: "rejected",
+      paymentPolicyStatus: "blocked",
       incentiveStatus: "not_eligible",
       paymentStatus: "blocked_by_policy",
       reason: "No matching Delegate UM SLA bonus policy",
@@ -363,6 +436,8 @@ async function settleDetermination(
       ...buildPendingRow(request),
       id: businessEvaluationId,
       slaStatus: buildDeterminedSlaStatus(request),
+      businessPolicyStatus: "rejected",
+      paymentPolicyStatus: "blocked",
       incentiveStatus: "not_eligible",
       paymentStatus: "blocked_by_policy",
       incentiveValue: 0,
@@ -373,6 +448,8 @@ async function settleDetermination(
       policyId: result.policyId,
       policyControls: buildDelegatePolicyControls(),
       policyCriteria: buildDelegatePolicyCriteria(blockedEvaluation),
+      paymentPolicyId: null,
+      paymentPolicyControls: [],
       audit,
       walletId: null
     };
@@ -404,6 +481,8 @@ async function settleDetermination(
     ...buildPendingRow(request),
     id: businessEvaluationId,
     slaStatus: buildDeterminedSlaStatus(request),
+    businessPolicyStatus: evaluation.result.decision === "approved" ? "approved" : "rejected",
+    paymentPolicyStatus: evaluation.result.decision === "approved" ? null : "blocked",
     incentiveStatus: evaluation.result.decision === "approved" ? "paid" : "not_eligible",
     paymentStatus: evaluation.result.decision === "approved" ? "auto_executed" : "blocked_by_policy",
     incentiveValue: evaluation.result.amount,
@@ -414,6 +493,8 @@ async function settleDetermination(
     policyId: businessPolicyId,
     policyControls: buildDelegatePolicyControls(),
     policyCriteria: buildDelegatePolicyCriteria(evaluation),
+    paymentPolicyId: null,
+    paymentPolicyControls: [],
     audit,
     walletId: evaluation.result.walletId
   };
@@ -424,8 +505,12 @@ async function settleDetermination(
 
   dependencies.rows.set(request.id, baseRow);
 
+  let paymentPolicy: PaymentPlanPolicy | null = null;
+  let requestedPaymentIntentId: string | null = null;
+  let payment: Awaited<ReturnType<typeof executePolicyBoundPayment>>;
+
   try {
-    const paymentPolicy = await dependencies.paymentPolicyStore.getPolicyForPlan(evidence.planId);
+    paymentPolicy = await dependencies.paymentPolicyStore.getPolicyForPlan(evidence.planId);
     if (!paymentPolicy) {
       throw new Error("HEDERA_PLAN_POLICY_NOT_FOUND");
     }
@@ -446,8 +531,9 @@ async function settleDetermination(
       triggerEvent: "UM_REQUEST_DETERMINED",
       policyControls: buildDelegatePolicyControls()
     } satisfies PaymentApprovalRequest;
+    requestedPaymentIntentId = buildPaymentIntentId(paymentRequest);
 
-    const payment = await executePolicyBoundPayment(
+    payment = await executePolicyBoundPayment(
       paymentRequest,
       {
         paymentIntentStore: dependencies.paymentIntentStore,
@@ -473,17 +559,7 @@ async function settleDetermination(
         )
       }
     );
-
-    return {
-      ...baseRow,
-      paymentIntentId: payment.paymentIntentId ?? null,
-      transactionId: payment.transactionId,
-      audit: {
-        ...audit,
-        transactionId: payment.transactionId
-      }
-    };
-  } catch {
+  } catch (error) {
     const paidRow = await getPersistedDelegateRow(
       dependencies.persistence,
       request.id,
@@ -494,27 +570,89 @@ async function settleDetermination(
       return paidRow;
     }
 
-    return {
+    const failedRow: DelegatePlanAuditRow = {
       ...baseRow,
+      businessPolicyStatus: "approved",
+      paymentPolicyStatus: "blocked",
+      paymentPolicyId: paymentPolicy?.planId ?? null,
       incentiveStatus: "payment_failed",
       paymentStatus: "execution_failed",
       reason: "Policy approved, but Hedera transaction execution failed",
       paymentIntentId: null,
       transactionId: null
     };
+
+    if (!paymentPolicy) {
+      return failedRow;
+    }
+
+    const failedPaymentIntentId =
+      requestedPaymentIntentId ??
+      buildPaymentIntentId({
+        umRequestId: failedRow.umRequestId,
+        caseId: failedRow.umRequestId,
+        incentiveEvaluationId: failedRow.id,
+        businessPolicyId,
+        paymentPolicyId: paymentPolicy.planId
+      });
+    const evidenceRecord = buildDelegatePaymentPolicyEvidence({
+      row: failedRow,
+      paymentPolicy,
+      outcome: "blocked",
+      failureCode: toPaymentPolicyFailureCode(error),
+      paymentIntentId: failedPaymentIntentId,
+      transactionId: null
+    });
+    await saveOptionalPaymentPolicyEvidence(dependencies.paymentPolicyEvidenceStore, evidenceRecord);
+
+    return {
+      ...failedRow,
+      paymentPolicyControls: evidenceRecord.controls
+    };
   }
+
+  const paymentIntentId = payment.paymentIntentId ?? requestedPaymentIntentId;
+  const paidRow: DelegatePlanAuditRow = {
+    ...baseRow,
+    paymentPolicyStatus: "paid",
+    paymentPolicyId: paymentPolicy.planId,
+    paymentIntentId,
+    transactionId: payment.transactionId,
+    audit: {
+      ...audit,
+      transactionId: payment.transactionId
+    }
+  };
+  const evidenceRecord = buildDelegatePaymentPolicyEvidence({
+    row: paidRow,
+    paymentPolicy,
+    outcome: "paid",
+    failureCode: null,
+    paymentIntentId,
+    transactionId: payment.transactionId ?? null
+  });
+  await saveOptionalPaymentPolicyEvidence(dependencies.paymentPolicyEvidenceStore, evidenceRecord);
+
+  return {
+    ...paidRow,
+    paymentPolicyControls: evidenceRecord.controls
+  };
 }
 
 async function loadPersistedDelegateRows(
   persistence: UmPasPersistenceStore | undefined,
   rows: Map<string, DelegatePlanAuditRow>,
-  requests: UMRequest[] = []
+  requests: UMRequest[] = [],
+  paymentPolicyStore?: PaymentPolicyStore
 ): Promise<void> {
   const persistedRows = (await persistence?.listIncentiveRows()) ?? [];
   const requestsById = new Map(requests.map((request) => [request.id, request]));
 
   for (const persistedRow of persistedRows) {
-    const row = normalizePersistedDelegateRow(persistedRow, getPersistedDelegateRequest(requestsById, persistedRow));
+    const row = await withDerivedLegacyPaymentControls(
+      normalizePersistedDelegateRow(persistedRow, getPersistedDelegateRequest(requestsById, persistedRow)),
+      paymentPolicyStore
+    );
     if (row) {
       rows.set(row.umRequestId, row);
     }
@@ -576,14 +714,25 @@ function normalizePersistedDelegateRow(value: unknown, request?: UMRequest): Del
     return null;
   }
 
+  const legacyPolicyCriteria = Array.isArray(value.policyCriteria)
+    ? value.policyCriteria.map((criterion) => ({ ...criterion }))
+    : [];
+
   return {
     ...value,
     umRequest,
+    businessPolicyStatus: value.businessPolicyStatus ?? businessPolicyStatusFromIncentiveStatus(value.incentiveStatus),
+    paymentPolicyStatus: value.paymentPolicyStatus ?? paymentPolicyStatusFromPaymentStatus(value),
     audit: value.audit ? { ...value.audit } : null,
     reasonCodes: [...value.reasonCodes],
     policyControls: Array.isArray(value.policyControls) ? [...value.policyControls] : [],
-    policyCriteria: Array.isArray(value.policyCriteria)
-      ? value.policyCriteria.map((criterion) => ({ ...criterion }))
+    policyCriteria: buildCanonicalDelegatePolicyCriteria(
+      mergeDelegateEvidenceFromLegacyCriteria(buildDelegateEvidence(umRequest), legacyPolicyCriteria),
+      [...value.reasonCodes]
+    ),
+    paymentPolicyId: typeof value.paymentPolicyId === "string" ? value.paymentPolicyId : null,
+    paymentPolicyControls: Array.isArray(value.paymentPolicyControls)
+      ? value.paymentPolicyControls.map((control) => ({ ...control }))
       : [],
     settlementToken: { ...value.settlementToken }
   };
@@ -628,6 +777,41 @@ function isUmRequestShape(value: unknown): value is UMRequest {
   return typeof value === "object" && value !== null && typeof (value as Partial<UMRequest>).id === "string";
 }
 
+async function withDerivedLegacyPaymentControls(
+  row: DelegatePlanAuditRow | null,
+  paymentPolicyStore?: PaymentPolicyStore
+): Promise<DelegatePlanAuditRow | null> {
+  if (!row || row.paymentPolicyControls.length > 0 || !paymentPolicyStore || !needsDerivedPaymentControls(row)) {
+    return row;
+  }
+
+  const paymentPolicy = await paymentPolicyStore.getPolicyForPlan(row.paymentPolicyId ?? row.planId);
+  if (!paymentPolicy) {
+    return row;
+  }
+
+  return {
+    ...row,
+    paymentPolicyId: row.paymentPolicyId ?? paymentPolicy.planId,
+    paymentPolicyControls: buildDelegatePaymentPolicyControlEvidence({
+      row,
+      paymentPolicy,
+      outcome: row.paymentPolicyStatus === "paid" || row.paymentStatus === "auto_executed" ? "paid" : "blocked",
+      failureCode: row.paymentStatus === "execution_failed" ? "PAYMENT_POLICY_EXECUTION_FAILED" : null
+    })
+  };
+}
+
+function needsDerivedPaymentControls(row: DelegatePlanAuditRow): boolean {
+  return (
+    row.paymentPolicyStatus === "paid" ||
+    row.paymentPolicyStatus === "blocked" ||
+    row.paymentStatus === "auto_executed" ||
+    row.paymentStatus === "blocked_by_policy" ||
+    row.paymentStatus === "execution_failed"
+  );
+}
+
 function withUmRequest(row: DelegatePlanAuditRow, request: UMRequest): DelegatePlanAuditRow {
   return {
     ...row,
@@ -651,11 +835,11 @@ function withUmRequest(row: DelegatePlanAuditRow, request: UMRequest): DelegateP
 }
 
 function isImmutablePaidDelegateRow(row: DelegatePlanAuditRow): boolean {
-  return row.incentiveStatus === "paid" && Boolean(row.transactionId || row.paymentIntentId);
+  return (row.paymentPolicyStatus === "paid" || row.incentiveStatus === "paid") && Boolean(row.transactionId || row.paymentIntentId);
 }
 
 function isTerminalDelegateRow(row: DelegatePlanAuditRow): boolean {
-  return row.incentiveStatus === "paid" || row.incentiveStatus === "not_eligible" || row.incentiveStatus === "payment_failed";
+  return row.businessPolicyStatus !== null && row.paymentPolicyStatus !== null;
 }
 
 function selectDelegateUmSlaEvaluation(
@@ -732,161 +916,254 @@ function buildDelegatePolicyControls(): string[] {
     "Request type limited to policy scope",
     "Determination completed within SLA",
     "Clinical review completion required",
-    "Outcome status not used for payment",
     "PAS audit reference required"
   ];
+}
+
+function buildDelegatePaymentPolicyEvidence({
+  row,
+  paymentPolicy,
+  outcome,
+  failureCode,
+  paymentIntentId,
+  transactionId
+}: {
+  row: DelegatePlanAuditRow;
+  paymentPolicy: PaymentPlanPolicy;
+  outcome: PaymentPolicyEvidenceOutcome;
+  failureCode: string | null;
+  paymentIntentId: string;
+  transactionId: string | null;
+}): PaymentPolicyEvidence {
+  const now = new Date().toISOString();
+
+  return {
+    incentiveEvaluationId: row.id,
+    umRequestId: row.umRequestId,
+    caseId: row.umRequestId,
+    planId: paymentPolicy.planId,
+    paymentPolicyId: paymentPolicy.planId,
+    businessPolicyId: row.policyId ?? "",
+    runtime: "hedera-agent-kit-policy",
+    outcome,
+    failureCode,
+    requestedPayment: {
+      amount: row.incentiveValue,
+      token: row.currency,
+      recipientWalletId: row.walletId ?? "Not assigned"
+    },
+    controls: buildDelegatePaymentPolicyControlEvidence({
+      row,
+      paymentPolicy,
+      outcome,
+      failureCode
+    }),
+    paymentIntentId,
+    transactionId,
+    createdAt: now,
+    updatedAt: now
+  };
+}
+
+function buildDelegatePaymentPolicyControlEvidence({
+  row,
+  paymentPolicy,
+  outcome,
+  failureCode
+}: {
+  row: DelegatePlanAuditRow;
+  paymentPolicy: PaymentPlanPolicy;
+  outcome: PaymentPolicyEvidenceOutcome;
+  failureCode: string | null;
+}): PaymentPolicyControlEvidence[] {
+  const amount = row.incentiveValue;
+  const token = row.currency;
+  const success = outcome === "paid";
+
+  return [
+    {
+      id: "businessEvaluationAttestation",
+      label: "Business evaluation attestation",
+      status: paymentPolicy.businessEvaluationAttestation
+        ? paymentControlStatus(failureCode, "BUSINESS_EVALUATION", success || failureCode !== null)
+        : "not_run"
+    },
+    {
+      id: "paymentToken",
+      label: "Payment token",
+      status: paymentPolicy.paymentToken === token && failureCode !== "HEDERA_PAYMENT_TOKEN_NOT_ALLOWED" ? "passed" : "failed",
+      expected: paymentPolicy.paymentToken,
+      actual: token,
+      failureCode: failureCode === "HEDERA_PAYMENT_TOKEN_NOT_ALLOWED" ? failureCode : undefined
+    },
+    {
+      id: "maxPaymentPerRequest",
+      label: "Max payment per request",
+      status: paymentPolicy.maxPaymentPerRequest
+        ? amount > paymentPolicy.maxPaymentAmount || failureCode === "HEDERA_PAYMENT_AMOUNT_EXCEEDS_PLAN_MAX"
+          ? "failed"
+          : "passed"
+        : "not_run",
+      expected: `<= ${paymentPolicy.maxPaymentAmount} ${paymentPolicy.paymentToken}`,
+      actual: `${amount} ${token}`,
+      failureCode: failureCode === "HEDERA_PAYMENT_AMOUNT_EXCEEDS_PLAN_MAX" ? failureCode : undefined
+    },
+    {
+      id: "duplicatePaymentPrevention",
+      label: "Duplicate payment prevention",
+      status: paymentPolicy.duplicatePaymentPrevention
+        ? failureCode === "DUPLICATE_PAYMENT_BLOCKED"
+          ? "failed"
+          : success
+            ? "passed"
+            : "not_run"
+        : "not_run",
+      failureCode: failureCode === "DUPLICATE_PAYMENT_BLOCKED" ? failureCode : undefined
+    },
+    {
+      id: "paymentEnvelopeIntegrity",
+      label: "Payment envelope integrity",
+      status: paymentPolicy.paymentEnvelopeIntegrity
+        ? isPaymentEnvelopeFailure(failureCode)
+          ? "failed"
+          : success
+            ? "passed"
+            : "not_run"
+        : "not_run",
+      failureCode: isPaymentEnvelopeFailure(failureCode) ? failureCode ?? undefined : undefined
+    }
+  ];
+}
+
+function paymentControlStatus(
+  failureCode: string | null,
+  failurePrefix: string,
+  evaluated: boolean
+): PaymentPolicyControlEvidence["status"] {
+  if (!evaluated) {
+    return "not_run";
+  }
+
+  return failureCode?.startsWith(failurePrefix) ? "failed" : "passed";
+}
+
+function isPaymentEnvelopeFailure(failureCode: string | null): boolean {
+  return Boolean(
+    failureCode &&
+      [
+        "HEDERA_POLICY_SOURCE_ACCOUNT_MISMATCH",
+        "HEDERA_POLICY_RECIPIENT_MISMATCH",
+        "HEDERA_POLICY_AMOUNT_MISMATCH",
+        "HEDERA_POLICY_MEMO_MISMATCH",
+        "BUSINESS_EVALUATION_WALLET_MISMATCH",
+        "BUSINESS_EVALUATION_AMOUNT_MISMATCH"
+      ].includes(failureCode)
+  );
+}
+
+function toPaymentPolicyFailureCode(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return "PAYMENT_POLICY_EXECUTION_FAILED";
+}
+
+async function saveOptionalPaymentPolicyEvidence(
+  paymentPolicyEvidenceStore: PaymentPolicyEvidenceStore | undefined,
+  evidence: PaymentPolicyEvidence
+): Promise<void> {
+  await paymentPolicyEvidenceStore?.saveEvidence(evidence).catch(() => undefined);
 }
 
 function buildDelegatePolicyCriteria(
   evaluation: ReturnType<typeof evaluateDelegateUmSlaEvent>
 ): PolicyCriterionMatch[] {
-  const evidence = evaluation.request.requestObject;
-  const reasonCodes = evaluation.result.reasonCodes;
-  const eligibleRequestTypes = evaluation.policy.incentiveScope.eligibleRequestTypes ?? [];
-  const excludedRequestTypes = evaluation.policy.incentiveScope.excludedRequestTypes ?? [];
-  const usesEligibleRequestTypes = eligibleRequestTypes.length > 0;
-  const requestTypeReasonCode = usesEligibleRequestTypes ? "REQUEST_TYPE_NOT_ELIGIBLE" : "REQUEST_TYPE_EXCLUDED";
-  const requestType = formatPolicyValue(evidence.requestType);
-  const requestTypeInScope = usesEligibleRequestTypes
-    ? eligibleRequestTypes.includes(requestType)
-    : !excludedRequestTypes.includes(requestType);
-  const slaHours = typeof evidence.slaHours === "number" ? evidence.slaHours : Number(evidence.slaHours ?? 24);
-  const slaLabel = Number.isFinite(slaHours) ? `${slaHours}h` : "configured";
+  return buildCanonicalDelegatePolicyCriteria(evaluation.request.requestObject, evaluation.result.reasonCodes);
+}
 
+function buildCanonicalDelegatePolicyCriteria(
+  evidence: CanonicalDelegatePolicyCriteriaEvidence,
+  reasonCodes: string[]
+): PolicyCriterionMatch[] {
   return [
     criterion({
-      id: "plan",
-      label: "Plan is in the delegate contract",
-      expected: evaluation.policy.contractPair.planId,
-      actual: formatPolicyValue(evidence.planId),
-      reasonCode: "PLAN_NOT_IN_CONTRACT",
-      passed: evidence.planId === evaluation.policy.contractPair.planId && !reasonCodes.includes("PLAN_NOT_IN_CONTRACT")
-    }),
-    criterion({
-      id: "delegateVendor",
-      label: "Delegate vendor is in the contract",
-      expected: evaluation.policy.contractPair.providerId,
-      actual: formatPolicyValue(evidence.delegateVendorId),
-      reasonCode: "DELEGATE_VENDOR_NOT_IN_CONTRACT",
+      id: "clinicalDocumentationReviewed",
+      label: "Clinical documentation reviewed",
+      expected: "Yes",
+      actual: formatYesNo(evidence.clinicalDocumentationReviewed === true),
+      reasonCode: "CLINICAL_DOCUMENTATION_NOT_REVIEWED",
       passed:
-        evidence.delegateVendorId === evaluation.policy.contractPair.providerId &&
-        evaluation.request.submitter.id === evaluation.policy.contractPair.providerId &&
-        !reasonCodes.includes("DELEGATE_VENDOR_NOT_IN_CONTRACT")
+        evidence.clinicalDocumentationReviewed === true &&
+        !reasonCodes.includes("CLINICAL_DOCUMENTATION_NOT_REVIEWED")
     }),
     criterion({
-      id: "wallet",
-      label: "Recipient wallet is approved",
-      expected: evaluation.policy.settlement.recipientWalletId,
-      actual: evaluation.result.walletId ?? "Not assigned",
-      reasonCode: "WALLET_NOT_APPROVED",
-      passed: evaluation.result.walletId === evaluation.policy.settlement.recipientWalletId
+      id: "medicalNecessityCriteriaMet",
+      label: "Medical necessity criteria met",
+      expected: "Yes",
+      actual: formatYesNo(evidence.medicalNecessityCriteriaMet === true),
+      reasonCode: "MEDICAL_NECESSITY_CRITERIA_NOT_MET",
+      passed:
+        evidence.medicalNecessityCriteriaMet === true &&
+        !reasonCodes.includes("MEDICAL_NECESSITY_CRITERIA_NOT_MET")
     }),
     criterion({
-      id: "requestType",
-      label: usesEligibleRequestTypes ? "Request type is eligible" : "Request type is not excluded",
-      expected: (usesEligibleRequestTypes ? eligibleRequestTypes : excludedRequestTypes)
-        .map((policyRequestType) => formatDelegateRequestType(policyRequestType))
-        .join(" or "),
-      actual: formatDelegateRequestType(requestType),
-      reasonCode: requestTypeReasonCode,
-      passed: requestTypeInScope && !reasonCodes.includes(requestTypeReasonCode)
+      id: "planPolicyRequirementsChecked",
+      label: "Plan policy requirements checked",
+      expected: "Yes",
+      actual: formatYesNo(evidence.planPolicyRequirementsChecked === true),
+      reasonCode: "PLAN_POLICY_REQUIREMENTS_NOT_CHECKED",
+      passed:
+        evidence.planPolicyRequirementsChecked === true &&
+        !reasonCodes.includes("PLAN_POLICY_REQUIREMENTS_NOT_CHECKED")
     }),
-    evidenceCriterion(
-      evidence,
-      "state",
-      "UM request is determined",
-      "determined",
-      "UM_REQUEST_NOT_DETERMINED",
-      reasonCodes
-    ),
-    evidenceCriterion(
-      evidence,
-      "outcomeStatusPresent",
-      "Determination outcome is captured",
-      true,
-      "OUTCOME_STATUS_MISSING",
-      reasonCodes
-    ),
     criterion({
-      id: "sla",
-      label: "Determination completed within SLA",
-      expected: `Within ${slaLabel} SLA`,
-      actual: evidence.completedWithinSla === true ? `Within ${slaLabel} SLA` : `Exceeded ${slaLabel} SLA`,
-      reasonCode: "SLA_EXCEEDED",
-      passed: evidence.completedWithinSla === true && !reasonCodes.includes("SLA_EXCEEDED")
-    }),
-    evidenceCriterion(
-      evidence,
-      "clinicalReviewCompleted",
-      "Clinical review checklist is complete",
-      true,
-      "CLINICAL_REVIEW_INCOMPLETE",
-      reasonCodes
-    ),
-    evidenceCriterion(
-      evidence,
-      "auditReady",
-      "PAS audit reference is available",
-      true,
-      "PAS_AUDIT_RECORD_MISSING",
-      reasonCodes
-    ),
-    criterion({
-      id: "outcomeNotPaymentMetric",
-      label: "Outcome status is not used for payment",
-      expected: "false",
-      actual: formatPolicyValue(evidence.outcomeStatusUsedForPayment),
-      reasonCode: "PROHIBITED_OUTCOME_METRIC",
-      passed: evidence.outcomeStatusUsedForPayment === false && !reasonCodes.includes("PROHIBITED_OUTCOME_METRIC")
+      id: "decisionRationaleDocumented",
+      label: "Decision rationale documented",
+      expected: "Yes",
+      actual: formatYesNo(evidence.decisionRationaleDocumented === true),
+      reasonCode: "DECISION_RATIONALE_NOT_DOCUMENTED",
+      passed:
+        evidence.decisionRationaleDocumented === true &&
+        !reasonCodes.includes("DECISION_RATIONALE_NOT_DOCUMENTED")
     })
   ];
 }
 
-function evidenceCriterion(
-  evidence: Record<string, unknown>,
-  field: string,
-  label: string,
-  expected: string | boolean,
-  reasonCode: string,
-  reasonCodes: string[]
-): PolicyCriterionMatch {
-  const actual = evidence[field];
+function mergeDelegateEvidenceFromLegacyCriteria(
+  evidence: DelegateUmSlaEvidence,
+  policyCriteria: PolicyCriterionMatch[]
+): DelegateUmSlaEvidence {
+  if (policyCriteria.length === 0) {
+    return evidence;
+  }
 
-  return criterion({
-    id: field,
-    label,
-    expected: String(expected),
-    actual: formatPolicyValue(actual),
-    reasonCode,
-    passed: actual === expected && !reasonCodes.includes(reasonCode)
-  });
+  return {
+    ...evidence,
+    state: legacyCriterionPassed(policyCriteria, "state") ? "determined" : evidence.state,
+    outcomeStatusPresent:
+      legacyCriterionPassed(policyCriteria, "outcomeStatusPresent") || evidence.outcomeStatusPresent,
+    completedWithinSla:
+      legacyCriterionPassed(policyCriteria, "sla") || evidence.completedWithinSla,
+    clinicalDocumentationReviewed:
+      legacyCriterionPassed(policyCriteria, "clinicalReviewCompleted") || evidence.clinicalDocumentationReviewed,
+    medicalNecessityCriteriaMet:
+      legacyCriterionPassed(policyCriteria, "clinicalReviewCompleted") || evidence.medicalNecessityCriteriaMet,
+    planPolicyRequirementsChecked:
+      legacyCriterionPassed(policyCriteria, "clinicalReviewCompleted") || evidence.planPolicyRequirementsChecked,
+    decisionRationaleDocumented:
+      legacyCriterionPassed(policyCriteria, "clinicalReviewCompleted") || evidence.decisionRationaleDocumented
+  };
+}
+
+function legacyCriterionPassed(policyCriteria: PolicyCriterionMatch[], id: string): boolean {
+  return policyCriteria.some((criterion) => criterion.id === id && criterion.passed);
 }
 
 function criterion(input: PolicyCriterionMatch): PolicyCriterionMatch {
   return input;
 }
 
-function formatPolicyValue(value: unknown): string {
-  if (value === undefined) {
-    return "Missing";
-  }
-
-  if (value === null) {
-    return "null";
-  }
-
-  return String(value);
-}
-
-function formatDelegateRequestType(requestType: string): string {
-  switch (requestType) {
-    case "outpatient_service":
-      return "Outpatient Service";
-    case "pharmacy_benefit":
-      return "Pharmacy Benefit";
-    case "inpatient_admission":
-      return "Inpatient Admission";
-    default:
-      return requestType;
-  }
+function formatYesNo(value: boolean): string {
+  return value ? "Yes" : "No";
 }

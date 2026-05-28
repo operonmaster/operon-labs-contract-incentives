@@ -14,6 +14,8 @@ import {
 } from "@operon-labs/um-platform";
 import { createDelegateUmWorkflow, type DelegatePlanAuditRow } from "./delegate-um-workflow";
 import type { PersistedIncentiveWorklistRow, StoredPasSubmission, UmPasPersistenceStore } from "./pas-persistence";
+import type { PaymentPolicyEvidence, PaymentPolicyEvidenceStore } from "./payment-policy-evidence-store";
+import { createInMemoryPaymentPolicyStore, defaultPaymentPlanPolicies } from "./payment-policy-store";
 import { createInMemoryPolicyStore, defaultIncentivePolicies, type PolicyStore } from "./policy-store";
 
 vi.mock("@operon-labs/hedera-executor", async (importOriginal) => {
@@ -117,9 +119,10 @@ describe("delegate UM workflow", () => {
 
     const determined = await workflow.completeDetermination(umRequest.id, {
       outcomeStatus: "denied",
-      medicalNecessityReviewed: true,
-      policyCriteriaChecked: true,
-      rationaleCaptured: true,
+      clinicalDocumentationReviewed: true,
+      medicalNecessityCriteriaMet: true,
+      planPolicyRequirementsChecked: true,
+      decisionRationaleDocumented: true,
       denialReasonCode: "NOT_MEDICALLY_NECESSARY"
     });
     const [row] = await workflow.listPlanRows();
@@ -138,6 +141,8 @@ describe("delegate UM workflow", () => {
       umRequestId: umRequest.id,
       id: businessEvaluationId,
       outcomeStatus: "denied",
+      businessPolicyStatus: "approved",
+      paymentPolicyStatus: "paid",
       incentiveStatus: "paid",
       paymentStatus: "auto_executed",
       incentiveValue: 5,
@@ -148,57 +153,57 @@ describe("delegate UM workflow", () => {
       "Request type limited to policy scope",
       "Determination completed within SLA",
       "Clinical review completion required",
-      "Outcome status not used for payment",
       "PAS audit reference required"
     ]);
-    expect(row.policyCriteria).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: "plan",
-        label: "Plan is in the delegate contract",
-        expected: "acme-health-ppo",
+    expect(row.policyCriteria).toEqual([
+      {
+        id: "clinicalDocumentationReviewed",
+        label: "Clinical documentation reviewed",
+        expected: "Yes",
+        actual: "Yes",
         passed: true,
-        reasonCode: "PLAN_NOT_IN_CONTRACT"
-      }),
-      expect.objectContaining({
-        id: "delegateVendor",
-        label: "Delegate vendor is in the contract",
-        expected: "northstar-um",
-        actual: "northstar-um",
+        reasonCode: "CLINICAL_DOCUMENTATION_NOT_REVIEWED"
+      },
+      {
+        id: "medicalNecessityCriteriaMet",
+        label: "Medical necessity criteria met",
+        expected: "Yes",
+        actual: "Yes",
         passed: true,
-        reasonCode: "DELEGATE_VENDOR_NOT_IN_CONTRACT"
-      }),
-      expect.objectContaining({
-        id: "requestType",
-        label: "Request type is eligible",
-        expected: "Pharmacy Benefit",
-        actual: "Pharmacy Benefit",
+        reasonCode: "MEDICAL_NECESSITY_CRITERIA_NOT_MET"
+      },
+      {
+        id: "planPolicyRequirementsChecked",
+        label: "Plan policy requirements checked",
+        expected: "Yes",
+        actual: "Yes",
         passed: true,
-        reasonCode: "REQUEST_TYPE_NOT_ELIGIBLE"
-      }),
-      expect.objectContaining({
-        id: "sla",
-        label: "Determination completed within SLA",
-        expected: "Within 24h SLA",
+        reasonCode: "PLAN_POLICY_REQUIREMENTS_NOT_CHECKED"
+      },
+      {
+        id: "decisionRationaleDocumented",
+        label: "Decision rationale documented",
+        expected: "Yes",
+        actual: "Yes",
         passed: true,
-        reasonCode: "SLA_EXCEEDED"
-      }),
-      expect.objectContaining({
-        id: "clinicalReviewCompleted",
-        label: "Clinical review checklist is complete",
-        expected: "true",
-        actual: "true",
-        passed: true,
-        reasonCode: "CLINICAL_REVIEW_INCOMPLETE"
-      }),
-      expect.objectContaining({
-        id: "outcomeNotPaymentMetric",
-        label: "Outcome status is not used for payment",
-        expected: "false",
-        actual: "false",
-        passed: true,
-        reasonCode: "PROHIBITED_OUTCOME_METRIC"
-      })
-    ]));
+        reasonCode: "DECISION_RATIONALE_NOT_DOCUMENTED"
+      }
+    ]);
+    expect(row.policyCriteria).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ label: "UM request is determined" }),
+        expect.objectContaining({ label: "Outcome status is present" }),
+        expect.objectContaining({ label: "Completed within SLA" }),
+        expect.objectContaining({ label: "Recipient wallet is approved" }),
+        expect.objectContaining({ label: "Request type is eligible" }),
+        expect.objectContaining({ label: "Plan is in the delegate contract" }),
+        expect.objectContaining({ label: "Delegate vendor is in the contract" }),
+        expect.objectContaining({ label: "PAS audit reference is available" }),
+        expect.objectContaining({ id: "outcomeNotPaymentMetric" }),
+        expect.objectContaining({ label: "Outcome value affects payment" }),
+        expect.objectContaining({ reasonCode: "PROHIBITED_OUTCOME_METRIC" })
+      ])
+    );
     expect(row.policyCriteria).not.toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -225,6 +230,156 @@ describe("delegate UM workflow", () => {
     expect(row.paymentIntentId).toBe(buildPaymentIntentId(paymentRequest));
   });
 
+  it("captures payment policy evidence controls for a paid delegate settlement", async () => {
+    const platform = createInMemoryUmPlatform({ generateCaseId: () => "PA-260526-0900-CTRL1111" });
+    const paymentPolicyEvidenceStore = createCapturingPaymentPolicyEvidenceStore();
+    const workflow = createDelegateUmWorkflow(
+      platform,
+      undefined,
+      createInMemoryPolicyStore({
+        delegate_um_acme_sla_bonus: defaultIncentivePolicies.delegate_um_acme_sla_bonus
+      }),
+      undefined,
+      undefined,
+      paymentPolicyEvidenceStore
+    );
+    const umRequest = platform.submitPriorAuth({
+      requestType: "pharmacy_benefit",
+      serviceCode: "wegovy_semaglutide"
+    });
+    await workflow.startReview(umRequest.id, "reviewer-ana");
+
+    await workflow.completeDetermination(umRequest.id, {
+      outcomeStatus: "approved",
+      clinicalDocumentationReviewed: true,
+      medicalNecessityCriteriaMet: true,
+      planPolicyRequirementsChecked: true,
+      decisionRationaleDocumented: true
+    });
+    const [row] = await workflow.listPlanRows();
+    const paymentRequest = executePolicyBoundPaymentMock.mock.calls[0]![0]!;
+    const paymentIntentId = buildPaymentIntentId(paymentRequest);
+
+    expect(paymentPolicyEvidenceStore.saved).toHaveLength(1);
+    expect(paymentPolicyEvidenceStore.saved[0]).toMatchObject({
+      incentiveEvaluationId: row?.id,
+      umRequestId: umRequest.id,
+      caseId: umRequest.id,
+      planId: "acme-health-ppo",
+      paymentPolicyId: "acme-health-ppo",
+      businessPolicyId: "delegate-um-sla-bonus-v1",
+      runtime: "hedera-agent-kit-policy",
+      outcome: "paid",
+      failureCode: null,
+      requestedPayment: {
+        amount: 5,
+        token: "HBAR",
+        recipientWalletId: "0.0.9049549"
+      },
+      controls: expect.arrayContaining([
+        expect.objectContaining({
+          id: "businessEvaluationAttestation",
+          label: "Business evaluation attestation",
+          status: "passed"
+        }),
+        expect.objectContaining({
+          id: "paymentToken",
+          label: "Payment token",
+          status: "passed",
+          expected: "HBAR",
+          actual: "HBAR"
+        }),
+        expect.objectContaining({
+          id: "maxPaymentPerRequest",
+          label: "Max payment per request",
+          status: "passed",
+          expected: "<= 5 HBAR",
+          actual: "5 HBAR"
+        }),
+        expect.objectContaining({
+          id: "duplicatePaymentPrevention",
+          label: "Duplicate payment prevention",
+          status: "passed"
+        }),
+        expect.objectContaining({
+          id: "paymentEnvelopeIntegrity",
+          label: "Payment envelope integrity",
+          status: "passed"
+        })
+      ]),
+      paymentIntentId,
+      transactionId: row?.transactionId
+    });
+    expect(row).toMatchObject({
+      paymentPolicyId: "acme-health-ppo",
+      paymentPolicyControls: paymentPolicyEvidenceStore.saved[0]!.controls
+    });
+  });
+
+  it("keeps a successful delegate payment paid when payment policy evidence persistence fails", async () => {
+    const platform = createInMemoryUmPlatform({ generateCaseId: () => "PA-260526-0900-EVIDFAIL" });
+    const paymentPolicyEvidenceStore = createCapturingFailingOncePaymentPolicyEvidenceStore();
+    const workflow = createDelegateUmWorkflow(
+      platform,
+      undefined,
+      createInMemoryPolicyStore({
+        delegate_um_acme_sla_bonus: defaultIncentivePolicies.delegate_um_acme_sla_bonus
+      }),
+      undefined,
+      undefined,
+      paymentPolicyEvidenceStore
+    );
+    const umRequest = platform.submitPriorAuth({
+      requestType: "pharmacy_benefit",
+      serviceCode: "wegovy_semaglutide"
+    });
+    await workflow.startReview(umRequest.id, "reviewer-ana");
+
+    await workflow.completeDetermination(umRequest.id, {
+      outcomeStatus: "approved",
+      clinicalDocumentationReviewed: true,
+      medicalNecessityCriteriaMet: true,
+      planPolicyRequirementsChecked: true,
+      decisionRationaleDocumented: true
+    });
+    const [row] = await workflow.listPlanRows();
+    const paymentRequest = executePolicyBoundPaymentMock.mock.calls[0]![0]!;
+    const paymentIntentId = buildPaymentIntentId(paymentRequest);
+
+    expect(paymentPolicyEvidenceStore.saved).toHaveLength(1);
+    expect(row).toMatchObject({
+      umRequestId: umRequest.id,
+      businessPolicyStatus: "approved",
+      paymentPolicyStatus: "paid",
+      incentiveStatus: "paid",
+      paymentStatus: "auto_executed",
+      paymentPolicyId: "acme-health-ppo",
+      paymentIntentId,
+      transactionId: `testnet-${paymentRequest.auditId}-${paymentRequest.currency.toLowerCase()}`,
+      paymentPolicyControls: paymentPolicyEvidenceStore.saved[0]!.controls
+    });
+    expect(row?.paymentPolicyControls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "businessEvaluationAttestation",
+          status: "passed"
+        }),
+        expect.objectContaining({
+          id: "paymentToken",
+          status: "passed",
+          expected: "HBAR",
+          actual: "HBAR"
+        }),
+        expect.objectContaining({
+          id: "maxPaymentPerRequest",
+          status: "passed",
+          expected: "<= 5 HBAR",
+          actual: "5 HBAR"
+        })
+      ])
+    );
+  });
+
   it("loads persisted paid delegate rows after workflow re-instantiation", async () => {
     const platform = createInMemoryUmPlatform({ generateCaseId: () => "PA-260526-0900-CCCC3333" });
     const persistence = new FakeDelegatePersistenceStore();
@@ -244,9 +399,10 @@ describe("delegate UM workflow", () => {
 
     await workflow.completeDetermination(umRequest.id, {
       outcomeStatus: "approved",
-      medicalNecessityReviewed: true,
-      policyCriteriaChecked: true,
-      rationaleCaptured: true
+      clinicalDocumentationReviewed: true,
+      medicalNecessityCriteriaMet: true,
+      planPolicyRequirementsChecked: true,
+      decisionRationaleDocumented: true
     });
     const [paidRow] = await workflow.listPlanRows();
     expect(paidRow).toMatchObject({
@@ -316,6 +472,101 @@ describe("delegate UM workflow", () => {
     ]);
   });
 
+  it("canonicalizes legacy delegate policy criteria and derives missing payment controls when loading persisted paid rows", async () => {
+    const platform = createInMemoryUmPlatform({ generateCaseId: () => "PA-260526-0900-LEGACY2" });
+    const persistence = new FakeDelegatePersistenceStore();
+    const umRequest = platform.submitPriorAuth({
+      requestType: "pharmacy_benefit",
+      serviceCode: "wegovy_semaglutide"
+    });
+    const legacyPaidRow = {
+      ...buildPaidDelegateRow(umRequest),
+      policyCriteria: buildLegacyVerbosePolicyCriteria(),
+      paymentPolicyControls: []
+    };
+    await persistence.saveUmRequest(legacyPaidRow.umRequest);
+    await persistence.saveIncentiveRow(legacyPaidRow as unknown as PersistedIncentiveWorklistRow);
+
+    const restartedWorkflow = createDelegateUmWorkflow(
+      createInMemoryUmPlatform(),
+      persistence,
+      createInMemoryPolicyStore({
+        delegate_um_acme_sla_bonus: defaultIncentivePolicies.delegate_um_acme_sla_bonus
+      }),
+      undefined,
+      createInMemoryPaymentPolicyStore(defaultPaymentPlanPolicies)
+    );
+
+    const [row] = await restartedWorkflow.listPlanRows();
+
+    expect(row?.policyCriteria).toEqual([
+      expect.objectContaining({
+        id: "clinicalDocumentationReviewed",
+        label: "Clinical documentation reviewed",
+        actual: "Yes"
+      }),
+      expect.objectContaining({
+        id: "medicalNecessityCriteriaMet",
+        label: "Medical necessity criteria met",
+        actual: "Yes"
+      }),
+      expect.objectContaining({
+        id: "planPolicyRequirementsChecked",
+        label: "Plan policy requirements checked",
+        actual: "Yes"
+      }),
+      expect.objectContaining({
+        id: "decisionRationaleDocumented",
+        label: "Decision rationale documented",
+        actual: "Yes"
+      })
+    ]);
+    expect(row?.policyCriteria).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ label: "UM request is determined" }),
+        expect.objectContaining({ label: "Outcome status is present" }),
+        expect.objectContaining({ label: "Completed within SLA" }),
+        expect.objectContaining({ label: "Recipient wallet is approved" }),
+        expect.objectContaining({ label: "Request type is eligible" }),
+        expect.objectContaining({ label: "Plan is in the delegate contract" }),
+        expect.objectContaining({ label: "Delegate vendor is in the contract" }),
+        expect.objectContaining({ label: "PAS audit reference is available" }),
+        expect.objectContaining({ id: "outcomeNotPaymentMetric" }),
+        expect.objectContaining({ label: "Outcome value affects payment" }),
+        expect.objectContaining({ reasonCode: "PROHIBITED_OUTCOME_METRIC" })
+      ])
+    );
+    expect(row?.paymentPolicyControls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "businessEvaluationAttestation",
+          label: "Business evaluation attestation",
+          status: "passed"
+        }),
+        expect.objectContaining({
+          id: "paymentToken",
+          label: "Payment token",
+          status: "passed"
+        }),
+        expect.objectContaining({
+          id: "maxPaymentPerRequest",
+          label: "Max payment per request",
+          status: "passed"
+        }),
+        expect.objectContaining({
+          id: "duplicatePaymentPrevention",
+          label: "Duplicate payment prevention",
+          status: "passed"
+        }),
+        expect.objectContaining({
+          id: "paymentEnvelopeIntegrity",
+          label: "Payment envelope integrity",
+          status: "passed"
+        })
+      ])
+    );
+  });
+
   it("does not execute a second payment for an already paid delegate determination", async () => {
     const platform = createInMemoryUmPlatform({ generateCaseId: () => "PA-260526-0900-DDDD4444" });
     const persistence = new FakeDelegatePersistenceStore();
@@ -335,9 +586,10 @@ describe("delegate UM workflow", () => {
 
     const input = {
       outcomeStatus: "approved" as const,
-      medicalNecessityReviewed: true,
-      policyCriteriaChecked: true,
-      rationaleCaptured: true
+      clinicalDocumentationReviewed: true,
+      medicalNecessityCriteriaMet: true,
+      planPolicyRequirementsChecked: true,
+      decisionRationaleDocumented: true
     };
     const first = await workflow.completeDetermination(umRequest.id, input);
     const [firstRow] = await workflow.listPlanRows();
@@ -387,9 +639,10 @@ describe("delegate UM workflow", () => {
 
     const determined = await workflow.completeDetermination(umRequest.id, {
       outcomeStatus: "approved",
-      medicalNecessityReviewed: true,
-      policyCriteriaChecked: true,
-      rationaleCaptured: true
+      clinicalDocumentationReviewed: true,
+      medicalNecessityCriteriaMet: true,
+      planPolicyRequirementsChecked: true,
+      decisionRationaleDocumented: true
     });
     const [row] = await workflow.listPlanRows();
 
@@ -431,15 +684,17 @@ describe("delegate UM workflow", () => {
 
     const determined = await workflow.completeDetermination(umRequest.id, {
       outcomeStatus: "approved",
-      medicalNecessityReviewed: true,
-      policyCriteriaChecked: true,
-      rationaleCaptured: true
+      clinicalDocumentationReviewed: true,
+      medicalNecessityCriteriaMet: true,
+      planPolicyRequirementsChecked: true,
+      decisionRationaleDocumented: true
     });
     await workflow.completeDetermination(umRequest.id, {
       outcomeStatus: "approved",
-      medicalNecessityReviewed: true,
-      policyCriteriaChecked: true,
-      rationaleCaptured: true
+      clinicalDocumentationReviewed: true,
+      medicalNecessityCriteriaMet: true,
+      planPolicyRequirementsChecked: true,
+      decisionRationaleDocumented: true
     });
     const [row] = await workflow.listPlanRows();
 
@@ -475,15 +730,17 @@ describe("delegate UM workflow", () => {
 
     const determined = await workflow.completeDetermination(umRequest.id, {
       outcomeStatus: "approved",
-      medicalNecessityReviewed: true,
-      policyCriteriaChecked: true,
-      rationaleCaptured: true
+      clinicalDocumentationReviewed: true,
+      medicalNecessityCriteriaMet: true,
+      planPolicyRequirementsChecked: true,
+      decisionRationaleDocumented: true
     });
     await workflow.completeDetermination(umRequest.id, {
       outcomeStatus: "approved",
-      medicalNecessityReviewed: true,
-      policyCriteriaChecked: true,
-      rationaleCaptured: true
+      clinicalDocumentationReviewed: true,
+      medicalNecessityCriteriaMet: true,
+      planPolicyRequirementsChecked: true,
+      decisionRationaleDocumented: true
     });
     const [row] = await workflow.listPlanRows();
 
@@ -527,9 +784,10 @@ describe("delegate UM workflow", () => {
     await expect(
       workflow.completeDetermination(umRequest.id, {
         outcomeStatus: "approved",
-        medicalNecessityReviewed: true,
-        policyCriteriaChecked: true,
-        rationaleCaptured: true
+        clinicalDocumentationReviewed: true,
+        medicalNecessityCriteriaMet: true,
+        planPolicyRequirementsChecked: true,
+        decisionRationaleDocumented: true
       })
     ).rejects.toThrow(`UM_REQUEST_NOT_DELEGATED:${umRequest.id}`);
     expect(executePolicyBoundPaymentMock).not.toHaveBeenCalled();
@@ -563,9 +821,10 @@ describe("delegate UM workflow", () => {
 
     const determined = await workflow.completeDetermination(umRequest.id, {
       outcomeStatus: "approved",
-      medicalNecessityReviewed: true,
-      policyCriteriaChecked: true,
-      rationaleCaptured: true
+      clinicalDocumentationReviewed: true,
+      medicalNecessityCriteriaMet: true,
+      planPolicyRequirementsChecked: true,
+      decisionRationaleDocumented: true
     });
     const [row] = await workflow.listPlanRows();
 
@@ -625,6 +884,8 @@ function buildPaidDelegateRow(request: UMRequest): DelegatePlanAuditRow {
     state: "determined",
     outcomeStatus: "approved",
     slaStatus: "within_sla",
+    businessPolicyStatus: "approved",
+    paymentPolicyStatus: "paid",
     incentiveStatus: "paid",
     paymentStatus: "auto_executed",
     incentiveValue: 5,
@@ -638,10 +899,41 @@ function buildPaidDelegateRow(request: UMRequest): DelegatePlanAuditRow {
       "Request type limited to policy scope",
       "Determination completed within SLA",
       "Clinical review completion required",
-      "Outcome status not used for payment",
       "PAS audit reference required"
     ],
     policyCriteria: [],
+    paymentPolicyId: request.planId,
+    paymentPolicyControls: [
+      {
+        id: "businessEvaluationAttestation",
+        label: "Business evaluation attestation",
+        status: "passed"
+      },
+      {
+        id: "paymentToken",
+        label: "Payment token",
+        status: "passed",
+        expected: "HBAR",
+        actual: "HBAR"
+      },
+      {
+        id: "maxPaymentPerRequest",
+        label: "Max payment per request",
+        status: "passed",
+        expected: "<= 5 HBAR",
+        actual: "5 HBAR"
+      },
+      {
+        id: "duplicatePaymentPrevention",
+        label: "Duplicate payment prevention",
+        status: "passed"
+      },
+      {
+        id: "paymentEnvelopeIntegrity",
+        label: "Payment envelope integrity",
+        status: "passed"
+      }
+    ],
     audit: {
       id: `audit-test-${request.id}`,
       requestHash: `hash-${request.id}`,
@@ -658,12 +950,126 @@ function buildPaidDelegateRow(request: UMRequest): DelegatePlanAuditRow {
   };
 }
 
+function createCapturingPaymentPolicyEvidenceStore(): PaymentPolicyEvidenceStore & { saved: PaymentPolicyEvidence[] } {
+  const saved: PaymentPolicyEvidence[] = [];
+
+  return {
+    backend: "memory",
+    saved,
+    async saveEvidence(evidence) {
+      saved.push(structuredClone(evidence));
+    },
+    async getEvidence(paymentIntentId) {
+      return saved.find((evidence) => evidence.paymentIntentId === paymentIntentId) ?? null;
+    }
+  };
+}
+
+function createCapturingFailingOncePaymentPolicyEvidenceStore(): PaymentPolicyEvidenceStore & {
+  saved: PaymentPolicyEvidence[];
+} {
+  const saved: PaymentPolicyEvidence[] = [];
+  let remainingFailures = 1;
+
+  return {
+    backend: "memory",
+    saved,
+    async saveEvidence(evidence) {
+      saved.push(structuredClone(evidence));
+      if (remainingFailures > 0) {
+        remainingFailures -= 1;
+        throw new Error("TEST_PAYMENT_POLICY_EVIDENCE_SAVE_FAILED");
+      }
+    },
+    async getEvidence(paymentIntentId) {
+      return saved.find((evidence) => evidence.paymentIntentId === paymentIntentId) ?? null;
+    }
+  };
+}
+
 function requireTestDelegateVendorId(request: UMRequest): string {
   if (!request.delegateVendorId) {
     throw new Error(`TEST_DELEGATE_VENDOR_REQUIRED:${request.id}`);
   }
 
   return request.delegateVendorId;
+}
+
+function buildLegacyVerbosePolicyCriteria(): DelegatePlanAuditRow["policyCriteria"] {
+  return [
+    {
+      id: "plan",
+      label: "Plan is in the delegate contract",
+      expected: "acme-health-ppo",
+      actual: "acme-health-ppo",
+      passed: true,
+      reasonCode: "PLAN_NOT_IN_CONTRACT"
+    },
+    {
+      id: "delegateVendor",
+      label: "Delegate vendor is in the contract",
+      expected: "northstar-um",
+      actual: "northstar-um",
+      passed: true,
+      reasonCode: "DELEGATE_VENDOR_NOT_IN_CONTRACT"
+    },
+    {
+      id: "wallet",
+      label: "Recipient wallet is approved",
+      expected: "0.0.9049549",
+      actual: "0.0.9049549",
+      passed: true,
+      reasonCode: "WALLET_NOT_APPROVED"
+    },
+    {
+      id: "requestType",
+      label: "Request type is eligible",
+      expected: "Pharmacy Benefit",
+      actual: "Pharmacy Benefit",
+      passed: true,
+      reasonCode: "REQUEST_TYPE_NOT_ELIGIBLE"
+    },
+    {
+      id: "state",
+      label: "UM request is determined",
+      expected: "determined",
+      actual: "determined",
+      passed: true,
+      reasonCode: "UM_REQUEST_NOT_DETERMINED"
+    },
+    {
+      id: "outcomeStatusPresent",
+      label: "Determination outcome is captured",
+      expected: "true",
+      actual: "true",
+      passed: true,
+      reasonCode: "OUTCOME_STATUS_MISSING"
+    },
+    {
+      id: "sla",
+      label: "Determination completed within SLA",
+      expected: "Within 24h SLA",
+      actual: "Within 24h SLA",
+      passed: true,
+      reasonCode: "SLA_EXCEEDED"
+    },
+    {
+      id: "clinicalReviewCompleted",
+      label: "Clinical review checklist is complete",
+      expected: "true",
+      actual: "true",
+      passed: true,
+      reasonCode: "CLINICAL_REVIEW_INCOMPLETE"
+    },
+    {
+      id: "auditReady",
+      label: "PAS audit reference is available",
+      expected: "true",
+      actual: "true",
+      passed: true,
+      reasonCode: "PAS_AUDIT_RECORD_MISSING"
+    }
+  ];
 }
 
 class FakeDelegatePersistenceStore implements UmPasPersistenceStore {

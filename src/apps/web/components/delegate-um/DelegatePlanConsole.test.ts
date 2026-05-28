@@ -4,6 +4,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { DelegatePlanAuditRow } from "../../lib/delegate-um-workflow";
+import type { PaymentPolicyControlEvidence } from "../../lib/payment-policy-evidence-store";
 import { DelegatePlanAuditDetailsModal } from "./DelegatePlanAuditDetailsModal";
 import { DelegatePlanConsole } from "./DelegatePlanConsole";
 
@@ -20,9 +21,9 @@ describe("DelegatePlanConsole source", () => {
     expect(source).toContain("<th>Action</th>");
     expect(source).toContain('<th className="badge-cell">Business Policy</th>');
     expect(source).toContain('<th className="badge-cell">Payment Policy</th>');
-    expect(source).toContain("formatBusinessPolicyStatus(row.incentiveStatus)");
-    expect(source).toContain("businessPolicyStatusBadgeVariant(row.incentiveStatus)");
-    expect(source).toContain("paymentStatusBadgeVariant(row.paymentStatus)");
+    expect(source).toContain("formatBusinessPolicyStatus(row.businessPolicyStatus)");
+    expect(source).toContain("businessPolicyStatusBadgeVariant(row.businessPolicyStatus)");
+    expect(source).toContain("paymentStatusBadgeVariant(row.paymentPolicyStatus)");
     expect(source).not.toContain("<th>State</th>");
     expect(source).not.toContain("<td>{formatUmState(row.state)}</td>");
     expect(source).not.toContain('className="panel detail-panel"');
@@ -40,18 +41,111 @@ describe("DelegatePlanConsole source", () => {
     expect(source).toContain("delegate-policy-event-modal");
     expect(source).toContain('className="policy-modal-sections payment-policy-modal-sections"');
     expect(source).toContain('role="dialog"');
-    expect(source).toContain("Delegate UM SLA policy audit");
-    expect(source).toContain("UM_REQUEST_DETERMINED");
+    expect(source).toContain("Policy Event Audit Details");
     expect(source).toContain("<dt>Delegate vendor</dt>");
-    expect(source).toContain("<dt>Business policy ID</dt>");
-    expect(source).toContain("<dt>Final outcome</dt>");
+    expect(source).toContain("<dt>Business policy status</dt>");
+    expect(source).toContain("<dt>Payment policy status</dt>");
+    expect(source).toContain("<dt>Amount</dt>");
+    expect(source.match(/<dt>Policy ID<\/dt>/g)).toHaveLength(2);
+    expect(source.match(/<dt>Audit record<\/dt>/g)).toHaveLength(2);
+    expect(source).toContain("row.paymentPolicyId ?? row.planId ?? \"None\"");
+    expect(source).toContain("row.paymentIntentId ?? \"None\"");
+    expect(source).not.toContain("<dt>Payment policy / plan</dt>");
     expect(source).toContain("Payment policy");
     expect(source).toContain("formatTransaction(row.transactionId)");
-    expect(source).toContain("Show business policy criteria");
-    expect(source).toContain("Expected");
-    expect(source).toContain("Evidence value");
-    expect(source).toContain("row.policyControls.join");
     expect(source).toContain("row.policyCriteria.map");
+    expect(source).toContain("row.paymentPolicyControls.map");
+    expect(source).toContain("Criterion/Control");
+    expect(source).toContain("Expected:");
+    expect(source).toContain("Actual");
+    expect(source).toContain("<colgroup>");
+    expect(source).toContain('className="policy-audit-evidence-actual-column"');
+    expect(source).not.toContain("<th>Expected</th>");
+    expect(source).not.toContain('<th className="badge-cell">Result</th>');
+    expect(source).not.toContain("Final outcome");
+    expect(source).not.toContain("Delegate UM SLA bonus paid");
+    expect(source).not.toContain("Delegate SLA bonus decision");
+    expect(source).not.toContain("<dt>Reason</dt>");
+    expect(source).not.toContain("Key business checks");
+    expect(source).not.toContain("Key payment controls");
+    expect(source).not.toContain("Paid the approved");
+    expect(source).not.toContain("Business policy approved");
+    expect(source).not.toContain("Recipient wallet assigned");
+    expect(source).not.toContain("Transaction recorded");
+    expect(source).not.toContain("Workflow object");
+    expect(source).not.toContain("UMRequest workflow object");
+    expect(source).not.toContain("Settlement network");
+    expect(source).not.toContain("Hedera testnet");
+    expect(source).not.toContain("Payment trace note");
+    expect(source).not.toContain("Payment runtime recorded");
+    expect(source).not.toContain("Show technical trace");
+    expect(source).not.toContain("Show business policy criteria");
+    expect(source).not.toContain("Evidence value");
+    expect(source).not.toContain("policyControls.map");
+    expect(source).not.toContain("<dt>Event</dt>");
+    expect(source).not.toContain("<dt>Evidence source</dt>");
+    expect(source).not.toContain("<dt>Business policy ID</dt>");
+    expect(source).not.toContain("<dt>UM status</dt>");
+    expect(source).not.toContain("<dt>Audit ID</dt>");
+    expect(source).not.toContain("<dt>Policy guardrails</dt>");
+    expect(source).not.toContain("<dt>Payment status</dt>");
+    expect(source).not.toContain("<dt>Payment intent</dt>");
+    expect(source).not.toContain("<dt>Network</dt>");
+    expect(source).not.toContain("<dt>Settlement reason</dt>");
+    expect(source).not.toContain("<dt>Runtime evidence</dt>");
+    expect(source).not.toMatch(/<dl className="policy-anchor-list">[\s\S]*?<dd className="mono-cell">/);
+  });
+
+  it("keeps delegate audit evidence tables responsive inside policy subcards", () => {
+    const styles = readFileSync(path.join(process.cwd(), "src/apps/web/app/styles.css"), "utf8");
+    const evidenceTableBlock = styles.match(/\.policy-audit-evidence-table\s*\{[^}]+\}/)?.[0] ?? "";
+    const actualColumnBlock = styles.match(/\.policy-audit-evidence-actual-column\s*\{[^}]+\}/)?.[0] ?? "";
+    const evidenceBadgeCellBlock =
+      styles.match(/\.policy-audit-evidence-table \.badge-cell\s*\{[^}]+\}/)?.[0] ?? "";
+    const evidenceBadgeBlock =
+      styles.match(/\.policy-audit-evidence-table \.badge-cell \.op-badge\s*\{[^}]+\}/)?.[0] ?? "";
+
+    expect(evidenceTableBlock).toContain("min-width: 0");
+    expect(evidenceTableBlock).toContain("table-layout: fixed");
+    expect(evidenceTableBlock).not.toContain("min-width: 620px");
+    expect(actualColumnBlock).toContain("clamp(");
+    expect(actualColumnBlock).not.toContain("width: max-content");
+    expect(evidenceBadgeCellBlock).toContain("clamp(");
+    expect(evidenceBadgeCellBlock).not.toContain("width: 132px");
+    expect(evidenceBadgeCellBlock).not.toContain("white-space: nowrap");
+    expect(evidenceBadgeBlock).toContain("max-width: 100%");
+    expect(evidenceBadgeBlock).toContain("overflow-wrap: anywhere");
+  });
+
+  it("renders policy anchor labels and values as inline rows with shared type", () => {
+    const styles = readFileSync(path.join(process.cwd(), "src/apps/web/app/styles.css"), "utf8");
+    const anchorRowBlock = styles.match(/\.policy-anchor-list div\s*\{[^}]+\}/)?.[0] ?? "";
+    const anchorTermBlock = styles.match(/\.policy-anchor-list dt\s*\{[^}]+\}/)?.[0] ?? "";
+    const anchorValueBlock = styles.match(/\.policy-anchor-list dd\s*\{[^}]+\}/)?.[0] ?? "";
+    const anchorSeparatorBlock = styles.match(/\.policy-anchor-list dt::after\s*\{[^}]+\}/)?.[0] ?? "";
+
+    expect(anchorRowBlock).not.toContain("display: grid");
+    expect(anchorRowBlock).toMatch(/display:\s*(inline-flex|flex)/);
+    expect(anchorTermBlock).not.toContain("text-transform: uppercase");
+    expect(anchorTermBlock).not.toContain("Geist Mono");
+    expect(anchorTermBlock).toContain('font-family: "Geist", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif');
+    expect(anchorTermBlock).toContain("font-size: 13px");
+    expect(anchorValueBlock).toContain('font-family: "Geist", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif');
+    expect(anchorValueBlock).toContain("font-size: 13px");
+    expect(anchorValueBlock).toContain("overflow-wrap: anywhere");
+    expect(anchorSeparatorBlock).toContain('content: ":"');
+  });
+
+  it("uses the shared two-label policy status convention in delegate formatters", () => {
+    const source = readFileSync(path.join(process.cwd(), "src/apps/web/components/delegate-um/delegate-formatters.ts"), "utf8");
+
+    expect(source).toMatch(/case "approved":\n\s+return "Approved";/);
+    expect(source).toMatch(/case "rejected":\n\s+return "Rejected";/);
+    expect(source).toMatch(/case "paid":\n\s+return "Paid";/);
+    expect(source).toMatch(/case "blocked":\n\s+return "Blocked";/);
+    expect(source).not.toContain(["Not", " eligible"].join(""));
+    expect(source).not.toContain(["Auto", "-settled"].join(""));
+    expect(source).not.toContain(["Blocked", " by policy"].join(""));
   });
 
   it("renders the plan view shell with loading state and delegate navigation", () => {
@@ -68,6 +162,8 @@ describe("DelegatePlanConsole source", () => {
     const markup = renderToStaticMarkup(
       createElement(DelegatePlanAuditDetailsModal, {
         row: buildDelegatePlanAuditRow({
+          businessPolicyStatus: "approved",
+          paymentPolicyStatus: "blocked",
           incentiveStatus: "payment_failed",
           paymentStatus: "execution_failed",
           reason: "Policy approved, but Hedera transaction execution failed"
@@ -76,24 +172,206 @@ describe("DelegatePlanConsole source", () => {
       })
     );
 
-    expect(markup).toContain("Final outcome");
-    expect(markup).toContain("Business policy passed, payment failed");
+    expect(markup).toContain("Business policy status");
     expect(markup).toContain("Business policy");
     expect(markup).toContain("Payment policy");
-    expect(markup).toContain("Show business policy criteria");
+    expect(markup).toContain("Policy Event Audit Details");
     expect(markup).not.toContain("Show policy criteria");
-    expect(markup).toContain("Payment execution failed after the business policy approved the incentive.");
-    expect(markup).toContain("Payment policy runtime details were not captured for this event.");
-    expect(markup).toContain("Requested payment");
+    expect(markup).not.toContain("Show business policy criteria");
+    expect(markup).not.toContain("Show technical trace");
+    expect(markup).toContain("Amount");
     expect(markup).toContain("5.00 HBAR");
-    expect(markup).toContain("Execution failed");
+    expect(markup).toContain("Blocked");
+    expect(markup).not.toContain(["Business policy", " passed"].join(""));
+    expect(markup).not.toContain(["Auto", "-settled"].join(""));
+    expect(markup).not.toContain(["Blocked", " by policy"].join(""));
     expect(markup).toContain("op-badge op-badge-warning");
-    expect(markup).toContain("Recipient wallet");
+    expect(markup).toContain("Wallet");
     expect(markup).toContain("0.0.9049549");
+  });
+
+  it("renders delegate policy details using policy criteria and payment control evidence from the row", () => {
+    const markup = renderToStaticMarkup(
+      createElement(DelegatePlanAuditDetailsModal, {
+        row: buildDelegatePlanAuditRow({
+          paymentPolicyId: "delegate-um-summit-payment-policy-v1",
+          paymentIntentId: "pi_delegate_um_52d91affd996",
+          transactionId: "0.0.9049549-1700000000-000000001",
+          policyCriteria: [
+            {
+              id: "clinicalDocumentationReviewed",
+              label: "Clinical documentation reviewed",
+              expected: "Yes",
+              actual: "Yes",
+              passed: true,
+              reasonCode: "CLINICAL_DOCUMENTATION_NOT_REVIEWED"
+            },
+            {
+              id: "medicalNecessityCriteriaMet",
+              label: "Medical necessity criteria met",
+              expected: "Yes",
+              actual: "No",
+              passed: false,
+              reasonCode: "MEDICAL_NECESSITY_CRITERIA_NOT_MET"
+            },
+            {
+              id: "planPolicyRequirementsChecked",
+              label: "Plan policy requirements checked",
+              expected: "Yes",
+              actual: "",
+              passed: true,
+              reasonCode: "PLAN_POLICY_REQUIREMENTS_NOT_CHECKED"
+            },
+            {
+              id: "decisionRationaleDocumented",
+              label: "Decision rationale documented",
+              expected: "Yes",
+              actual: "",
+              passed: false,
+              reasonCode: "DECISION_RATIONALE_NOT_DOCUMENTED"
+            }
+          ],
+          paymentPolicyControls: [
+            ...buildPaymentPolicyControls(),
+            {
+              id: "paymentAmountLimitExceeded",
+              label: "Payment amount limit",
+              status: "failed",
+              expected: "<= 5 HBAR",
+              actual: "6 HBAR",
+              failureCode: "PAYMENT_AMOUNT_LIMIT_EXCEEDED"
+            },
+            {
+              id: "paymentSettlementTrace",
+              label: "Payment settlement trace",
+              status: "not_run",
+              expected: "Recorded"
+            }
+          ]
+        }),
+        onClose: () => undefined
+      })
+    );
+
+    expect(markup).toContain("Policy Event Audit Details");
+    expect(markup).toContain("PA-260526-1927-CECVCB4C");
+    expect(markup).toContain("Summit Health HMO");
+    expect(markup).toContain("northstar-um");
+    expect(markup).toContain("Wegovy (semaglutide) injection");
+    expect(markup).toContain("Approved");
+    expect(markup).toContain("delegate-um-summit-pharmacy-sla-bonus-v1");
+    expect(markup).toContain("audit_52d91affd996");
+    expect(markup).toContain("5.00 HBAR");
+    expect(markup).toContain("<dt>Amount</dt>");
+    expect(markup).toContain("<dt>Wallet</dt>");
+    expect(markup).toContain("https://hashscan.io/testnet/transaction/0.0.9049549-1700000000-000000001");
+    expect(markup).toContain("Business Policy");
+    expect(markup).toContain("Payment Policy");
+    expect(markup.match(/<dt>Policy ID<\/dt>/g)).toHaveLength(2);
+    expect(markup.match(/<dt>Audit record<\/dt>/g)).toHaveLength(2);
+    expect(markup).toContain("<dt>Policy ID</dt><dd>delegate-um-summit-pharmacy-sla-bonus-v1</dd>");
+    expect(markup).toContain("<dt>Audit record</dt><dd>audit_52d91affd996</dd>");
+    expect(markup).toContain("<dt>Policy ID</dt><dd>delegate-um-summit-payment-policy-v1</dd>");
+    expect(markup).toContain("<dt>Audit record</dt><dd>pi_delegate_um_52d91affd996</dd>");
+    expect(markup).not.toContain('<dd class="mono-cell">delegate-um-summit-pharmacy-sla-bonus-v1</dd>');
+    expect(markup).not.toContain('<dd class="mono-cell">audit_52d91affd996</dd>');
+    expect(markup).not.toContain('<dd class="mono-cell">delegate-um-summit-payment-policy-v1</dd>');
+    expect(markup).not.toContain('<dd class="mono-cell">pi_delegate_um_52d91affd996</dd>');
+    expect(markup).toContain("delegate-um-summit-payment-policy-v1");
+    expect(markup).toContain("pi_delegate_um_52d91affd996");
+    expect(markup).not.toContain("<dt>Payment policy / plan</dt>");
+    expect(markup).toContain("Criterion/Control");
+    expect(markup).toContain("Expected: Yes");
+    expect(markup).toContain("Expected: &lt;= 5 HBAR");
+    expect(markup).toContain("Expected: Recorded");
+    expect(markup).not.toContain("Expected: Not recorded");
+    expect(markup).toContain("Actual");
+    expect(markup).not.toContain("<th>Expected</th>");
+    expect(markup).not.toContain("<th>Result</th>");
+    expect(markup).not.toContain('<th class="badge-cell">Result</th>');
+    expect(markup).not.toContain("UM request is determined");
+    expect(markup).not.toContain("Outcome status is present");
+    expect(markup).not.toContain("Outcome value affects payment");
+    expect(markup).not.toContain("outcomeNotPaymentMetric");
+    expect(markup).not.toContain("PROHIBITED_OUTCOME_METRIC");
+    expect(markup).toContain("Clinical documentation reviewed");
+    expect(markup).toContain("Medical necessity criteria met");
+    expect(markup).toContain('<span class="op-badge op-badge-success">Yes</span>');
+    expect(markup).toContain('<span class="op-badge op-badge-warning">No</span>');
+    expect(markup).toContain("Plan policy requirements checked");
+    expect(markup).toContain("Decision rationale documented");
+    expect(markup).toContain('<span class="op-badge op-badge-success">Verified</span>');
+    expect(markup).toContain('<span class="op-badge op-badge-warning">Not verified</span>');
+    expect(markup).not.toContain("CLINICAL_DOCUMENTATION_NOT_REVIEWED");
+    expect(markup).not.toContain("MEDICAL_NECESSITY_CRITERIA_NOT_MET");
+    expect(markup).not.toContain("Completed within SLA");
+    expect(markup).toContain("Business evaluation attestation");
+    expect(markup).toContain("Payment token");
+    expect(markup).toContain("Max payment per request");
+    expect(markup).toContain("Duplicate payment prevention");
+    expect(markup).toContain("Payment envelope integrity");
+    expect(markup).toContain("5 HBAR");
+    expect(markup).toContain('<span class="op-badge op-badge-success">HBAR</span>');
+    expect(markup).toContain('<span class="op-badge op-badge-success">5 HBAR</span>');
+    expect(markup).toContain('<span class="op-badge op-badge-warning">6 HBAR</span>');
+    expect(markup).toContain("Payment settlement trace");
+    expect(markup).toContain('<span class="op-badge op-badge-warning">Not verified</span>');
+    expect(markup).not.toContain('<span class="op-badge op-badge-warning">Not recorded</span>');
+    expect(markup).not.toContain('<span class="op-badge op-badge-neutral">Not recorded</span>');
+    expect(markup).not.toContain("PAYMENT_AMOUNT_LIMIT_EXCEEDED");
+    expect(markup).not.toContain("Passed");
+
+    expect(markup).not.toContain("Final outcome");
+    expect(markup).not.toContain("Delegate UM SLA bonus paid");
+    expect(markup).not.toContain("Delegate SLA bonus decision");
+    expect(markup).not.toContain("<dt>Reason</dt>");
+    expect(markup).not.toContain("Key business checks");
+    expect(markup).not.toContain("Key payment controls");
+    expect(markup).not.toContain("Paid the approved");
+    expect(markup).not.toContain("Business policy approved");
+    expect(markup).not.toContain("Recipient wallet assigned");
+    expect(markup).not.toContain("Recipient wallet is approved");
+    expect(markup).not.toContain("Request type is eligible");
+    expect(markup).not.toContain("Plan is in the delegate contract");
+    expect(markup).not.toContain("Delegate vendor is in the contract");
+    expect(markup).not.toContain("PAS audit reference is available");
+    expect(markup).not.toContain("Transaction recorded");
+    expect(markup).not.toContain("Workflow object");
+    expect(markup).not.toContain("UMRequest workflow object");
+    expect(markup).not.toContain("Settlement network");
+    expect(markup).not.toContain("Hedera testnet");
+    expect(markup).not.toContain("Payment trace note");
+    expect(markup).not.toContain("Payment runtime recorded");
+    expect(markup).not.toContain("Show technical trace");
+    expect(markup).not.toContain("Show business policy criteria");
+    expect(markup).not.toContain("<dt>Event</dt>");
+    expect(markup).not.toContain("<dt>Evidence source</dt>");
+    expect(markup).not.toContain("<dt>Policy guardrails</dt>");
+    expect(markup).not.toContain("<dt>Payment intent</dt>");
+    expect(markup).not.toContain("<dt>Runtime evidence</dt>");
+
+    expect(markup).toContain("<dt>Business policy status</dt>");
+    expect(markup).toContain("<dt>Payment policy status</dt>");
+    expect(policyEventSectionHeading(markup, "Business Policy")).not.toContain("Approved");
+    expect(policyEventSectionHeading(markup, "Payment Policy")).not.toContain("Paid");
   });
 });
 
-function buildDelegatePlanAuditRow(overrides: Partial<DelegatePlanAuditRow> = {}): DelegatePlanAuditRow {
+function policyEventSectionHeading(markup: string, title: string) {
+  const headingMatch = markup.match(
+    new RegExp(`<div class="policy-event-section-heading">[\\s\\S]*?<h3[^>]*>${title}</h3>[\\s\\S]*?</div></div>`)
+  );
+
+  expect(headingMatch, `Expected ${title} policy-event-section-heading to render`).not.toBeNull();
+  return headingMatch?.[0] ?? "";
+}
+
+function buildDelegatePlanAuditRow(
+  overrides: Partial<DelegatePlanAuditRow> & {
+    paymentPolicyControls?: PaymentPolicyControlEvidence[];
+    paymentPolicyId?: string | null;
+  } = {}
+): DelegatePlanAuditRow {
   const umRequest = {
     id: "PA-260526-1927-CECVCB4C",
     source: "pas_fhir",
@@ -145,9 +423,10 @@ function buildDelegatePlanAuditRow(overrides: Partial<DelegatePlanAuditRow> = {}
     },
     clinicalReview: {
       reviewerId: "delegate-reviewer",
-      medicalNecessityReviewed: true,
-      policyCriteriaChecked: true,
-      rationaleCaptured: true,
+      clinicalDocumentationReviewed: true,
+      medicalNecessityCriteriaMet: true,
+      planPolicyRequirementsChecked: true,
+      decisionRationaleDocumented: true,
       approvalReasonCode: "POLICY_CRITERIA_MET",
       denialReasonCode: null
     },
@@ -177,6 +456,8 @@ function buildDelegatePlanAuditRow(overrides: Partial<DelegatePlanAuditRow> = {}
     state: "determined",
     outcomeStatus: "approved",
     slaStatus: "within_sla",
+    businessPolicyStatus: "approved",
+    paymentPolicyStatus: "paid",
     incentiveStatus: "paid",
     paymentStatus: "auto_executed",
     incentiveValue: 5,
@@ -196,6 +477,8 @@ function buildDelegatePlanAuditRow(overrides: Partial<DelegatePlanAuditRow> = {}
         reasonCode: "PLAN_NOT_IN_CONTRACT"
       }
     ],
+    paymentPolicyId: umRequest.planId,
+    paymentPolicyControls: buildPaymentPolicyControls(),
     audit: {
       id: "audit_52d91affd996",
       requestHash: "52d91affd996",
@@ -210,5 +493,39 @@ function buildDelegatePlanAuditRow(overrides: Partial<DelegatePlanAuditRow> = {}
     paymentIntentId: null,
     transactionId: null,
     ...overrides
-  };
+  } as DelegatePlanAuditRow;
+}
+
+function buildPaymentPolicyControls(): PaymentPolicyControlEvidence[] {
+  return [
+    {
+      id: "businessEvaluationAttestation",
+      label: "Business evaluation attestation",
+      status: "passed"
+    },
+    {
+      id: "paymentToken",
+      label: "Payment token",
+      status: "passed",
+      expected: "HBAR",
+      actual: "HBAR"
+    },
+    {
+      id: "maxPaymentPerRequest",
+      label: "Max payment per request",
+      status: "passed",
+      expected: "<= 5 HBAR",
+      actual: "5 HBAR"
+    },
+    {
+      id: "duplicatePaymentPrevention",
+      label: "Duplicate payment prevention",
+      status: "passed"
+    },
+    {
+      id: "paymentEnvelopeIntegrity",
+      label: "Payment envelope integrity",
+      status: "passed"
+    }
+  ];
 }

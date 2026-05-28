@@ -53,9 +53,10 @@ describe("delegate UM API routes", () => {
         method: "POST",
         body: JSON.stringify({
           outcomeStatus: "approved",
-          medicalNecessityReviewed: true,
-          policyCriteriaChecked: true,
-          rationaleCaptured: true
+          clinicalDocumentationReviewed: true,
+          medicalNecessityCriteriaMet: true,
+          planPolicyRequirementsChecked: true,
+          decisionRationaleDocumented: true
         })
       }),
       { params: Promise.resolve({ umRequestId: submitted.id }) }
@@ -97,9 +98,10 @@ describe("delegate UM API routes", () => {
         method: "POST",
         body: JSON.stringify({
           outcomeStatus: "maybe",
-          medicalNecessityReviewed: true,
-          policyCriteriaChecked: true,
-          rationaleCaptured: true
+          clinicalDocumentationReviewed: true,
+          medicalNecessityCriteriaMet: true,
+          planPolicyRequirementsChecked: true,
+          decisionRationaleDocumented: true
         })
       }),
       { params: Promise.resolve({ umRequestId: "missing" }) }

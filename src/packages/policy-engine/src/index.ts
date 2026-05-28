@@ -44,7 +44,6 @@ export interface IncentivePolicy {
     requiresDtrCompletionWhenRequested: boolean;
     requiresDeterminationWithinSla?: boolean;
     requiresClinicalReviewCompletion?: boolean;
-    prohibitsOutcomeBasedPayment?: boolean;
   };
   payout: {
     token: TokenSymbol;
@@ -213,29 +212,25 @@ function evaluateDelegateUmSlaPolicy(input: EvaluatePolicyInput): PolicyEvaluati
   }
 
   if (policy.eligibilityCriteria.requiresClinicalReviewCompletion) {
-    if (request.requestObject.clinicalReviewCompleted !== true) {
-      reasonCodes.push("CLINICAL_REVIEW_INCOMPLETE");
+    if (request.requestObject.clinicalDocumentationReviewed !== true) {
+      reasonCodes.push("CLINICAL_DOCUMENTATION_NOT_REVIEWED");
     }
 
-    if (request.requestObject.medicalNecessityReviewed !== true) {
-      reasonCodes.push("MEDICAL_NECESSITY_NOT_REVIEWED");
+    if (request.requestObject.medicalNecessityCriteriaMet !== true) {
+      reasonCodes.push("MEDICAL_NECESSITY_CRITERIA_NOT_MET");
     }
 
-    if (request.requestObject.policyCriteriaChecked !== true) {
-      reasonCodes.push("POLICY_CRITERIA_NOT_CHECKED");
+    if (request.requestObject.planPolicyRequirementsChecked !== true) {
+      reasonCodes.push("PLAN_POLICY_REQUIREMENTS_NOT_CHECKED");
     }
 
-    if (request.requestObject.rationaleCaptured !== true) {
-      reasonCodes.push("RATIONALE_NOT_CAPTURED");
+    if (request.requestObject.decisionRationaleDocumented !== true) {
+      reasonCodes.push("DECISION_RATIONALE_NOT_DOCUMENTED");
     }
   }
 
   if (request.requestObject.auditReady !== true) {
     reasonCodes.push("PAS_AUDIT_RECORD_MISSING");
-  }
-
-  if (policy.eligibilityCriteria.prohibitsOutcomeBasedPayment && request.requestObject.outcomeStatusUsedForPayment !== false) {
-    reasonCodes.push("PROHIBITED_OUTCOME_METRIC");
   }
 
   if (monthToDateAmount + policy.payout.amountPerEligibleRequest > policy.payout.monthlyCap) {

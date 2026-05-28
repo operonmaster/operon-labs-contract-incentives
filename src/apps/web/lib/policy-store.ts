@@ -623,8 +623,7 @@ function delegateUmSlaBonusPolicy({
       appliesOnlyToCoveredBenefits: false,
       requiresDtrCompletionWhenRequested: false,
       requiresDeterminationWithinSla: true,
-      requiresClinicalReviewCompletion: true,
-      prohibitsOutcomeBasedPayment: true
+      requiresClinicalReviewCompletion: true
     },
     payout: {
       token: "HBAR",

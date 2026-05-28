@@ -19,6 +19,7 @@ interface RecordedIncentiveEvaluation {
   caseId: string;
   planId?: string;
   policyId: string;
+  businessPolicyStatus?: "approved" | "rejected" | null;
   incentiveStatus: string;
   incentiveValue: number;
   currency: Currency;
@@ -67,7 +68,7 @@ class ProviderDocumentationBusinessEvaluationAttestationStore implements Busines
       return null;
     }
 
-    if (row.incentiveStatus !== "paid") {
+    if ((row.businessPolicyStatus ?? legacyBusinessPolicyStatus(row.incentiveStatus)) !== "approved") {
       return null;
     }
 
@@ -105,5 +106,17 @@ class ProviderDocumentationBusinessEvaluationAttestationStore implements Busines
       currency: row.currency,
       walletId: row.walletId ?? ""
     };
+  }
+}
+
+function legacyBusinessPolicyStatus(status: string): "approved" | "rejected" | null {
+  switch (status) {
+    case "paid":
+    case "payment_failed":
+      return "approved";
+    case "not_eligible":
+      return "rejected";
+    default:
+      return null;
   }
 }

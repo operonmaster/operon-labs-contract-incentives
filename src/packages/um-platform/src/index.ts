@@ -91,9 +91,10 @@ export interface UMRequest extends PriorAuthCompatibilityFields {
   };
   clinicalReview: {
     reviewerId: string | null;
-    medicalNecessityReviewed: boolean;
-    policyCriteriaChecked: boolean;
-    rationaleCaptured: boolean;
+    clinicalDocumentationReviewed: boolean;
+    medicalNecessityCriteriaMet: boolean;
+    planPolicyRequirementsChecked: boolean;
+    decisionRationaleDocumented: boolean;
     approvalReasonCode: string | null;
     denialReasonCode: string | null;
   };
@@ -119,9 +120,10 @@ export type UMPlatformEvent = PasSubmittedEvent | UMRequestLifecycleEvent;
 
 export interface CompleteClinicalReviewInput {
   outcomeStatus: UMOutcomeStatus;
-  medicalNecessityReviewed: boolean;
-  policyCriteriaChecked: boolean;
-  rationaleCaptured: boolean;
+  clinicalDocumentationReviewed: boolean;
+  medicalNecessityCriteriaMet: boolean;
+  planPolicyRequirementsChecked: boolean;
+  decisionRationaleDocumented: boolean;
   approvalReasonCode?: string | null;
   denialReasonCode?: string | null;
 }
@@ -259,7 +261,12 @@ export function completeClinicalReviewForRequest(
     throw new Error("UM_REQUEST_NOT_IN_CLINICAL_REVIEW");
   }
 
-  if (!input.medicalNecessityReviewed || !input.policyCriteriaChecked || !input.rationaleCaptured) {
+  if (
+    !input.clinicalDocumentationReviewed ||
+    !input.medicalNecessityCriteriaMet ||
+    !input.planPolicyRequirementsChecked ||
+    !input.decisionRationaleDocumented
+  ) {
     throw new Error("CLINICAL_REVIEW_INCOMPLETE");
   }
 
@@ -274,9 +281,10 @@ export function completeClinicalReviewForRequest(
     determinedAt: now.toISOString(),
     clinicalReview: {
       ...request.clinicalReview,
-      medicalNecessityReviewed: input.medicalNecessityReviewed,
-      policyCriteriaChecked: input.policyCriteriaChecked,
-      rationaleCaptured: input.rationaleCaptured,
+      clinicalDocumentationReviewed: input.clinicalDocumentationReviewed,
+      medicalNecessityCriteriaMet: input.medicalNecessityCriteriaMet,
+      planPolicyRequirementsChecked: input.planPolicyRequirementsChecked,
+      decisionRationaleDocumented: input.decisionRationaleDocumented,
       approvalReasonCode: input.outcomeStatus === "approved" ? input.approvalReasonCode ?? null : null,
       denialReasonCode: input.outcomeStatus === "denied" ? input.denialReasonCode ?? null : null
     }
@@ -350,9 +358,10 @@ export function createInMemoryUmPlatform(options: UmPlatformOptions = {}): UmPla
         documentation,
         clinicalReview: {
           reviewerId: null,
-          medicalNecessityReviewed: false,
-          policyCriteriaChecked: false,
-          rationaleCaptured: false,
+          clinicalDocumentationReviewed: false,
+          medicalNecessityCriteriaMet: false,
+          planPolicyRequirementsChecked: false,
+          decisionRationaleDocumented: false,
           approvalReasonCode: null,
           denialReasonCode: null
         },
@@ -524,8 +533,43 @@ function copyUmRequest(request: UMRequest): UMRequest {
     dtr: copyDtrAnswers(request.dtr),
     dtrQuestionnaireResponse: copyDtrQuestionnaireResponse(request.dtrQuestionnaireResponse),
     documentation: { ...request.documentation },
-    clinicalReview: { ...request.clinicalReview },
+    clinicalReview: normalizeClinicalReview(request.clinicalReview),
     auditRefs: { ...request.auditRefs }
+  };
+}
+
+type LegacyClinicalReview = UMRequest["clinicalReview"] & {
+  medicalNecessityReviewed?: unknown;
+  policyCriteriaChecked?: unknown;
+  rationaleCaptured?: unknown;
+};
+
+function normalizeClinicalReview(review: LegacyClinicalReview): UMRequest["clinicalReview"] {
+  const legacyChecklistComplete =
+    review.medicalNecessityReviewed === true &&
+    review.policyCriteriaChecked === true &&
+    review.rationaleCaptured === true;
+
+  return {
+    reviewerId: review.reviewerId ?? null,
+    clinicalDocumentationReviewed:
+      typeof review.clinicalDocumentationReviewed === "boolean"
+        ? review.clinicalDocumentationReviewed
+        : legacyChecklistComplete,
+    medicalNecessityCriteriaMet:
+      typeof review.medicalNecessityCriteriaMet === "boolean"
+        ? review.medicalNecessityCriteriaMet
+        : review.medicalNecessityReviewed === true,
+    planPolicyRequirementsChecked:
+      typeof review.planPolicyRequirementsChecked === "boolean"
+        ? review.planPolicyRequirementsChecked
+        : review.policyCriteriaChecked === true,
+    decisionRationaleDocumented:
+      typeof review.decisionRationaleDocumented === "boolean"
+        ? review.decisionRationaleDocumented
+        : review.rationaleCaptured === true,
+    approvalReasonCode: review.approvalReasonCode ?? null,
+    denialReasonCode: review.denialReasonCode ?? null
   };
 }
 

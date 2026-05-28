@@ -32,16 +32,16 @@ describe("evaluateProviderDocumentationEvent", () => {
       state: "determined",
       outcomeStatusPresent: true,
       outcomeStatus: "approved",
-      outcomeStatusUsedForPayment: false,
       completedWithinSla: true,
       slaHours: 24,
-      clinicalReviewCompleted: true,
-      medicalNecessityReviewed: true,
-      policyCriteriaChecked: true,
-      rationaleCaptured: true,
+      clinicalDocumentationReviewed: true,
+      medicalNecessityCriteriaMet: true,
+      planPolicyRequirementsChecked: true,
+      decisionRationaleDocumented: true,
       auditReady: true
     });
     expect(evaluation.request.requestObject).not.toHaveProperty("containsPhi");
+    expect(evaluation.request.requestObject).not.toHaveProperty("outcomeStatusUsedForPayment");
     expect(evaluation.result).toMatchObject({
       decision: "approved",
       amount: 5,
@@ -114,10 +114,10 @@ describe("evaluateProviderDocumentationEvent", () => {
       dtrRequested: true,
       dtrCompleted: true,
       dtrTemplateCompleted: true,
-      outcomeStatusUsedForPayment: false,
       containsPhi: false
     });
     expect(evaluation.request.requestObject).not.toHaveProperty("outcomeStatus");
+    expect(evaluation.request.requestObject).not.toHaveProperty("outcomeStatusUsedForPayment");
     expect(evaluation.request.requestObject).not.toHaveProperty("pasSubmitted");
     expect(evaluation.request.requestObject).not.toHaveProperty("attachmentChecklistComplete");
     expect(evaluation.request.requestObject).not.toHaveProperty("fhirFieldsPresent");
@@ -422,8 +422,7 @@ function createDelegateUmPolicy(amount: number): IncentivePolicy {
       appliesOnlyToCoveredBenefits: false,
       requiresDtrCompletionWhenRequested: false,
       requiresDeterminationWithinSla: true,
-      requiresClinicalReviewCompletion: true,
-      prohibitsOutcomeBasedPayment: true
+      requiresClinicalReviewCompletion: true
     },
     payout: {
       token: "HBAR",

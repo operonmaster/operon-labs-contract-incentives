@@ -317,6 +317,8 @@ Recommended demo flow:
    - required fields
    - passed checks
    - failed checks, if any
+   - Business Policy outcome from canonical `businessPolicyStatus` data: `approved` or `rejected`
+   - Payment Policy outcome from canonical `paymentPolicyStatus` data: `paid` or `blocked`
    - computed payment amount
    - recipient wallet
    - reason code

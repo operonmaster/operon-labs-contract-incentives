@@ -286,11 +286,10 @@ function buildDelegateUmSlaBonusDetailSections(policy: IncentivePolicy, token: s
     {
       title: "Eligibility criteria",
       items: [
-        "UM request is determined: Yes",
-        "Outcome status is present: Yes",
-        `Outcome value affects payment: ${formatBoolean(!policy.eligibilityCriteria.prohibitsOutcomeBasedPayment)}`,
-        `Clinical review checklist complete: ${formatBoolean(Boolean(policy.eligibilityCriteria.requiresClinicalReviewCompletion))}`,
-        `Completed within SLA: ${delegateUmSlaHours} hours`
+        `Clinical documentation reviewed: ${formatBoolean(Boolean(policy.eligibilityCriteria.requiresClinicalReviewCompletion))}`,
+        `Medical necessity criteria met: ${formatBoolean(Boolean(policy.eligibilityCriteria.requiresClinicalReviewCompletion))}`,
+        `Plan policy requirements checked: ${formatBoolean(Boolean(policy.eligibilityCriteria.requiresClinicalReviewCompletion))}`,
+        `Decision rationale documented: ${formatBoolean(Boolean(policy.eligibilityCriteria.requiresClinicalReviewCompletion))}`
       ]
     },
     {

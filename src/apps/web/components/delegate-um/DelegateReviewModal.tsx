@@ -53,16 +53,21 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, requ
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const [reviewStarted, setReviewStarted] = useState(request.state === "in_clinical_review");
   const [outcomeStatus, setOutcomeStatus] = useState<"approved" | "denied" | null>(request.outcomeStatus ?? null);
-  const [medicalNecessityReviewed, setMedicalNecessityReviewed] = useState(false);
-  const [policyCriteriaChecked, setPolicyCriteriaChecked] = useState(false);
-  const [rationaleCaptured, setRationaleCaptured] = useState(false);
+  const [clinicalDocumentationReviewed, setClinicalDocumentationReviewed] = useState(false);
+  const [medicalNecessityCriteriaMet, setMedicalNecessityCriteriaMet] = useState(false);
+  const [planPolicyRequirementsChecked, setPlanPolicyRequirementsChecked] = useState(false);
+  const [decisionRationaleDocumented, setDecisionRationaleDocumented] = useState(false);
   const [approvalReasonCode, setApprovalReasonCode] = useState("POLICY_CRITERIA_MET");
   const [denialReasonCode, setDenialReasonCode] = useState("NOT_MEDICALLY_NECESSARY");
   const [submitting, setSubmitting] = useState(false);
   const [actionStatus, setActionStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const checklistComplete = medicalNecessityReviewed && policyCriteriaChecked && rationaleCaptured;
+  const checklistComplete =
+    clinicalDocumentationReviewed &&
+    medicalNecessityCriteriaMet &&
+    planPolicyRequirementsChecked &&
+    decisionRationaleDocumented;
   const canChooseOutcome = checklistComplete;
   const canSubmit = canChooseOutcome && outcomeStatus !== null && !submitting;
   const activeReasonOptions = outcomeStatus === "denied" ? denialReasonOptions : approvalReasonOptions;
@@ -144,9 +149,10 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, requ
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           outcomeStatus,
-          medicalNecessityReviewed,
-          policyCriteriaChecked,
-          rationaleCaptured,
+          clinicalDocumentationReviewed,
+          medicalNecessityCriteriaMet,
+          planPolicyRequirementsChecked,
+          decisionRationaleDocumented,
           approvalReasonCode: outcomeStatus === "approved" ? approvalReasonCode : null,
           denialReasonCode: outcomeStatus === "denied" ? denialReasonCode : null
         })
@@ -270,27 +276,35 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, requ
             <h3>Clinical checklist</h3>
             <label className="checkbox-row">
               <input
-                checked={medicalNecessityReviewed}
+                checked={clinicalDocumentationReviewed}
                 type="checkbox"
-                onChange={(event) => setMedicalNecessityReviewed(event.currentTarget.checked)}
+                onChange={(event) => setClinicalDocumentationReviewed(event.currentTarget.checked)}
               />
-              Medical necessity reviewed
+              Clinical documentation reviewed
             </label>
             <label className="checkbox-row">
               <input
-                checked={policyCriteriaChecked}
+                checked={medicalNecessityCriteriaMet}
                 type="checkbox"
-                onChange={(event) => setPolicyCriteriaChecked(event.currentTarget.checked)}
+                onChange={(event) => setMedicalNecessityCriteriaMet(event.currentTarget.checked)}
               />
-              Policy criteria checked
+              Medical necessity criteria met
             </label>
             <label className="checkbox-row">
               <input
-                checked={rationaleCaptured}
+                checked={planPolicyRequirementsChecked}
                 type="checkbox"
-                onChange={(event) => setRationaleCaptured(event.currentTarget.checked)}
+                onChange={(event) => setPlanPolicyRequirementsChecked(event.currentTarget.checked)}
               />
-              Rationale captured
+              Plan policy requirements checked
+            </label>
+            <label className="checkbox-row">
+              <input
+                checked={decisionRationaleDocumented}
+                type="checkbox"
+                onChange={(event) => setDecisionRationaleDocumented(event.currentTarget.checked)}
+              />
+              Decision rationale documented
             </label>
           </section>
 

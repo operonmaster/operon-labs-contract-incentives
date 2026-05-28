@@ -231,6 +231,8 @@ The business evaluation attestation control fetches `incentiveEvaluations/{busin
 
 Stores the runtime output of the Hedera Agent Kit payment policy checks. This is the audit bridge between the internal business-policy evaluation and the Hedera settlement attempt. The document id matches the settlement intent id, where `paymentIntentId = pi_sha256(umRequestId | businessPolicyId | paymentPolicyId)`. The readable PA/UM request id remains in `umRequestId`, `caseId`, and the Hedera transaction memo.
 
+Policy outcome status is stored as canonical data, not as display-only labels. `incentiveEvaluations` uses `businessPolicyStatus: "approved" | "rejected" | null` and `paymentPolicyStatus: "paid" | "blocked" | null`; null means the policy surface has not produced a final outcome yet. `paymentPolicyEvidences.outcome` uses the canonical payment-policy outcome, `paid` or `blocked`. Lifecycle fields such as `incentiveStatus`, `paymentStatus`, and `paymentIntents.status` remain execution/backward-compatibility details and are not the policy outcome data model.
+
 Shape:
 
 ```json
@@ -370,6 +372,8 @@ Shape:
   "businessPolicyId": "delegate-um-summit-pharmacy-sla-bonus-v1",
   "paymentPolicyId": "summit-health-hmo",
   "paymentIntentId": "pi_1f2e3d4c5b6a79800112233445566778",
+  "businessPolicyStatus": "approved",
+  "paymentPolicyStatus": "paid",
   "incentiveStatus": "paid",
   "paymentStatus": "auto_executed",
   "incentiveValue": 5,

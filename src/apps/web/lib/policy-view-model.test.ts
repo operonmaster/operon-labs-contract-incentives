@@ -165,17 +165,20 @@ describe("policy view model", () => {
       ])
     );
     const pharmacyCard = cards.find((card) => card.id === "delegate-um-sla-bonus-v1")!;
-    expect(pharmacyCard.detailSections.flatMap((section) => section.items)).toEqual(
-      expect.arrayContaining([
-        "UM request is determined: Yes",
-        "Outcome status is present: Yes",
-        "Outcome value affects payment: No",
-        "Clinical review checklist complete: Yes",
-        "Completed within SLA: 24 hours",
-        "Eligible request types: Pharmacy Benefit (pharmacy_benefit)"
-      ])
-    );
-    expect(pharmacyCard.detailSections.flatMap((section) => section.items)).not.toContain("PHI in payment metadata: No");
+    const pharmacyCardItems = pharmacyCard.detailSections.flatMap((section) => section.items);
+    const eligibilityItems = pharmacyCard.detailSections.find((section) => section.title === "Eligibility criteria")?.items;
+    expect(eligibilityItems).toEqual([
+      "Clinical documentation reviewed: Yes",
+      "Medical necessity criteria met: Yes",
+      "Plan policy requirements checked: Yes",
+      "Decision rationale documented: Yes"
+    ]);
+    expect(pharmacyCardItems).toContain("Eligible request types: Pharmacy Benefit (pharmacy_benefit)");
+    expect(pharmacyCardItems).not.toContain("UM request is determined: Yes");
+    expect(pharmacyCardItems).not.toContain("Outcome status is present: Yes");
+    expect(pharmacyCardItems).not.toContain("Completed within SLA: 24 hours");
+    expect(pharmacyCardItems).not.toContain("Outcome value affects payment: No");
+    expect(pharmacyCardItems).not.toContain("PHI in payment metadata: No");
     const outpatientCard = cards.find((card) => card.id === "delegate-um-acme-outpatient-sla-bonus-v1")!;
     expect(outpatientCard.detailSections.flatMap((section) => section.items)).toContain("Eligible request types: Outpatient Service (outpatient_service)");
   });

@@ -209,6 +209,8 @@ Incentive amount, caps, recipient wallet mapping, request-type scope, and servic
 
 Hedera Agent Kit hooks are the settlement-control boundary, not a duplicate CRD/DTR/PAS eligibility engine. Agent Kit execution policy must use flat plan-level `paymentPolicies/{planId}` documents and deterministic tuple ids: `incentiveEvaluations/{businessEvaluationId}` from `umRequestId + businessPolicyId`, and `paymentIntents/{paymentIntentId}` / `paymentPolicyEvidences/{paymentIntentId}` from `umRequestId + businessPolicyId + paymentPolicyId`. Duplicate prevention blocks only the same triplet.
 
+Policy outcome status must be canonical data across Provider Documentation and Delegate UM. Persist `businessPolicyStatus` as `approved | rejected | null` and `paymentPolicyStatus` as `paid | blocked | null`; null is only for not-yet-evaluated surfaces. Keep lifecycle fields such as `incentiveStatus`, `paymentStatus`, and `paymentIntents.status` secondary.
+
 ## Security Boundary
 
 This is a public repo. Do not commit:

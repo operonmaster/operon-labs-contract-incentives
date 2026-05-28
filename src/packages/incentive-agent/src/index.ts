@@ -28,13 +28,12 @@ export interface DelegateUmSlaEvidence {
   state: string;
   outcomeStatus: "approved" | "denied";
   outcomeStatusPresent: boolean;
-  outcomeStatusUsedForPayment: false;
   completedWithinSla: boolean;
   slaHours: 24;
-  clinicalReviewCompleted: boolean;
-  medicalNecessityReviewed: boolean;
-  policyCriteriaChecked: boolean;
-  rationaleCaptured: boolean;
+  clinicalDocumentationReviewed: boolean;
+  medicalNecessityCriteriaMet: boolean;
+  planPolicyRequirementsChecked: boolean;
+  decisionRationaleDocumented: boolean;
   auditReady: boolean;
 }
 
@@ -118,7 +117,6 @@ export function evaluateProviderDocumentationEvent(
       dtrRequested: evidence.dtrRequested,
       dtrCompleted: evidence.dtrCompleted,
       dtrTemplateCompleted: evidence.dtrCompleted,
-      outcomeStatusUsedForPayment: false,
       containsPhi: false
     }
   };
@@ -165,13 +163,12 @@ export function evaluateDelegateUmSlaEvent(
       state: evidence.state,
       outcomeStatus: evidence.outcomeStatus,
       outcomeStatusPresent: evidence.outcomeStatusPresent,
-      outcomeStatusUsedForPayment: evidence.outcomeStatusUsedForPayment,
       completedWithinSla: evidence.completedWithinSla,
       slaHours: evidence.slaHours,
-      clinicalReviewCompleted: evidence.clinicalReviewCompleted,
-      medicalNecessityReviewed: evidence.medicalNecessityReviewed,
-      policyCriteriaChecked: evidence.policyCriteriaChecked,
-      rationaleCaptured: evidence.rationaleCaptured,
+      clinicalDocumentationReviewed: evidence.clinicalDocumentationReviewed,
+      medicalNecessityCriteriaMet: evidence.medicalNecessityCriteriaMet,
+      planPolicyRequirementsChecked: evidence.planPolicyRequirementsChecked,
+      decisionRationaleDocumented: evidence.decisionRationaleDocumented,
       auditReady: evidence.auditReady
     }
   };
@@ -241,13 +238,12 @@ const demoRequests: Record<string, EvaluationRequest> = {
       state: "determined",
       outcomeStatusPresent: true,
       outcomeStatus: "approved",
-      outcomeStatusUsedForPayment: false,
       completedWithinSla: true,
       slaHours: 24,
-      clinicalReviewCompleted: true,
-      medicalNecessityReviewed: true,
-      policyCriteriaChecked: true,
-      rationaleCaptured: true,
+      clinicalDocumentationReviewed: true,
+      medicalNecessityCriteriaMet: true,
+      planPolicyRequirementsChecked: true,
+      decisionRationaleDocumented: true,
       auditReady: true
     }
   },

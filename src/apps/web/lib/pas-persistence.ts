@@ -290,12 +290,14 @@ class FirestorePasPersistenceStore implements UmPasPersistenceStore {
       throw new Error("UM_REQUEST_ID_REQUIRED");
     }
 
-    validateIncentiveRowIds(row);
+    const canonicalRow = canonicalizeIncentiveRowPolicyStatuses(row);
+    validateIncentiveRowIds(canonicalRow);
+    validateIncentiveRowPolicyStatuses(canonicalRow);
 
     const firestore = await this.getFirestore();
-    const documentId = buildIncentiveRowDocumentId(row);
+    const documentId = buildIncentiveRowDocumentId(canonicalRow);
     await firestore.collection(INCENTIVE_EVALUATIONS_COLLECTION).doc(documentId).set({
-      ...row,
+      ...canonicalRow,
       id: documentId,
       storedAt: new Date().toISOString()
     });
@@ -414,6 +416,29 @@ function validateIncentiveRowIds(row: PersistedIncentiveWorklistRow): void {
     if (row.paymentIntentId !== expectedPaymentIntentId) {
       throw new Error("PAS_SUBMISSION_ID_MISMATCH:row.paymentIntentId");
     }
+  }
+}
+
+function validateIncentiveRowPolicyStatuses(row: PersistedIncentiveWorklistRow): void {
+  const businessPolicyStatus = row.businessPolicyStatus;
+  const paymentPolicyStatus = row.paymentPolicyStatus;
+
+  if (businessPolicyStatus !== "approved" && businessPolicyStatus !== "rejected" && businessPolicyStatus !== null) {
+    throw new Error("PAS_POLICY_STATUS_INVALID:row.businessPolicyStatus");
+  }
+
+  if (paymentPolicyStatus !== "paid" && paymentPolicyStatus !== "blocked" && paymentPolicyStatus !== null) {
+    throw new Error("PAS_POLICY_STATUS_INVALID:row.paymentPolicyStatus");
+  }
+
+  const derivedBusinessPolicyStatus = deriveBusinessPolicyStatus(row.incentiveStatus);
+  if (businessPolicyStatus !== null && derivedBusinessPolicyStatus !== null && businessPolicyStatus !== derivedBusinessPolicyStatus) {
+    throw new Error("PAS_POLICY_STATUS_MISMATCH:row.businessPolicyStatus");
+  }
+
+  const derivedPaymentPolicyStatus = derivePaymentPolicyStatus(row);
+  if (paymentPolicyStatus !== null && derivedPaymentPolicyStatus !== null && paymentPolicyStatus !== derivedPaymentPolicyStatus) {
+    throw new Error("PAS_POLICY_STATUS_MISMATCH:row.paymentPolicyStatus");
   }
 }
 
@@ -655,6 +680,42 @@ function canonicalizeLegacyCanonicalId(id: string): string {
   return id;
 }
 
+function canonicalizeIncentiveRowPolicyStatuses(row: PersistedIncentiveWorklistRow): PersistedIncentiveWorklistRow {
+  return {
+    ...row,
+    businessPolicyStatus: row.businessPolicyStatus ?? deriveBusinessPolicyStatus(row.incentiveStatus),
+    paymentPolicyStatus: row.paymentPolicyStatus ?? derivePaymentPolicyStatus(row)
+  };
+}
+
+function deriveBusinessPolicyStatus(status: string | null | undefined): PersistedIncentiveWorklistRow["businessPolicyStatus"] {
+  switch (status) {
+    case "paid":
+    case "payment_failed":
+      return "approved";
+    case "not_eligible":
+      return "rejected";
+    default:
+      return null;
+  }
+}
+
+function derivePaymentPolicyStatus(row: {
+  paymentStatus?: string | null;
+  transactionId?: string | null;
+  paymentIntentId?: string | null;
+}): PersistedIncentiveWorklistRow["paymentPolicyStatus"] {
+  switch (row.paymentStatus) {
+    case "auto_executed":
+      return row.transactionId || row.paymentIntentId ? "paid" : null;
+    case "blocked_by_policy":
+    case "execution_failed":
+      return "blocked";
+    default:
+      return null;
+  }
+}
+
 function canonicalizeStoredIncentiveRow(
   row: PersistedIncentiveWorklistRow & { storedAt?: string },
   fallbackCanonicalId: string | undefined
@@ -662,6 +723,8 @@ function canonicalizeStoredIncentiveRow(
   const incentiveRow = { ...row } as PersistedIncentiveWorklistRow & {
     caseId?: string;
     id?: string;
+    paymentPolicyId?: string | null;
+    paymentPolicyControls?: PersistedIncentiveWorklistRow["paymentPolicyControls"];
     paResult?: unknown;
     denialReason?: unknown;
     storedAt?: string;
@@ -678,7 +741,7 @@ function canonicalizeStoredIncentiveRow(
   delete (incentiveRow as PersistedIncentiveWorklistRow & { storedAt?: string }).storedAt;
   delete incentiveRow.paResult;
   delete incentiveRow.denialReason;
-  return {
+  return canonicalizeIncentiveRowPolicyStatuses({
     ...incentiveRow,
     id: expectedEvaluationId,
     umRequestId: canonicalId,
@@ -686,8 +749,12 @@ function canonicalizeStoredIncentiveRow(
     state: incentiveRow.state ?? "pend",
     outcomeStatus: incentiveRow.outcomeStatus ?? null,
     paymentIntentId: incentiveRow.paymentIntentId ?? null,
+    paymentPolicyId: incentiveRow.paymentPolicyId ?? null,
+    paymentPolicyControls: Array.isArray(incentiveRow.paymentPolicyControls)
+      ? incentiveRow.paymentPolicyControls.map((control) => ({ ...control }))
+      : [],
     settlementToken: incentiveRow.settlementToken ?? {
       symbol: incentiveRow.currency
     }
-  };
+  });
 }

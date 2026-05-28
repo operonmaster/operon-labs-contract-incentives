@@ -92,7 +92,7 @@ describe("Operon Labs design system", () => {
     expect(css).toMatch(/\.badge-cell \.op-badge \{[^}]*margin-inline: auto;/);
     expect(planConsole).toContain('<th className="badge-cell">Business Policy</th>');
     expect(planConsole).toContain('<td className="badge-cell">');
-    expect(auditModal).toContain('<th className="badge-cell">Result</th>');
+    expect(auditModal).toContain('<th className="badge-cell">Actual</th>');
     expect(auditModal).toContain('<td className="badge-cell">');
   });
 

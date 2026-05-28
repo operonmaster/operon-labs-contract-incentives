@@ -117,7 +117,7 @@ describe("PAS persistence store selection", () => {
       walletId: "0.0.9049549",
       paymentIntentId,
       transactionId: "testnet-1"
-    });
+    } as unknown as PersistedIncentiveWorklistRow);
 
     const pasClaimSnapshot = await firestore.collection("pasClaims").doc(umRequest.id).get();
     expect(pasClaimSnapshot.data()).toMatchObject({
@@ -157,7 +157,11 @@ describe("PAS persistence store selection", () => {
       umRequestId: umRequest.id,
       caseId: umRequest.id,
       paymentIntentId,
-      paymentStatus: "auto_executed"
+      businessPolicyStatus: "approved",
+      paymentPolicyStatus: "paid",
+      paymentStatus: "auto_executed",
+      paymentPolicyId: null,
+      paymentPolicyControls: []
     });
     await expect(store.listIncentiveRows()).resolves.toEqual([
       expect.objectContaining({
@@ -165,7 +169,11 @@ describe("PAS persistence store selection", () => {
         umRequestId: umRequest.id,
         caseId: umRequest.id,
         paymentIntentId,
-        paymentStatus: "auto_executed"
+        businessPolicyStatus: "approved",
+        paymentPolicyStatus: "paid",
+        paymentStatus: "auto_executed",
+        paymentPolicyId: null,
+        paymentPolicyControls: []
       })
     ]);
     expect(firestore.collectionNames()).toEqual(
@@ -1192,6 +1200,8 @@ function buildPersistedIncentiveRow(
 ): PersistedIncentiveWorklistRow {
   const policyId = overrides.policyId ?? "provider-documentation-completeness-v1";
   const planId = overrides.planId ?? umRequest.planId;
+  const incentiveStatus = overrides.incentiveStatus ?? "paid";
+  const paymentStatus = overrides.paymentStatus ?? "auto_executed";
   const businessEvaluationId = buildBusinessEvaluationId({
     umRequestId: umRequest.id,
     businessPolicyId: policyId
@@ -1216,8 +1226,6 @@ function buildPersistedIncentiveRow(
     serviceCode: umRequest.serviceCode,
     state: umRequest.state,
     outcomeStatus: umRequest.outcomeStatus,
-    incentiveStatus: "paid",
-    paymentStatus: "auto_executed",
     incentiveValue: 5,
     currency: "HBAR",
     settlementToken: {
@@ -1241,7 +1249,13 @@ function buildPersistedIncentiveRow(
     walletId: "0.0.9049549",
     paymentIntentId,
     transactionId: "testnet-1",
-    ...overrides
+    ...overrides,
+    paymentPolicyId: overrides.paymentPolicyId ?? null,
+    paymentPolicyControls: overrides.paymentPolicyControls ?? [],
+    businessPolicyStatus: overrides.businessPolicyStatus ?? (incentiveStatus === "not_eligible" ? "rejected" : "approved"),
+    paymentPolicyStatus: overrides.paymentPolicyStatus ?? (paymentStatus === "auto_executed" ? "paid" : "blocked"),
+    incentiveStatus,
+    paymentStatus
   };
 }
 

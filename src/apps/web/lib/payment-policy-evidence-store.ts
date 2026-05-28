@@ -4,7 +4,7 @@ import type { FirestoreDatabase } from "./pas-persistence";
 
 export type PaymentPolicyEvidenceStoreBackend = "firestore" | "memory";
 export type PaymentPolicyRuntime = "hedera-agent-kit-policy";
-export type PaymentPolicyEvidenceOutcome = "paid" | "blocked" | "simulated";
+export type PaymentPolicyEvidenceOutcome = "paid" | "blocked";
 export type PaymentPolicyControlStatus = "passed" | "failed" | "not_run";
 
 export interface PaymentPolicyControlEvidence {

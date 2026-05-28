@@ -171,13 +171,13 @@ export function DelegatePlanConsole({ initialUmRequestId = null }: { initialUmRe
                     <LabsBadge variant={row.slaStatus === "breached" ? "warning" : "info"}>{formatSlaStatus(row)}</LabsBadge>
                   </td>
                   <td className="badge-cell">
-                    <LabsBadge variant={businessPolicyStatusBadgeVariant(row.incentiveStatus)}>
-                      {formatBusinessPolicyStatus(row.incentiveStatus)}
+                    <LabsBadge variant={businessPolicyStatusBadgeVariant(row.businessPolicyStatus)}>
+                      {formatBusinessPolicyStatus(row.businessPolicyStatus)}
                     </LabsBadge>
                   </td>
                   <td className="badge-cell">
-                    <LabsBadge variant={paymentStatusBadgeVariant(row.paymentStatus)}>
-                      {formatPaymentStatus(row.paymentStatus)}
+                    <LabsBadge variant={paymentStatusBadgeVariant(row.paymentPolicyStatus)}>
+                      {formatPaymentStatus(row.paymentPolicyStatus)}
                     </LabsBadge>
                   </td>
                   <td>

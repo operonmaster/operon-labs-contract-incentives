@@ -19,8 +19,7 @@ const policy: IncentivePolicy = {
     appliesOnlyToCoveredBenefits: false,
     requiresDtrCompletionWhenRequested: false,
     requiresDeterminationWithinSla: true,
-    requiresClinicalReviewCompletion: true,
-    prohibitsOutcomeBasedPayment: true
+    requiresClinicalReviewCompletion: true
   },
   payout: { token: "HBAR", amountPerEligibleRequest: 5, monthlyCap: 500 },
   settlement: { mode: "auto", recipientWalletId: "0.0.9049549", requiresHumanApproval: false }
@@ -35,13 +34,12 @@ const evidence: DelegateUmSlaEvidence = {
   state: "determined",
   outcomeStatus: "denied",
   outcomeStatusPresent: true,
-  outcomeStatusUsedForPayment: false,
   completedWithinSla: true,
   slaHours: 24,
-  clinicalReviewCompleted: true,
-  medicalNecessityReviewed: true,
-  policyCriteriaChecked: true,
-  rationaleCaptured: true,
+  clinicalDocumentationReviewed: true,
+  medicalNecessityCriteriaMet: true,
+  planPolicyRequirementsChecked: true,
+  decisionRationaleDocumented: true,
   auditReady: true
 };
 
@@ -67,17 +65,17 @@ describe("evaluateDelegateUmSlaEvent", () => {
         state: "determined",
         outcomeStatus: "denied",
         outcomeStatusPresent: true,
-        outcomeStatusUsedForPayment: false,
         completedWithinSla: true,
         slaHours: 24,
-        clinicalReviewCompleted: true,
-        medicalNecessityReviewed: true,
-        policyCriteriaChecked: true,
-        rationaleCaptured: true,
+        clinicalDocumentationReviewed: true,
+        medicalNecessityCriteriaMet: true,
+        planPolicyRequirementsChecked: true,
+        decisionRationaleDocumented: true,
         auditReady: true
       }
     });
     expect(evaluation.request.requestObject).not.toHaveProperty("containsPhi");
+    expect(evaluation.request.requestObject).not.toHaveProperty("outcomeStatusUsedForPayment");
     expect(evaluation.result).toMatchObject({
       decision: "approved",
       amount: 5,

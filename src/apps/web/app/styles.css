@@ -1372,6 +1372,37 @@ main {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
+.policy-event-context-line {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin: 0;
+}
+
+.policy-event-context-line div {
+  align-items: baseline;
+  display: inline-flex;
+  gap: 5px;
+}
+
+.policy-event-context-line dt {
+  color: var(--op-muted);
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.policy-event-context-line dd {
+  color: var(--op-ink-2);
+  font-size: 13px;
+  margin: 0;
+}
+
+.policy-event-outcome-strip {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
 .policy-modal-sections {
   display: grid;
   gap: 12px;
@@ -1413,6 +1444,39 @@ main {
 .policy-modal-section li {
   color: var(--op-muted);
   line-height: 1.45;
+}
+
+.policy-anchor-list {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+}
+
+.policy-anchor-list div {
+  align-items: baseline;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.policy-anchor-list dt {
+  color: var(--op-ink-2);
+  font-family: "Geist", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.policy-anchor-list dt::after {
+  content: ":";
+}
+
+.policy-anchor-list dd {
+  color: var(--op-ink-2);
+  font-family: "Geist", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .policy-detail-badged-item {
@@ -1537,6 +1601,33 @@ main {
   border-collapse: collapse;
   min-width: 760px;
   width: 100%;
+}
+
+.policy-audit-evidence-table {
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.policy-audit-evidence-actual-column {
+  width: clamp(160px, 34%, 220px);
+}
+
+.policy-audit-evidence-table th:first-child,
+.policy-audit-evidence-table td:first-child {
+  overflow-wrap: anywhere;
+}
+
+.policy-audit-evidence-table .badge-cell {
+  width: clamp(160px, 34%, 220px);
+}
+
+.policy-audit-evidence-table .badge-cell .op-badge {
+  justify-content: center;
+  line-height: 1.2;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  text-align: center;
+  white-space: normal;
 }
 
 .policy-criteria-table th,

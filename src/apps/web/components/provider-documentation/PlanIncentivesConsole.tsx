@@ -168,7 +168,7 @@ export function PlanIncentivesConsole({ initialUmRequestId = null }: { initialUm
                     <td>{row.providerGroupDisplay}</td>
                     <td>{formatRequestType(row.requestType)}</td>
                     <td className="badge-cell">
-                      <LabsBadge variant={businessPolicyBadgeVariant(row.incentiveStatus)}>
+                      <LabsBadge variant={businessPolicyBadgeVariant(row)}>
                         {formatBusinessPolicyOutcome(row)}
                       </LabsBadge>
                     </td>
@@ -211,44 +211,43 @@ export function PlanIncentivesConsole({ initialUmRequestId = null }: { initialUm
 }
 
 export function formatBusinessPolicyOutcome(row: IncentiveWorklistRow) {
-  switch (row.incentiveStatus) {
-    case "not_eligible":
-      return "Rejected";
-    case "paid":
+  switch (row.businessPolicyStatus) {
+    case "approved":
       return "Approved";
-    case "payment_failed":
+    case "rejected":
       return "Rejected";
+    default:
+      return "Pending";
   }
 }
 
 export function formatPaymentPolicyOutcome(row: IncentiveWorklistRow) {
-  if (row.incentiveStatus === "not_eligible") {
-    return "";
+  switch (row.paymentPolicyStatus) {
+    case "paid":
+      return "Paid";
+    case "blocked":
+      return "Blocked";
+    default:
+      return "";
   }
-
-  if (row.paymentStatus === "auto_executed" && row.transactionId) {
-    return "Paid";
-  }
-
-  return "Blocked";
 }
 
 export function formatPaymentAmount(row: IncentiveWorklistRow) {
-  if (row.paymentStatus !== "auto_executed" || !row.transactionId) {
+  if (row.paymentPolicyStatus !== "paid" || !row.transactionId) {
     return "";
   }
 
   return formatCurrency(row);
 }
 
-function businessPolicyBadgeVariant(status: IncentiveWorklistRow["incentiveStatus"]): "success" | "warning" {
-  switch (status) {
-    case "not_eligible":
-      return "warning";
-    case "paid":
+function businessPolicyBadgeVariant(row: IncentiveWorklistRow): "success" | "warning" | "neutral" {
+  switch (row.businessPolicyStatus) {
+    case "approved":
       return "success";
-    case "payment_failed":
+    case "rejected":
       return "warning";
+    default:
+      return "neutral";
   }
 }
 

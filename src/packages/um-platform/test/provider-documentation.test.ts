@@ -497,9 +497,10 @@ describe("provider documentation UM Platform", () => {
       },
       clinicalReview: {
         reviewerId: null,
-        medicalNecessityReviewed: false,
-        policyCriteriaChecked: false,
-        rationaleCaptured: false,
+        clinicalDocumentationReviewed: false,
+        medicalNecessityCriteriaMet: false,
+        planPolicyRequirementsChecked: false,
+        decisionRationaleDocumented: false,
         denialReasonCode: null
       },
       auditRefs: {
@@ -544,9 +545,10 @@ describe("provider documentation UM Platform", () => {
 
     const determined = platform.completeClinicalReview(umRequest.id, {
       outcomeStatus: "approved",
-      medicalNecessityReviewed: true,
-      policyCriteriaChecked: true,
-      rationaleCaptured: true,
+      clinicalDocumentationReviewed: true,
+      medicalNecessityCriteriaMet: true,
+      planPolicyRequirementsChecked: true,
+      decisionRationaleDocumented: true,
       approvalReasonCode: "POLICY_CRITERIA_MET"
     });
 
@@ -555,9 +557,10 @@ describe("provider documentation UM Platform", () => {
       state: "determined",
       outcomeStatus: "approved",
       clinicalReview: {
-        medicalNecessityReviewed: true,
-        policyCriteriaChecked: true,
-        rationaleCaptured: true,
+        clinicalDocumentationReviewed: true,
+        medicalNecessityCriteriaMet: true,
+        planPolicyRequirementsChecked: true,
+        decisionRationaleDocumented: true,
         approvalReasonCode: "POLICY_CRITERIA_MET",
         denialReasonCode: null
       }
@@ -577,9 +580,10 @@ describe("provider documentation UM Platform", () => {
     expect(() =>
       platform.completeClinicalReview(umRequest.id, {
         outcomeStatus: "denied",
-        medicalNecessityReviewed: true,
-        policyCriteriaChecked: true,
-        rationaleCaptured: true
+        clinicalDocumentationReviewed: true,
+        medicalNecessityCriteriaMet: true,
+        planPolicyRequirementsChecked: true,
+        decisionRationaleDocumented: true
       })
     ).toThrow("DENIAL_REASON_REQUIRED");
   });
@@ -596,9 +600,10 @@ describe("provider documentation UM Platform", () => {
     expect(() =>
       platform.completeClinicalReview(umRequest.id, {
         outcomeStatus: "approved",
-        medicalNecessityReviewed: true,
-        policyCriteriaChecked: true,
-        rationaleCaptured: true
+        clinicalDocumentationReviewed: true,
+        medicalNecessityCriteriaMet: true,
+        planPolicyRequirementsChecked: true,
+        decisionRationaleDocumented: true
       })
     ).toThrow("UM_REQUEST_NOT_IN_CLINICAL_REVIEW");
   });
@@ -616,9 +621,10 @@ describe("provider documentation UM Platform", () => {
     expect(() =>
       platform.completeClinicalReview(umRequest.id, {
         outcomeStatus: "approved",
-        medicalNecessityReviewed: true,
-        policyCriteriaChecked: false,
-        rationaleCaptured: true
+        clinicalDocumentationReviewed: true,
+        medicalNecessityCriteriaMet: true,
+        planPolicyRequirementsChecked: false,
+        decisionRationaleDocumented: true
       })
     ).toThrow("CLINICAL_REVIEW_INCOMPLETE");
   });

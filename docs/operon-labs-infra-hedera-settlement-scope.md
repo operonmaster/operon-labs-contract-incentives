@@ -22,6 +22,8 @@ Approved Provider Documentation and Delegate UM events follow this settlement pa
 
 Blocked policy outcomes do not call Hedera.
 
+Plan audit surfaces use one shared policy outcome data model across Provider Documentation and Delegate UM. `businessPolicyStatus` is `approved` or `rejected` for final outcomes. `paymentPolicyStatus` is `paid` or `blocked` for final outcomes. Null means that policy surface has not produced a final outcome yet. Internal enum values such as `payment_failed`, `auto_executed`, `blocked_by_policy`, and `execution_failed` remain execution/backward-compatibility details, not policy outcome statuses.
+
 ## Settlement Identity Contract
 
 Healthcare workflow records keep the readable PA/UM request id. Settlement-facing documents use deterministic opaque ids:

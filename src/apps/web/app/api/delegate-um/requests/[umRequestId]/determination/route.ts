@@ -37,9 +37,10 @@ function parseDeterminationInput(value: unknown): CompleteClinicalReviewInput | 
   }
 
   if (
-    typeof candidate.medicalNecessityReviewed !== "boolean" ||
-    typeof candidate.policyCriteriaChecked !== "boolean" ||
-    typeof candidate.rationaleCaptured !== "boolean"
+    typeof candidate.clinicalDocumentationReviewed !== "boolean" ||
+    typeof candidate.medicalNecessityCriteriaMet !== "boolean" ||
+    typeof candidate.planPolicyRequirementsChecked !== "boolean" ||
+    typeof candidate.decisionRationaleDocumented !== "boolean"
   ) {
     return null;
   }
@@ -70,9 +71,10 @@ function parseDeterminationInput(value: unknown): CompleteClinicalReviewInput | 
 
   return {
     outcomeStatus,
-    medicalNecessityReviewed: candidate.medicalNecessityReviewed,
-    policyCriteriaChecked: candidate.policyCriteriaChecked,
-    rationaleCaptured: candidate.rationaleCaptured,
+    clinicalDocumentationReviewed: candidate.clinicalDocumentationReviewed,
+    medicalNecessityCriteriaMet: candidate.medicalNecessityCriteriaMet,
+    planPolicyRequirementsChecked: candidate.planPolicyRequirementsChecked,
+    decisionRationaleDocumented: candidate.decisionRationaleDocumented,
     approvalReasonCode: typeof approvalReasonCode === "string" ? approvalReasonCode.trim() : approvalReasonCode ?? null,
     denialReasonCode: typeof denialReasonCode === "string" ? denialReasonCode.trim() : denialReasonCode ?? null
   };

@@ -53,28 +53,25 @@ export function formatUmRequestSlaStatus(request: Pick<UMRequest, "determinedAt"
   return `${formatDuration(Math.max(0, new Date(request.slaDeadlineAt).getTime() - Date.now()))} remaining`;
 }
 
-export function formatBusinessPolicyStatus(status: DelegatePlanAuditRow["incentiveStatus"]) {
+export function formatBusinessPolicyStatus(status: DelegatePlanAuditRow["businessPolicyStatus"]) {
   switch (status) {
-    case "pending":
+    case "approved":
+      return "Approved";
+    case "rejected":
+      return "Rejected";
+    default:
       return "Pending";
-    case "not_eligible":
-      return "Not eligible";
-    case "paid":
-    case "payment_failed":
-      return "Passed";
   }
 }
 
-export function formatPaymentStatus(status: DelegatePlanAuditRow["paymentStatus"]) {
+export function formatPaymentStatus(status: DelegatePlanAuditRow["paymentPolicyStatus"]) {
   switch (status) {
-    case "pending":
+    case "paid":
+      return "Paid";
+    case "blocked":
+      return "Blocked";
+    default:
       return "Pending";
-    case "auto_executed":
-      return "Auto-settled";
-    case "blocked_by_policy":
-      return "Blocked by policy";
-    case "execution_failed":
-      return "Execution failed";
   }
 }
 
@@ -85,24 +82,24 @@ export function formatCurrency(row: Pick<DelegatePlanAuditRow, "currency" | "inc
   })} ${row.settlementToken?.symbol ?? row.currency}`;
 }
 
-export function businessPolicyStatusBadgeVariant(status: DelegatePlanAuditRow["incentiveStatus"]): "success" | "warning" | "neutral" {
-  if (status === "paid" || status === "payment_failed") {
+export function businessPolicyStatusBadgeVariant(status: DelegatePlanAuditRow["businessPolicyStatus"]): "success" | "warning" | "neutral" {
+  if (status === "approved") {
     return "success";
   }
 
-  if (status === "not_eligible") {
+  if (status === "rejected") {
     return "warning";
   }
 
   return "neutral";
 }
 
-export function paymentStatusBadgeVariant(status: DelegatePlanAuditRow["paymentStatus"]): "success" | "warning" | "neutral" {
-  if (status === "auto_executed") {
+export function paymentStatusBadgeVariant(status: DelegatePlanAuditRow["paymentPolicyStatus"]): "success" | "warning" | "neutral" {
+  if (status === "paid") {
     return "success";
   }
 
-  if (status === "blocked_by_policy" || status === "execution_failed") {
+  if (status === "blocked") {
     return "warning";
   }
 
