@@ -2378,6 +2378,28 @@ body {
   }
 }
 
+.specialty-rx-modal {
+  max-width: 980px;
+  overflow: visible;
+  width: min(100%, 980px);
+}
+
+.specialty-rx-stepper {
+  margin-bottom: 20px;
+}
+
+.specialty-rx-console .hero p {
+  max-width: 780px;
+}
+
+.specialty-rx-workqueue {
+  min-width: 1120px;
+}
+
+.specialty-rx-workqueue td {
+  overflow-wrap: anywhere;
+}
+
 .error-text {
   color: #fca5a5;
 }
