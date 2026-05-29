@@ -167,6 +167,7 @@ export function createSpecialtyRxWorkflow(
   paymentPolicyEvidenceStore: PaymentPolicyEvidenceStore | undefined = createPaymentPolicyEvidenceStoreFromEnv()
 ): SpecialtyRxWorkflow {
   const rows = new Map<string, SpecialtyRxPlanAuditRow>();
+  const settlementsInFlight = new Map<string, Promise<SpecialtyFulfillmentCase>>();
 
   async function listRequests(): Promise<UMRequest[]> {
     return persistence ? persistence.listUmRequests() : platform.listUmRequests();
@@ -281,31 +282,46 @@ export function createSpecialtyRxWorkflow(
       return updated;
     },
     async confirmFulfillment(fulfillmentCaseId, input, now = new Date()) {
-      const caseRecord = await getCase(fulfillmentCaseId);
-      if (caseRecord.state !== "shipment_scheduled" || !caseRecord.clearToFillAt) {
-        throw new Error(`SPECIALTY_RX_NOT_READY_FOR_FULFILLMENT:${caseRecord.id}`);
+      const existingSettlement = settlementsInFlight.get(fulfillmentCaseId);
+      if (existingSettlement) {
+        await existingSettlement;
+        return getCase(fulfillmentCaseId);
       }
 
-      const timestamp = now.toISOString();
-      const isException = input.avoidableFulfillmentException || input.externalBlockerDocumented;
-      const updated = {
-        ...caseRecord,
-        state: isException ? "exception" as const : "fulfilled" as const,
-        deliveryConfirmedAt: input.deliveryConfirmed ? timestamp : null,
-        exceptionRecordedAt: isException ? timestamp : null,
-        fulfillment: { ...input },
-        updatedAt: timestamp
-      };
-      await caseStore.saveCase(updated);
-      const row = await settleFulfillment(updated, {
-        rows,
-        policyStore,
-        paymentIntentStore,
-        paymentPolicyStore,
-        paymentPolicyEvidenceStore
-      });
-      rows.set(updated.id, row);
-      return updated;
+      const settlement = (async () => {
+        const caseRecord = await getCase(fulfillmentCaseId);
+        if (caseRecord.state !== "shipment_scheduled" || !caseRecord.clearToFillAt) {
+          throw new Error(`SPECIALTY_RX_NOT_READY_FOR_FULFILLMENT:${caseRecord.id}`);
+        }
+
+        const timestamp = now.toISOString();
+        const isException = input.avoidableFulfillmentException || input.externalBlockerDocumented;
+        const updated = {
+          ...caseRecord,
+          state: isException ? "exception" as const : "fulfilled" as const,
+          deliveryConfirmedAt: input.deliveryConfirmed ? timestamp : null,
+          exceptionRecordedAt: isException ? timestamp : null,
+          fulfillment: { ...input },
+          updatedAt: timestamp
+        };
+        await caseStore.saveCase(updated);
+        const row = await settleFulfillment(updated, {
+          rows,
+          policyStore,
+          paymentIntentStore,
+          paymentPolicyStore,
+          paymentPolicyEvidenceStore
+        });
+        rows.set(updated.id, row);
+        return updated;
+      })();
+      settlementsInFlight.set(fulfillmentCaseId, settlement);
+
+      try {
+        return await settlement;
+      } finally {
+        settlementsInFlight.delete(fulfillmentCaseId);
+      }
     }
   };
 }
@@ -428,6 +444,56 @@ async function settleFulfillment(
     };
   }
 
+  if (policies.length > 1) {
+    const evaluation = evaluateSpecialtyRxFulfillmentEvent(
+      {
+        eventType: "SPECIALTY_FULFILLMENT_COMPLETED",
+        fulfillmentCaseId: caseRecord.id,
+        umRequestId: caseRecord.umRequestId
+      },
+      {
+        getEvidenceByFulfillmentCaseId: () => evidence,
+        policy: policies[0]!,
+        monthToDateAmount: 0
+      }
+    );
+    const result = {
+      ...evaluation.result,
+      decision: "blocked" as const,
+      amount: 0,
+      walletId: null,
+      reasonCodes: ["MULTIPLE_POLICY_MATCHES"]
+    };
+    const audit = createAuditRecord({
+      request: evaluation.request,
+      result,
+      transactionId: null
+    });
+    const businessEvaluationId = buildBusinessEvaluationId({
+      umRequestId: caseRecord.umRequestId,
+      businessPolicyId: result.policyId
+    });
+
+    return {
+      ...buildBaseRow(caseRecord),
+      id: businessEvaluationId,
+      businessPolicyStatus: "rejected",
+      paymentPolicyStatus: "blocked",
+      incentiveStatus: "not_eligible",
+      paymentStatus: "blocked_by_policy",
+      incentiveValue: 0,
+      currency: result.currency,
+      settlementToken: result.settlementToken,
+      reason: summarizeSpecialtyRxReason(result.reasonCodes),
+      reasonCodes: result.reasonCodes,
+      policyId: result.policyId,
+      policyControls: [...SPECIALTY_POLICY_CONTROLS],
+      policyCriteria: buildSpecialtyRxPolicyCriteria(evidence, result.reasonCodes),
+      audit,
+      walletId: null
+    };
+  }
+
   const evaluation = evaluateSpecialtyRxFulfillmentEvent(
     {
       eventType: "SPECIALTY_FULFILLMENT_COMPLETED",
@@ -481,11 +547,10 @@ async function settleFulfillment(
   let payment: Awaited<ReturnType<typeof executePolicyBoundPayment>>;
 
   try {
-    const storedPaymentPolicy = await dependencies.paymentPolicyStore.getPolicyForPlan(evidence.planId);
-    if (!storedPaymentPolicy) {
+    paymentPolicy = await dependencies.paymentPolicyStore.getPolicyForPlan(evidence.planId);
+    if (!paymentPolicy) {
       throw new Error("HEDERA_PLAN_POLICY_NOT_FOUND");
     }
-    paymentPolicy = specialtyPaymentPolicyForAmount(storedPaymentPolicy, evaluation.result.amount);
 
     const paymentRequest = {
       auditId: audit.id,
@@ -663,7 +728,7 @@ function buildSpecialtyRxEvidence(caseRecord: SpecialtyFulfillmentCase): Special
     deliveryConfirmedWithinSla: isWithinSla(caseRecord.clearToFillAt, caseRecord.deliveryConfirmedAt, caseRecord.deliverySlaHours),
     remsRequired: caseRecord.clearToFill.remsRequired,
     remsAuthorizationConfirmed: caseRecord.clearToFill.remsAuthorizationConfirmed,
-    coldChainRequired: caseRecord.shipment.coldChainRequired,
+    coldChainRequired: caseRecord.fulfillment.externalBlockerDocumented ? false : caseRecord.shipment.coldChainRequired,
     coldChainPackoutValidated: caseRecord.shipment.coldChainPackoutValidated,
     temperatureLogValid: caseRecord.fulfillment.temperatureLogValid,
     avoidableFulfillmentException: caseRecord.fulfillment.avoidableFulfillmentException,
@@ -890,13 +955,6 @@ function buildSpecialtyPaymentPolicyControlEvidence({
       failureCode: isPaymentEnvelopeFailure(failureCode) ? failureCode ?? undefined : undefined
     }
   ];
-}
-
-function specialtyPaymentPolicyForAmount(policy: PaymentPlanPolicy, amount: number): PaymentPlanPolicy {
-  return {
-    ...policy,
-    maxPaymentAmount: Math.max(policy.maxPaymentAmount, amount)
-  };
 }
 
 function paymentControlStatus(

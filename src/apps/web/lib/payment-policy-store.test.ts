@@ -27,7 +27,7 @@ describe("payment policy store", () => {
         expect.objectContaining({
           planId: "acme-health-ppo",
           paymentToken: "HBAR",
-          maxPaymentAmount: 5,
+          maxPaymentAmount: 7,
           businessEvaluationAttestation: true,
           duplicatePaymentPrevention: true,
           paymentEnvelopeIntegrity: true
@@ -35,7 +35,7 @@ describe("payment policy store", () => {
         expect.objectContaining({
           planId: "summit-health-hmo",
           paymentToken: "HBAR",
-          maxPaymentAmount: 5,
+          maxPaymentAmount: 7,
           businessEvaluationAttestation: true,
           duplicatePaymentPrevention: true,
           paymentEnvelopeIntegrity: true
@@ -92,7 +92,7 @@ describe("payment policy store", () => {
       businessEvaluationAttestation: true,
       duplicatePaymentPrevention: true,
       paymentToken: "HBAR",
-      maxPaymentAmount: 5
+      maxPaymentAmount: 7
     });
   });
 });

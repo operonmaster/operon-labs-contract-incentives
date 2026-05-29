@@ -218,7 +218,7 @@ function planPolicy({ planId, planName }: { planId: string; planName: string }):
     duplicatePaymentPrevention: true,
     maxPaymentPerRequest: true,
     paymentToken: "HBAR",
-    maxPaymentAmount: 5,
+    maxPaymentAmount: 7,
     paymentEnvelopeIntegrity: true
   };
 }

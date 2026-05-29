@@ -10,6 +10,7 @@ import {
   type SpecialtyRxWorkflow
 } from "./specialty-rx-workflow";
 import { createInMemorySpecialtyRxCaseStore } from "./specialty-rx-store";
+import { createInMemoryPaymentPolicyStore, defaultPaymentPlanPolicies } from "./payment-policy-store";
 import { createInMemoryPolicyStore, defaultIncentivePolicies } from "./policy-store";
 
 vi.mock("@operon-labs/hedera-executor", async (importOriginal) => {
@@ -170,7 +171,7 @@ describe("specialty rx workflow", () => {
       shipped: false,
       deliveryConfirmed: false,
       deliveryAttemptDocumented: true,
-      temperatureLogValid: true,
+      temperatureLogValid: false,
       avoidableFulfillmentException: false,
       externalBlockerDocumented: true,
       exceptionReasonCode: "PATIENT_UNREACHABLE"
@@ -186,9 +187,161 @@ describe("specialty rx workflow", () => {
     });
     expect(executePolicyBoundPaymentMock).not.toHaveBeenCalled();
   });
+
+  it("does not raise a lower stored payment policy max during settlement", async () => {
+    executePolicyBoundPaymentMock.mockImplementation(async (request, options) => {
+      if (options?.planPolicy && request.amount > options.planPolicy.maxPaymentAmount) {
+        throw new Error("HEDERA_PAYMENT_AMOUNT_EXCEEDS_PLAN_MAX");
+      }
+
+      return {
+        status: "simulated",
+        network: "testnet",
+        transactionId: `testnet-${request.auditId}-${request.currency.toLowerCase()}`,
+        runtime: "hedera-agent-kit-policy",
+        paymentIntentId: buildPaymentIntentId(request)
+      };
+    });
+
+    const lowMaxPaymentPolicyStore = createInMemoryPaymentPolicyStore({
+      "acme-health-ppo": {
+        ...defaultPaymentPlanPolicies["acme-health-ppo"],
+        maxPaymentAmount: 6
+      }
+    });
+    const { workflow } = await createApprovedSpecialtyRxCase(
+      "PA-260526-0900-RX444444",
+      undefined,
+      lowMaxPaymentPolicyStore
+    );
+    const [created] = await workflow.listWorkqueue();
+
+    await completeHappyPathBeforeFulfillment(workflow, created!.id);
+    await workflow.confirmFulfillment(created!.id, {
+      shipped: true,
+      deliveryConfirmed: true,
+      deliveryAttemptDocumented: true,
+      temperatureLogValid: true,
+      avoidableFulfillmentException: false,
+      externalBlockerDocumented: false,
+      exceptionReasonCode: null
+    });
+    const [row] = await workflow.listPlanRows();
+
+    expect(row).toMatchObject({
+      businessPolicyStatus: "approved",
+      paymentPolicyStatus: "blocked",
+      incentiveStatus: "payment_failed",
+      paymentStatus: "execution_failed",
+      incentiveValue: 7
+    });
+    expect(row!.paymentPolicyControls).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "maxPaymentPerRequest",
+          status: "failed",
+          expected: "<= 6 HBAR",
+          actual: "7 HBAR",
+          failureCode: "HEDERA_PAYMENT_AMOUNT_EXCEEDS_PLAN_MAX"
+        })
+      ])
+    );
+  });
+
+  it("deduplicates concurrent fulfillment settlement for the same case", async () => {
+    executePolicyBoundPaymentMock.mockImplementation(async (request) => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      return {
+        status: "simulated",
+        network: "testnet",
+        transactionId: `testnet-${request.auditId}-${request.currency.toLowerCase()}`,
+        runtime: "hedera-agent-kit-policy",
+        paymentIntentId: buildPaymentIntentId(request)
+      };
+    });
+
+    const { workflow } = await createApprovedSpecialtyRxCase("PA-260526-0900-RX555555");
+    const [created] = await workflow.listWorkqueue();
+
+    await completeHappyPathBeforeFulfillment(workflow, created!.id);
+    await Promise.all([
+      workflow.confirmFulfillment(
+        created!.id,
+        {
+          shipped: true,
+          deliveryConfirmed: true,
+          deliveryAttemptDocumented: true,
+          temperatureLogValid: true,
+          avoidableFulfillmentException: false,
+          externalBlockerDocumented: false,
+          exceptionReasonCode: null
+        },
+        new Date("2026-06-20T14:00:00.000Z")
+      ),
+      workflow.confirmFulfillment(
+        created!.id,
+        {
+          shipped: true,
+          deliveryConfirmed: true,
+          deliveryAttemptDocumented: true,
+          temperatureLogValid: true,
+          avoidableFulfillmentException: false,
+          externalBlockerDocumented: false,
+          exceptionReasonCode: null
+        },
+        new Date("2026-06-20T14:00:00.000Z")
+      )
+    ]);
+
+    expect(executePolicyBoundPaymentMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks settlement when multiple specialty policies match", async () => {
+    const duplicatePolicy = {
+      ...defaultIncentivePolicies.specialty_rx_acme_fulfillment_sla,
+      policyId: "specialty-rx-fulfillment-sla-v1-duplicate"
+    };
+    const { workflow } = await createApprovedSpecialtyRxCase(
+      "PA-260526-0900-RX666666",
+      createInMemoryPolicyStore({
+        specialty_rx_acme_fulfillment_sla: defaultIncentivePolicies.specialty_rx_acme_fulfillment_sla,
+        specialty_rx_acme_fulfillment_sla_duplicate: duplicatePolicy
+      })
+    );
+    const [created] = await workflow.listWorkqueue();
+
+    await completeHappyPathBeforeFulfillment(workflow, created!.id);
+    await workflow.confirmFulfillment(created!.id, {
+      shipped: true,
+      deliveryConfirmed: true,
+      deliveryAttemptDocumented: true,
+      temperatureLogValid: true,
+      avoidableFulfillmentException: false,
+      externalBlockerDocumented: false,
+      exceptionReasonCode: null
+    });
+    const [row] = await workflow.listPlanRows();
+
+    expect(row).toMatchObject({
+      businessPolicyStatus: "rejected",
+      paymentPolicyStatus: "blocked",
+      incentiveValue: 0,
+      reasonCodes: ["MULTIPLE_POLICY_MATCHES"]
+    });
+    expect(row!.audit).not.toBeNull();
+    expect(row!.policyCriteria.length).toBeGreaterThan(0);
+    expect(executePolicyBoundPaymentMock).not.toHaveBeenCalled();
+  });
 });
 
-async function createApprovedSpecialtyRxCase(caseId: string): Promise<{
+async function createApprovedSpecialtyRxCase(
+  caseId: string,
+  policyStore = createInMemoryPolicyStore({
+    specialty_rx_acme_fulfillment_sla: defaultIncentivePolicies.specialty_rx_acme_fulfillment_sla
+  }),
+  paymentPolicyStore = createInMemoryPaymentPolicyStore(defaultPaymentPlanPolicies)
+): Promise<{
   workflow: SpecialtyRxWorkflow;
   umRequest: ReturnType<ReturnType<typeof createInMemoryUmPlatform>["submitPriorAuth"]>;
 }> {
@@ -197,9 +350,9 @@ async function createApprovedSpecialtyRxCase(caseId: string): Promise<{
     platform,
     undefined,
     createInMemorySpecialtyRxCaseStore(),
-    createInMemoryPolicyStore({
-      specialty_rx_acme_fulfillment_sla: defaultIncentivePolicies.specialty_rx_acme_fulfillment_sla
-    })
+    policyStore,
+    undefined,
+    paymentPolicyStore
   );
   const umRequest = platform.submitPriorAuth({
     requestType: "pharmacy_benefit",
@@ -216,4 +369,41 @@ async function createApprovedSpecialtyRxCase(caseId: string): Promise<{
   });
 
   return { workflow, umRequest };
+}
+
+async function completeHappyPathBeforeFulfillment(
+  workflow: SpecialtyRxWorkflow,
+  fulfillmentCaseId: string
+): Promise<void> {
+  await workflow.completeIntake(fulfillmentCaseId, {
+    prescriptionPresent: true,
+    assignedPharmacyConfirmed: true,
+    therapyMetadataPresent: true,
+    handoffDataComplete: true
+  });
+  await workflow.clearToFill(
+    fulfillmentCaseId,
+    {
+      benefitsOrClaimCheckCompleted: true,
+      prescriptionValid: true,
+      prescriberClarificationRequired: false,
+      prescriberClarificationResolved: true,
+      remsRequired: false,
+      remsAuthorizationConfirmed: true,
+      inventoryAvailable: true,
+      copayOrPaymentReady: true
+    },
+    new Date("2026-06-18T16:00:00.000Z")
+  );
+  await workflow.scheduleShipment(
+    fulfillmentCaseId,
+    {
+      patientContactAttemptDocumented: true,
+      addressConfirmed: true,
+      deliveryWindowConfirmed: true,
+      coldChainPackoutValidated: true,
+      courierScheduled: true
+    },
+    new Date("2026-06-19T09:30:00.000Z")
+  );
 }
