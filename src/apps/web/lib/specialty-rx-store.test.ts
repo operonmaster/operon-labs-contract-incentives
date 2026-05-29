@@ -22,6 +22,7 @@ const caseRecord: SpecialtyFulfillmentCase = {
   state: "intake_triage",
   paApprovalReceivedAt: "2026-06-18T10:00:00.000Z",
   intakeStartedAt: "2026-06-18T10:05:00.000Z",
+  fulfillmentSlaStartedAt: null,
   clearToFillAt: null,
   shipmentScheduledAt: null,
   deliveryConfirmedAt: null,
@@ -150,6 +151,57 @@ describe("specialty rx case store", () => {
     });
     expect(listedRow).not.toHaveProperty("deliverySlaStatus");
   });
+
+  it("normalizes legacy fulfillment cases without a paid SLA start timestamp", async () => {
+    const firestore = createFakeFirestore();
+    const store = createFirestoreSpecialtyRxCaseStore(
+      { projectId: "operon-labs-nonprod", databaseId: "(default)" },
+      firestore
+    );
+    const legacyCase = {
+      ...caseRecord,
+      state: "shipment_scheduled",
+      clearToFillAt: "2026-06-18T16:00:00.000Z",
+      shipmentScheduledAt: "2026-06-19T09:30:00.000Z",
+      updatedAt: "2026-06-19T09:30:00.000Z"
+    } satisfies Record<string, unknown>;
+    delete (legacyCase as Record<string, unknown>).fulfillmentSlaStartedAt;
+
+    await firestore.collection("specialtyFulfillmentCases").doc(legacyCase.id).set(legacyCase);
+
+    const storedCase = await store.getCase(legacyCase.id);
+    const [listedCase] = await store.listCases();
+
+    expect(storedCase!.fulfillmentSlaStartedAt).toBe("2026-06-18T16:00:00.000Z");
+    expect(listedCase!.fulfillmentSlaStartedAt).toBe("2026-06-18T16:00:00.000Z");
+    expect(storedCase!).not.toHaveProperty("deliverySlaHours");
+  });
+
+  it("normalizes legacy clear-to-fill cases with no clear-to-fill timestamp from updatedAt", async () => {
+    const firestore = createFakeFirestore();
+    const store = createFirestoreSpecialtyRxCaseStore(
+      { projectId: "operon-labs-nonprod", databaseId: "(default)" },
+      firestore
+    );
+    const legacyCase = {
+      ...caseRecord,
+      id: "RXF-260526-0900-CLEARTF",
+      umRequestId: "PA-260526-0900-CLEARTF",
+      state: "clear_to_fill",
+      clearToFillAt: null,
+      updatedAt: "2026-06-18T12:00:00.000Z"
+    } satisfies Record<string, unknown>;
+    delete (legacyCase as Record<string, unknown>).fulfillmentSlaStartedAt;
+
+    await firestore.collection("specialtyFulfillmentCases").doc(legacyCase.id).set(legacyCase);
+
+    await expect(store.getCase(legacyCase.id)).resolves.toMatchObject({
+      id: legacyCase.id,
+      state: "clear_to_fill",
+      fulfillmentSlaStartedAt: "2026-06-18T12:00:00.000Z",
+      clearToFillAt: null
+    });
+  });
 });
 
 function buildPlanRow(overrides: Partial<SpecialtyRxPlanAuditRow> = {}): SpecialtyRxPlanAuditRow {
@@ -165,6 +217,7 @@ function buildPlanRow(overrides: Partial<SpecialtyRxPlanAuditRow> = {}): Special
     requestType: "pharmacy_benefit",
     serviceLabel: caseRecord.serviceLabel,
     state: caseRecord.state,
+    fulfillmentSlaStartedAt: caseRecord.fulfillmentSlaStartedAt,
     clearToFillAt: caseRecord.clearToFillAt,
     shipmentScheduledAt: caseRecord.shipmentScheduledAt,
     deliveryConfirmedAt: caseRecord.deliveryConfirmedAt,

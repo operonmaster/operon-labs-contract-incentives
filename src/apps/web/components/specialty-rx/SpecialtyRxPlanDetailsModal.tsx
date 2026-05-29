@@ -160,6 +160,10 @@ export function SpecialtyRxPlanDetailsModal({ row, onClose }: SpecialtyRxPlanDet
                 <dd>{formatNullableDateTime(fulfillmentCase.paApprovalReceivedAt ?? null)}</dd>
               </div>
               <div>
+                <dt>Fulfillment SLA started</dt>
+                <dd>{formatNullableDateTime(row.fulfillmentSlaStartedAt)}</dd>
+              </div>
+              <div>
                 <dt>Clear To Fill</dt>
                 <dd>{formatNullableDateTime(row.clearToFillAt)}</dd>
               </div>

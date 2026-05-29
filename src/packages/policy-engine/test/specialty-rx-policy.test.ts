@@ -59,6 +59,7 @@ const approvedRequest: EvaluationRequest = {
     state: "fulfilled",
     intakeComplete: true,
     clearToFillComplete: true,
+    fulfillmentSlaStartedAt: "2026-06-18T15:00:00.000Z",
     clearToFillAt: "2026-06-18T16:00:00.000Z",
     shipmentScheduledAt: "2026-06-19T09:30:00.000Z",
     deliveryConfirmedAt: "2026-06-20T14:00:00.000Z",
@@ -93,7 +94,7 @@ describe("specialty_rx_fulfillment_sla policy", () => {
     });
   });
 
-  it("blocks late shipment from the clear-to-fill timestamp", () => {
+  it("blocks late shipment from the intake-completion Fulfillment SLA start", () => {
     const result = evaluatePolicy({
       policy,
       request: {

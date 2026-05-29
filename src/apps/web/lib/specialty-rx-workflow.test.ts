@@ -79,7 +79,7 @@ describe("specialty rx workflow", () => {
       assignedPharmacyConfirmed: true,
       therapyMetadataPresent: true,
       handoffDataComplete: true
-    });
+    }, new Date("2026-06-18T15:00:00.000Z"));
     await workflow.clearToFill(
       created!.id,
       {
@@ -124,11 +124,14 @@ describe("specialty rx workflow", () => {
     expect(row).toMatchObject({
       fulfillmentCaseId: created!.id,
       umRequestId: umRequest.id,
+      fulfillmentSlaStartedAt: "2026-06-18T15:00:00.000Z",
       businessPolicyStatus: "approved",
       paymentPolicyStatus: "paid",
       incentiveValue: 7,
       reasonCodes: []
     });
+    expect(row!.policyControls).toContain("Intake completion starts Fulfillment SLA");
+    expect(row!.policyControls).not.toContain("Clear-to-fill timestamp starts Fulfillment SLA");
     expect(executePolicyBoundPaymentMock).toHaveBeenCalledWith(
       expect.objectContaining({
         umRequestId: umRequest.id,
@@ -140,6 +143,84 @@ describe("specialty rx workflow", () => {
       }),
       expect.any(Object)
     );
+  });
+
+  it("blocks settlement when shipment is outside the Fulfillment SLA started at intake completion", async () => {
+    const { workflow, umRequest } = await createApprovedSpecialtyRxCase("PA-260526-0900-RX242424");
+    const [created] = await workflow.listWorkqueue();
+
+    await workflow.completeIntake(created!.id, {
+      prescriptionPresent: true,
+      assignedPharmacyConfirmed: true,
+      therapyMetadataPresent: true,
+      handoffDataComplete: true
+    }, new Date("2026-06-18T08:00:00.000Z"));
+    await workflow.clearToFill(
+      created!.id,
+      {
+        benefitsOrClaimCheckCompleted: true,
+        prescriptionValid: true,
+        prescriberClarificationRequired: false,
+        prescriberClarificationResolved: true,
+        remsRequired: false,
+        remsAuthorizationConfirmed: true,
+        inventoryAvailable: true,
+        copayOrPaymentReady: true
+      },
+      new Date("2026-06-19T09:00:00.000Z")
+    );
+    await workflow.scheduleShipment(
+      created!.id,
+      {
+        patientContactAttemptDocumented: true,
+        addressConfirmed: true,
+        deliveryWindowConfirmed: true,
+        coldChainPackoutValidated: true,
+        courierScheduled: true
+      },
+      new Date("2026-06-19T10:00:00.000Z")
+    );
+    await workflow.confirmFulfillment(
+      created!.id,
+      {
+        shipped: true,
+        deliveryConfirmed: true,
+        deliveryAttemptDocumented: true,
+        temperatureLogValid: true,
+        avoidableFulfillmentException: false,
+        externalBlockerDocumented: false,
+        exceptionReasonCode: null
+      },
+      new Date("2026-06-19T11:00:00.000Z")
+    );
+
+    const [row] = await workflow.listPlanRows();
+
+    expect(row).toMatchObject({
+      fulfillmentCaseId: created!.id,
+      umRequestId: umRequest.id,
+      fulfillmentSlaStartedAt: "2026-06-18T08:00:00.000Z",
+      clearToFillAt: "2026-06-19T09:00:00.000Z",
+      shipmentScheduledAt: "2026-06-19T10:00:00.000Z",
+      fulfillmentSlaStatus: "breached",
+      businessPolicyStatus: "rejected",
+      paymentPolicyStatus: "blocked",
+      incentiveStatus: "not_eligible",
+      paymentStatus: "blocked_by_policy",
+      incentiveValue: 0,
+      reasonCodes: ["SHIPMENT_SLA_EXCEEDED"]
+    });
+    expect(row!.policyCriteria).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "shipmentScheduledWithinSla",
+          actual: "No",
+          passed: false,
+          reasonCode: "SHIPMENT_SLA_EXCEEDED"
+        })
+      ])
+    );
+    expect(executePolicyBoundPaymentMock).not.toHaveBeenCalled();
   });
 
   it("pays when shipment meets the Fulfillment SLA even if delivery closes after the old delivery window", async () => {
@@ -652,7 +733,7 @@ async function completeHappyPathBeforeFulfillment(
     assignedPharmacyConfirmed: true,
     therapyMetadataPresent: true,
     handoffDataComplete: true
-  });
+  }, new Date("2026-06-18T15:00:00.000Z"));
   await workflow.clearToFill(
     fulfillmentCaseId,
     {

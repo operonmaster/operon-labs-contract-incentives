@@ -36,6 +36,7 @@ describe("SpecialtyRxPlanConsole", () => {
     expect(markup).toContain("RXF-260526-0900-DELEGATE");
     expect(markup).toContain("PA-260526-0900-DELEGATE");
     expect(markup).toContain("Fulfillment SLA");
+    expect(markup).toContain("Fulfillment SLA started");
     expect(markup).not.toContain("Schedule SLA");
     expect(markup).not.toContain("Delivery SLA");
     expect(markup).toContain("Clear To Fill");
@@ -68,6 +69,7 @@ function buildSpecialtyRxPlanAuditRow(): SpecialtyRxPlanAuditRow {
     requestType: "pharmacy_benefit",
     serviceLabel: "Wegovy semaglutide",
     state: "fulfilled",
+    fulfillmentSlaStartedAt: "2026-06-18T15:00:00.000Z",
     clearToFillAt: "2026-06-18T16:00:00.000Z",
     shipmentScheduledAt: "2026-06-19T09:30:00.000Z",
     deliveryConfirmedAt: "2026-06-20T14:00:00.000Z",

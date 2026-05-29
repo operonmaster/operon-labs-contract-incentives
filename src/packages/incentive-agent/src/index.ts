@@ -51,6 +51,7 @@ export interface SpecialtyRxFulfillmentEvidence {
   requestType: string;
   paOutcomeStatus: "approved" | "denied";
   state: "intake_triage" | "clear_to_fill" | "shipment_scheduled" | "fulfilled" | "exception";
+  fulfillmentSlaStartedAt: string | null;
   clearToFillAt: string | null;
   shipmentScheduledAt: string | null;
   deliveryConfirmedAt: string | null;
@@ -248,6 +249,7 @@ export function evaluateSpecialtyRxFulfillmentEvent(
       requestType: evidence.requestType,
       paOutcomeStatus: evidence.paOutcomeStatus,
       state: evidence.state,
+      fulfillmentSlaStartedAt: evidence.fulfillmentSlaStartedAt,
       clearToFillAt: evidence.clearToFillAt,
       shipmentScheduledAt: evidence.shipmentScheduledAt,
       deliveryConfirmedAt: evidence.deliveryConfirmedAt,
@@ -405,6 +407,7 @@ const demoRequests: Record<string, EvaluationRequest> = {
       requestType: "pharmacy_benefit",
       paOutcomeStatus: "approved",
       state: "fulfilled",
+      fulfillmentSlaStartedAt: "2026-06-18T15:00:00.000Z",
       clearToFillAt: "2026-06-18T16:00:00.000Z",
       shipmentScheduledAt: "2026-06-19T09:30:00.000Z",
       deliveryConfirmedAt: "2026-06-20T14:00:00.000Z",

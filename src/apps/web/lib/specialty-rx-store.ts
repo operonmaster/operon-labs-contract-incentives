@@ -24,6 +24,7 @@ export interface SpecialtyFulfillmentCase {
   state: SpecialtyFulfillmentState;
   paApprovalReceivedAt: string;
   intakeStartedAt: string;
+  fulfillmentSlaStartedAt: string | null;
   clearToFillAt: string | null;
   shipmentScheduledAt: string | null;
   deliveryConfirmedAt: string | null;
@@ -353,18 +354,23 @@ function isSpecialtyRxPlanAuditRowShape(value: unknown): value is SpecialtyRxPla
   );
 }
 
-type SpecialtyFulfillmentCaseWithLegacyDeliverySla = SpecialtyFulfillmentCase & {
+type SpecialtyFulfillmentCaseWithLegacyFields = SpecialtyFulfillmentCase & {
   deliverySlaHours?: number;
+  fulfillmentSlaStartedAt?: string | null;
 };
 
 function copyCase(caseRecord: SpecialtyFulfillmentCase): SpecialtyFulfillmentCase {
-  const clone = structuredClone(caseRecord) as SpecialtyFulfillmentCaseWithLegacyDeliverySla;
+  const clone = structuredClone(caseRecord) as SpecialtyFulfillmentCaseWithLegacyFields;
   delete clone.deliverySlaHours;
 
-  return clone;
+  return {
+    ...clone,
+    fulfillmentSlaStartedAt: normalizeFulfillmentSlaStartedAt(clone)
+  };
 }
 
 type SpecialtyRxPlanAuditRowWithLegacySlaFields = SpecialtyRxPlanAuditRow & {
+  fulfillmentSlaStartedAt?: string | null;
   scheduleSlaStatus?: SpecialtyRxSlaStatus;
   deliverySlaStatus?: SpecialtyRxSlaStatus;
 };
@@ -372,16 +378,61 @@ type SpecialtyRxPlanAuditRowWithLegacySlaFields = SpecialtyRxPlanAuditRow & {
 function copyPlanRow(row: SpecialtyRxPlanAuditRow): SpecialtyRxPlanAuditRow {
   const clone = structuredClone(row) as SpecialtyRxPlanAuditRowWithLegacySlaFields;
   const { scheduleSlaStatus, deliverySlaStatus, ...rowWithoutLegacySlaFields } = clone;
+  const fulfillmentCase = copyCase(clone.fulfillmentCase);
+  const normalizedRow = {
+    ...rowWithoutLegacySlaFields,
+    fulfillmentCase,
+    fulfillmentSlaStartedAt: normalizePlanRowFulfillmentSlaStartedAt(clone, fulfillmentCase)
+  };
 
   return {
-    ...rowWithoutLegacySlaFields,
+    ...normalizedRow,
     fulfillmentSlaStatus:
       normalizeSlaStatus(clone.fulfillmentSlaStatus) ??
       normalizeSlaStatus(scheduleSlaStatus) ??
-      inferFulfillmentSlaStatus(clone) ??
+      inferFulfillmentSlaStatus(normalizedRow) ??
       normalizeSlaStatus(deliverySlaStatus) ??
       "pending"
   };
+}
+
+function normalizeFulfillmentSlaStartedAt(caseRecord: SpecialtyFulfillmentCaseWithLegacyFields): string | null {
+  if (typeof caseRecord.fulfillmentSlaStartedAt === "string") {
+    return caseRecord.fulfillmentSlaStartedAt;
+  }
+
+  if (caseRecord.state === "intake_triage") {
+    return null;
+  }
+
+  if (typeof caseRecord.clearToFillAt === "string") {
+    return caseRecord.clearToFillAt;
+  }
+
+  if (typeof caseRecord.updatedAt === "string") {
+    return caseRecord.updatedAt;
+  }
+
+  return typeof caseRecord.intakeStartedAt === "string" ? caseRecord.intakeStartedAt : null;
+}
+
+function normalizePlanRowFulfillmentSlaStartedAt(
+  row: SpecialtyRxPlanAuditRowWithLegacySlaFields,
+  fulfillmentCase: SpecialtyFulfillmentCase
+): string | null {
+  if (typeof row.fulfillmentSlaStartedAt === "string") {
+    return row.fulfillmentSlaStartedAt;
+  }
+
+  if (typeof fulfillmentCase.fulfillmentSlaStartedAt === "string") {
+    return fulfillmentCase.fulfillmentSlaStartedAt;
+  }
+
+  if (typeof row.clearToFillAt === "string") {
+    return row.clearToFillAt;
+  }
+
+  return null;
 }
 
 function comparePlanRows(left: SpecialtyRxPlanAuditRow, right: SpecialtyRxPlanAuditRow): number {
@@ -397,7 +448,7 @@ function normalizeSlaStatus(value: unknown): SpecialtyRxSlaStatus | null {
 }
 
 function inferFulfillmentSlaStatus(row: SpecialtyRxPlanAuditRow): SpecialtyRxSlaStatus | null {
-  if (!row.clearToFillAt) {
+  if (!row.fulfillmentSlaStartedAt) {
     return "pending";
   }
 
@@ -406,7 +457,7 @@ function inferFulfillmentSlaStatus(row: SpecialtyRxPlanAuditRow): SpecialtyRxSla
   }
 
   const slaHours = row.fulfillmentCase.scheduleSlaHours;
-  const dueAt = new Date(row.clearToFillAt).getTime() + slaHours * 60 * 60 * 1000;
+  const dueAt = new Date(row.fulfillmentSlaStartedAt).getTime() + slaHours * 60 * 60 * 1000;
   const shipmentScheduledAt = new Date(row.shipmentScheduledAt).getTime();
 
   if (Number.isNaN(dueAt) || Number.isNaN(shipmentScheduledAt)) {

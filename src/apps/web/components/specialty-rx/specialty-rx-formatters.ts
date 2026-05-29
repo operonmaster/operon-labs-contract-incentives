@@ -39,11 +39,12 @@ export function formatFulfillmentSlaClock(caseRecord: SpecialtyFulfillmentCase):
     return `Closed - ${formatSlaStatus(status)}`;
   }
 
-  if (!caseRecord.clearToFillAt) {
-    return "Active - awaiting clear to fill";
+  const startedAt = getFulfillmentSlaStartedAt(caseRecord);
+  if (!startedAt) {
+    return "Active - awaiting intake completion";
   }
 
-  const dueAt = new Date(caseRecord.clearToFillAt).getTime() + caseRecord.scheduleSlaHours * 60 * 60 * 1000;
+  const dueAt = new Date(startedAt).getTime() + caseRecord.scheduleSlaHours * 60 * 60 * 1000;
   const deltaMs = dueAt - Date.now();
   const formattedDuration = formatDuration(Math.abs(deltaMs));
 
@@ -59,11 +60,12 @@ export function fulfillmentSlaBadgeVariant(caseRecord: SpecialtyFulfillmentCase)
     return getFulfillmentSlaStatus(caseRecord) === "breached" ? "warning" : "success";
   }
 
-  if (!caseRecord.clearToFillAt) {
+  const startedAt = getFulfillmentSlaStartedAt(caseRecord);
+  if (!startedAt) {
     return "info";
   }
 
-  return Date.now() <= new Date(caseRecord.clearToFillAt).getTime() + caseRecord.scheduleSlaHours * 60 * 60 * 1000
+  return Date.now() <= new Date(startedAt).getTime() + caseRecord.scheduleSlaHours * 60 * 60 * 1000
     ? "info"
     : "warning";
 }
@@ -185,12 +187,25 @@ export function formatNullableDateTime(value: string | null): string {
 }
 
 function getFulfillmentSlaStatus(caseRecord: SpecialtyFulfillmentCase): SpecialtyRxPlanAuditRow["fulfillmentSlaStatus"] {
-  if (!caseRecord.clearToFillAt || !caseRecord.shipmentScheduledAt) {
+  const startedAt = getFulfillmentSlaStartedAt(caseRecord);
+  if (!startedAt || !caseRecord.shipmentScheduledAt) {
     return "pending";
   }
 
-  const dueAt = new Date(caseRecord.clearToFillAt).getTime() + caseRecord.scheduleSlaHours * 60 * 60 * 1000;
+  const dueAt = new Date(startedAt).getTime() + caseRecord.scheduleSlaHours * 60 * 60 * 1000;
   return new Date(caseRecord.shipmentScheduledAt).getTime() <= dueAt ? "within_sla" : "breached";
+}
+
+function getFulfillmentSlaStartedAt(caseRecord: SpecialtyFulfillmentCase): string | null {
+  if (typeof caseRecord.fulfillmentSlaStartedAt === "string") {
+    return caseRecord.fulfillmentSlaStartedAt;
+  }
+
+  if (caseRecord.state === "intake_triage") {
+    return null;
+  }
+
+  return caseRecord.clearToFillAt ?? caseRecord.updatedAt ?? caseRecord.intakeStartedAt;
 }
 
 function formatDuration(milliseconds: number): string {

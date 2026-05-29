@@ -97,6 +97,7 @@ export interface SpecialtyRxPlanAuditRow {
   requestType: "pharmacy_benefit";
   serviceLabel: string;
   state: SpecialtyFulfillmentCase["state"];
+  fulfillmentSlaStartedAt: string | null;
   clearToFillAt: string | null;
   shipmentScheduledAt: string | null;
   deliveryConfirmedAt: string | null;
@@ -125,7 +126,11 @@ export interface SpecialtyRxPlanAuditRow {
 export interface SpecialtyRxWorkflow {
   listWorkqueue(): Promise<SpecialtyFulfillmentCase[]>;
   listPlanRows(): Promise<SpecialtyRxPlanAuditRow[]>;
-  completeIntake(fulfillmentCaseId: string, input: CompleteIntakeInput): Promise<SpecialtyFulfillmentCase>;
+  completeIntake(
+    fulfillmentCaseId: string,
+    input: CompleteIntakeInput,
+    now?: Date
+  ): Promise<SpecialtyFulfillmentCase>;
   clearToFill(
     fulfillmentCaseId: string,
     input: ClearToFillInput,
@@ -150,7 +155,7 @@ export const SCHEDULE_SLA_HOURS = 24 as const;
 
 const SPECIALTY_POLICY_CONTROLS = [
   "Approved pharmacy benefit PA linked",
-  "Clear-to-fill timestamp starts Fulfillment SLA",
+  "Intake completion starts Fulfillment SLA",
   "Fulfillment SLA met by shipment scheduling",
   "Delivery confirmation recorded as closure evidence",
   "External blockers excluded from pharmacy reward"
@@ -222,7 +227,7 @@ export function createSpecialtyRxWorkflow(
         )
       );
     },
-    async completeIntake(fulfillmentCaseId, input) {
+    async completeIntake(fulfillmentCaseId, input, now = new Date()) {
       const caseRecord = await getCase(fulfillmentCaseId);
       if (caseRecord.state !== "intake_triage") {
         throw new Error(`SPECIALTY_RX_INVALID_STATE:${caseRecord.state}`);
@@ -236,9 +241,11 @@ export function createSpecialtyRxWorkflow(
         throw new Error("SPECIALTY_RX_INTAKE_INCOMPLETE");
       }
 
+      const timestamp = now.toISOString();
       const updated = {
         ...caseRecord,
         state: "clear_to_fill" as const,
+        fulfillmentSlaStartedAt: timestamp,
         intake: {
           approvedPaLinked: true,
           prescriptionPresent: input.prescriptionPresent,
@@ -246,7 +253,7 @@ export function createSpecialtyRxWorkflow(
           therapyMetadataPresent: input.therapyMetadataPresent,
           handoffDataComplete: input.handoffDataComplete
         },
-        updatedAt: new Date().toISOString()
+        updatedAt: timestamp
       };
       await caseStore.saveCase(updated);
       return updated;
@@ -393,6 +400,7 @@ function buildCaseFromApprovedRequest(request: UMRequest): SpecialtyFulfillmentC
     state: "intake_triage",
     paApprovalReceivedAt: timestamp,
     intakeStartedAt: timestamp,
+    fulfillmentSlaStartedAt: null,
     clearToFillAt: null,
     shipmentScheduledAt: null,
     deliveryConfirmedAt: null,
@@ -468,7 +476,7 @@ async function settleFulfillment(
     planId: evidence.planId,
     providerId: evidence.pharmacyId,
     requestType: evidence.requestType,
-    submittedAt: caseRecord.clearToFillAt ?? caseRecord.paApprovalReceivedAt
+    submittedAt: caseRecord.fulfillmentSlaStartedAt ?? caseRecord.clearToFillAt ?? caseRecord.paApprovalReceivedAt
   });
 
   if (policies.length === 0) {
@@ -833,10 +841,15 @@ function buildBaseRow(caseRecord: SpecialtyFulfillmentCase): SpecialtyRxPlanAudi
     requestType: "pharmacy_benefit",
     serviceLabel: caseRecord.serviceLabel,
     state: caseRecord.state,
+    fulfillmentSlaStartedAt: caseRecord.fulfillmentSlaStartedAt,
     clearToFillAt: caseRecord.clearToFillAt,
     shipmentScheduledAt: caseRecord.shipmentScheduledAt,
     deliveryConfirmedAt: caseRecord.deliveryConfirmedAt,
-    fulfillmentSlaStatus: buildSlaStatus(caseRecord.clearToFillAt, caseRecord.shipmentScheduledAt, caseRecord.scheduleSlaHours),
+    fulfillmentSlaStatus: buildSlaStatus(
+      caseRecord.fulfillmentSlaStartedAt,
+      caseRecord.shipmentScheduledAt,
+      caseRecord.scheduleSlaHours
+    ),
     businessPolicyStatus: null,
     paymentPolicyStatus: null,
     incentiveStatus: "pending",
@@ -867,13 +880,18 @@ function buildSpecialtyRxEvidence(caseRecord: SpecialtyFulfillmentCase): Special
     requestType: caseRecord.requestType,
     paOutcomeStatus: "approved",
     state: caseRecord.state,
+    fulfillmentSlaStartedAt: caseRecord.fulfillmentSlaStartedAt,
     clearToFillAt: caseRecord.clearToFillAt,
     shipmentScheduledAt: caseRecord.shipmentScheduledAt,
     deliveryConfirmedAt: caseRecord.deliveryConfirmedAt,
     scheduleSlaHours: caseRecord.scheduleSlaHours,
     intakeComplete: Object.values(caseRecord.intake).every(Boolean),
     clearToFillComplete: isClearToFillEvidenceComplete(caseRecord),
-    shipmentScheduledWithinSla: isWithinSla(caseRecord.clearToFillAt, caseRecord.shipmentScheduledAt, caseRecord.scheduleSlaHours),
+    shipmentScheduledWithinSla: isWithinSla(
+      caseRecord.fulfillmentSlaStartedAt,
+      caseRecord.shipmentScheduledAt,
+      caseRecord.scheduleSlaHours
+    ),
     remsRequired: caseRecord.clearToFill.remsRequired,
     remsAuthorizationConfirmed: caseRecord.clearToFill.remsAuthorizationConfirmed,
     coldChainRequired: caseRecord.fulfillment.externalBlockerDocumented ? false : caseRecord.shipment.coldChainRequired,

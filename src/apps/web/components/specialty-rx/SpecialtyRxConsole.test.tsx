@@ -37,6 +37,7 @@ describe("SpecialtyRxWorkflowModal", () => {
         caseRecord: {
           ...buildSpecialtyFulfillmentCase(),
           state: "shipment_scheduled",
+          fulfillmentSlaStartedAt: "2026-05-28T15:00:00.000Z",
           clearToFillAt: "2026-05-28T15:00:00.000Z",
           shipmentScheduledAt: "2026-05-28T16:00:00.000Z"
         },
@@ -58,7 +59,8 @@ describe("SpecialtyRxWorkflowModal", () => {
         caseRecord: {
           ...buildSpecialtyFulfillmentCase(),
           state: "clear_to_fill",
-          clearToFillAt: "2026-05-28T15:00:00.000Z"
+          fulfillmentSlaStartedAt: "2026-05-28T15:00:00.000Z",
+          clearToFillAt: null
         },
         onClose: () => undefined,
         onUpdated: () => undefined
@@ -69,6 +71,7 @@ describe("SpecialtyRxWorkflowModal", () => {
         caseRecord: {
           ...buildSpecialtyFulfillmentCase(),
           state: "shipment_scheduled",
+          fulfillmentSlaStartedAt: "2026-05-28T15:00:00.000Z",
           clearToFillAt: "2026-05-28T15:00:00.000Z"
         },
         onClose: () => undefined,
@@ -91,6 +94,7 @@ describe("SpecialtyRxWorkflowModal", () => {
         caseRecord: {
           ...buildSpecialtyFulfillmentCase(),
           state: "shipment_scheduled",
+          fulfillmentSlaStartedAt: "2026-05-28T15:00:00.000Z",
           clearToFillAt: "2026-05-28T15:00:00.000Z"
         },
         onClose: () => undefined,
@@ -166,6 +170,7 @@ function buildSpecialtyFulfillmentCase(): SpecialtyFulfillmentCase {
     state: "intake_triage",
     paApprovalReceivedAt: "2026-05-28T15:00:00.000Z",
     intakeStartedAt: "2026-05-28T15:05:00.000Z",
+    fulfillmentSlaStartedAt: null,
     clearToFillAt: null,
     shipmentScheduledAt: null,
     deliveryConfirmedAt: null,
