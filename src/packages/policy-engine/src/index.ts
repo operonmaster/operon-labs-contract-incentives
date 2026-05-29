@@ -44,11 +44,20 @@ export interface IncentivePolicy {
     requiresDtrCompletionWhenRequested: boolean;
     requiresDeterminationWithinSla?: boolean;
     requiresClinicalReviewCompletion?: boolean;
+    requiresShipmentScheduledWithinSla?: boolean;
+    requiresDeliveryConfirmedWithinSla?: boolean;
+    requiresColdChainEvidenceWhenRequired?: boolean;
+    requiresRemsAuthorizationWhenRequired?: boolean;
+    prohibitsAvoidableFulfillmentException?: boolean;
   };
   payout: {
     token: TokenSymbol;
     amountPerEligibleRequest: number;
     monthlyCap: number;
+    coldChainHandlingAddOn?: {
+      amount: number;
+      maxPerRequest: number;
+    };
   };
   settlement: {
     mode: SettlementMode;
@@ -89,6 +98,10 @@ export function evaluatePolicy(input: EvaluatePolicyInput): PolicyEvaluationResu
 
   if (policy.evaluationType === "delegate_um_sla_bonus") {
     return evaluateDelegateUmSlaPolicy(input);
+  }
+
+  if (policy.evaluationType === "specialty_rx_fulfillment_sla") {
+    return evaluateSpecialtyRxFulfillmentPolicy(input);
   }
 
   if (request.evaluationType !== policy.evaluationType) {
@@ -255,16 +268,160 @@ function evaluateDelegateUmSlaPolicy(input: EvaluatePolicyInput): PolicyEvaluati
   });
 }
 
+function evaluateSpecialtyRxFulfillmentPolicy(input: EvaluatePolicyInput): PolicyEvaluationResult {
+  const { policy, request, monthToDateAmount } = input;
+  const reasonCodes: string[] = [];
+  const token = policy.payout.token;
+
+  if (request.requestObject.externalBlockerDocumented === true) {
+    return result({
+      decision: "not_applicable",
+      policy,
+      reasonCodes: ["EXTERNAL_BLOCKER_DOCUMENTED"],
+      token
+    });
+  }
+
+  if (request.evaluationType !== policy.evaluationType) {
+    reasonCodes.push("EVALUATION_TYPE_MISMATCH");
+  }
+
+  if (policy.status !== "active") {
+    reasonCodes.push("POLICY_INACTIVE");
+  }
+
+  if (request.requestObject.planId !== policy.contractPair.planId) {
+    reasonCodes.push("PLAN_NOT_IN_CONTRACT");
+  }
+
+  if (request.submitter.id !== policy.contractPair.providerId || request.requestObject.pharmacyId !== policy.contractPair.providerId) {
+    reasonCodes.push("SPECIALTY_PHARMACY_NOT_IN_CONTRACT");
+  }
+
+  const requestType = String(request.requestObject.requestType ?? "");
+  const excludedRequestTypes = policy.incentiveScope.excludedRequestTypes ?? [];
+  const eligibleRequestTypes = policy.incentiveScope.eligibleRequestTypes ?? [];
+  if (excludedRequestTypes.includes(requestType)) {
+    reasonCodes.push("REQUEST_TYPE_EXCLUDED");
+  } else if (eligibleRequestTypes.length > 0 && !eligibleRequestTypes.includes(requestType)) {
+    reasonCodes.push("REQUEST_TYPE_NOT_ELIGIBLE");
+  }
+
+  if (request.requestObject.paOutcomeStatus !== "approved") {
+    reasonCodes.push("LINKED_PA_NOT_APPROVED");
+  }
+
+  if (request.requestObject.state !== "fulfilled") {
+    reasonCodes.push("FULFILLMENT_NOT_COMPLETE");
+  }
+
+  if (request.requestObject.intakeComplete !== true) {
+    reasonCodes.push("INTAKE_INCOMPLETE");
+  }
+
+  if (request.requestObject.clearToFillComplete !== true || typeof request.requestObject.clearToFillAt !== "string") {
+    reasonCodes.push("CLEAR_TO_FILL_INCOMPLETE");
+  }
+
+  if (policy.eligibilityCriteria.requiresShipmentScheduledWithinSla && request.requestObject.shipmentScheduledWithinSla !== true) {
+    reasonCodes.push("SHIPMENT_SLA_EXCEEDED");
+  }
+
+  if (policy.eligibilityCriteria.requiresDeliveryConfirmedWithinSla && request.requestObject.deliveryConfirmedWithinSla !== true) {
+    reasonCodes.push("DELIVERY_SLA_EXCEEDED");
+  }
+
+  if (
+    policy.eligibilityCriteria.requiresColdChainEvidenceWhenRequired &&
+    request.requestObject.coldChainRequired === true &&
+    (request.requestObject.coldChainPackoutValidated !== true || request.requestObject.temperatureLogValid !== true)
+  ) {
+    reasonCodes.push("COLD_CHAIN_EVIDENCE_INVALID");
+  }
+
+  if (
+    policy.eligibilityCriteria.requiresRemsAuthorizationWhenRequired &&
+    request.requestObject.remsRequired === true &&
+    request.requestObject.remsAuthorizationConfirmed !== true
+  ) {
+    reasonCodes.push("REMS_AUTHORIZATION_MISSING");
+  }
+
+  if (policy.eligibilityCriteria.prohibitsAvoidableFulfillmentException && request.requestObject.avoidableFulfillmentException === true) {
+    reasonCodes.push("AVOIDABLE_FULFILLMENT_EXCEPTION");
+  }
+
+  if (request.requestObject.drugChoiceMetricUsed === true) {
+    reasonCodes.push("PROHIBITED_DRUG_CHOICE_METRIC");
+  }
+
+  if (request.requestObject.fillVolumeMetricUsed === true) {
+    reasonCodes.push("PROHIBITED_FILL_VOLUME_METRIC");
+  }
+
+  if (request.requestObject.pharmacySteeringMetricUsed === true) {
+    reasonCodes.push("PROHIBITED_PHARMACY_STEERING_METRIC");
+  }
+
+  if (request.requestObject.patientAdherenceMetricUsed === true) {
+    reasonCodes.push("PROHIBITED_PATIENT_ADHERENCE_METRIC");
+  }
+
+  if (request.requestObject.containsPhi === true) {
+    reasonCodes.push("PHI_IN_PAYMENT_METADATA");
+  }
+
+  const amount = specialtyRxFulfillmentAmount(policy, request);
+  if (monthToDateAmount + amount > policy.payout.monthlyCap) {
+    reasonCodes.push("MONTHLY_CAP_EXCEEDED");
+  }
+
+  const blocked = reasonCodes.length > 0;
+  if (!blocked && (policy.settlement.mode === "manual" || policy.settlement.requiresHumanApproval)) {
+    return result({
+      decision: "manual_review",
+      policy,
+      reasonCodes: ["MANUAL_REVIEW_REQUIRED"],
+      token
+    });
+  }
+
+  return result({
+    decision: blocked ? "blocked" : "approved",
+    policy,
+    reasonCodes,
+    token,
+    amountOverride: amount
+  });
+}
+
+function specialtyRxFulfillmentAmount(policy: IncentivePolicy, request: EvaluationRequest): number {
+  const baseAmount = policy.payout.amountPerEligibleRequest;
+  const addOn = policy.payout.coldChainHandlingAddOn;
+  if (
+    !addOn ||
+    request.requestObject.coldChainRequired !== true ||
+    request.requestObject.coldChainPackoutValidated !== true ||
+    request.requestObject.temperatureLogValid !== true
+  ) {
+    return baseAmount;
+  }
+
+  return Math.min(baseAmount + addOn.amount, addOn.maxPerRequest);
+}
+
 function result({
   decision,
   policy,
   reasonCodes,
-  token
+  token,
+  amountOverride
 }: {
   decision: PolicyDecision;
   policy: IncentivePolicy;
   reasonCodes: string[];
   token: TokenSymbol;
+  amountOverride?: number;
 }): PolicyEvaluationResult {
   const approved = decision === "approved";
 
@@ -272,7 +429,7 @@ function result({
     decision,
     policyId: policy.policyId,
     policyVersion: policy.version,
-    amount: approved ? policy.payout.amountPerEligibleRequest : 0,
+    amount: approved ? (amountOverride ?? policy.payout.amountPerEligibleRequest) : 0,
     currency: token,
     settlementToken: {
       symbol: token
