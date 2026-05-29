@@ -4,6 +4,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { SpecialtyFulfillmentCase } from "../../lib/specialty-rx-store";
+import { formatNullableDateTime } from "./specialty-rx-formatters";
 import { SpecialtyRxWorkflowModal } from "./SpecialtyRxWorkflowModal";
 
 describe("SpecialtyRxWorkflowModal", () => {
@@ -20,6 +21,42 @@ describe("SpecialtyRxWorkflowModal", () => {
     expect(markup).toContain("Clear To Fill");
     expect(markup).toContain("Schedule Shipment");
     expect(markup).toContain("Confirm Fulfillment");
+  });
+
+  it("marks the active workflow step for assistive technology", () => {
+    const markup = renderToStaticMarkup(
+      createElement(SpecialtyRxWorkflowModal, {
+        caseRecord: buildSpecialtyFulfillmentCase(),
+        onClose: () => undefined,
+        onUpdated: () => undefined
+      })
+    );
+
+    expect(markup).toContain('aria-label="Specialty fulfillment workflow steps"');
+    expect(markup.match(/aria-current="step"/g)).toHaveLength(1);
+    expect(markup).toContain('class="active" aria-current="step"');
+  });
+});
+
+describe("formatNullableDateTime", () => {
+  it("formats null dates as pending", () => {
+    expect(formatNullableDateTime(null)).toBe("Pending");
+  });
+
+  it("formats valid date strings", () => {
+    const value = "2026-05-28T15:05:00.000Z";
+    const expected = new Intl.DateTimeFormat("en-US", {
+      day: "2-digit",
+      hour: "numeric",
+      minute: "2-digit",
+      month: "short"
+    }).format(new Date(value));
+
+    expect(formatNullableDateTime(value)).toBe(expected);
+  });
+
+  it("formats malformed date strings as invalid date", () => {
+    expect(formatNullableDateTime("not-a-date")).toBe("Invalid date");
   });
 });
 

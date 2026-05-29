@@ -102,9 +102,13 @@ export function SpecialtyRxWorkflowModal({ caseRecord, onClose, onUpdated }: Spe
           </button>
         </div>
 
-        <ol className="stepper compact-stepper specialty-rx-stepper">
+        <ol className="stepper compact-stepper specialty-rx-stepper" aria-label="Specialty fulfillment workflow steps">
           {workflowSteps.map((step, index) => (
-            <li className={index < activeStepIndex ? "done" : index === activeStepIndex ? "active" : ""} key={step.id}>
+            <li
+              className={index < activeStepIndex ? "done" : index === activeStepIndex ? "active" : ""}
+              aria-current={index === activeStepIndex ? "step" : undefined}
+              key={step.id}
+            >
               <strong>{index + 1}</strong>
               <span>{step.label}</span>
             </li>
