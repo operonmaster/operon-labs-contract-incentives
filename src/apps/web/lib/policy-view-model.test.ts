@@ -9,7 +9,8 @@ import {
   buildProviderDocumentationBusinessPolicyCards,
   policyBoundaryStatement,
   policyRoutePath,
-  providerDocumentationBusinessPolicyType
+  providerDocumentationBusinessPolicyType,
+  specialtyRxFulfillmentBusinessPolicyType
 } from "./policy-view-model";
 
 describe("policy view model", () => {
@@ -183,6 +184,19 @@ describe("policy view model", () => {
     expect(outpatientCard.detailSections.flatMap((section) => section.items)).toContain("Eligible request types: Outpatient Service (outpatient_service)");
   });
 
+  it("builds specialty Rx fulfillment SLA business policy cards", () => {
+    const cards = Object.values(defaultIncentivePolicies)
+      .filter((policy) => policy.evaluationType === specialtyRxFulfillmentBusinessPolicyType)
+      .flatMap(buildBusinessPolicyCards);
+
+    expect(cards).toHaveLength(1);
+    expect(cards[0]?.title).toBe("Specialty Rx Fulfillment SLA");
+    expect(cards[0]?.detailSections.flatMap((section) => section.items).join(" ")).toContain("Cold-chain evidence");
+    expect(cards[0]?.detailSections.flatMap((section) => section.items)).toContain(
+      "No avoidable fulfillment exception: Yes"
+    );
+  });
+
   it("lists plan-level payment policies separately from business eligibility", () => {
     expect(policyBoundaryStatement).toBe(
       "Business contract policies describe plan/provider incentive agreements. Payment policies are plan-level Hedera Agent Kit settlement guardrails before any approved payment leaves the treasury."
@@ -199,7 +213,7 @@ describe("policy view model", () => {
     expect(summaries[0].previewItems).toEqual([
       { label: "Plan", value: "Acme Health PPO" },
       { label: "Token", value: "HBAR" },
-      { label: "Max payment", value: "5 HBAR" },
+      { label: "Max payment", value: "7 HBAR" },
       { label: "Business attestation", value: "Enabled" },
       { label: "Duplicate prevention", value: "Enabled" },
       { label: "Envelope integrity", value: "Enabled" }
@@ -219,7 +233,7 @@ describe("policy view model", () => {
         "Duplicate payment prevention: Enabled",
         "Payment envelope integrity: Enabled",
         "Payment token: HBAR",
-        "Max payment per request: 5 HBAR"
+        "Max payment per request: 7 HBAR"
       ])
     );
     expect(summaries[0].detailSections.flatMap((section) => section.items)).not.toContain("Status: Active");

@@ -25,7 +25,9 @@ src/
 - `/provider-documentation` - provider documentation completeness incentive
 - `/provider-documentation/incentives` - health-plan audit console for provider documentation incentives
 - `/appeals` - appeals packet quality incentive
-- `/provider-directory` - provider directory quality incentive
+- `/specialty-rx` - specialty pharmacy fulfillment SLA workflow
+- `/specialty-rx/plan` - health-plan audit console for specialty fulfillment incentives
+- `/specialty-rx/policies` - specialty fulfillment business and payment policy catalog
 
 ### Provider Documentation Two-Page Demo
 

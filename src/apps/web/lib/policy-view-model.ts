@@ -33,8 +33,10 @@ export const policyBoundaryStatement =
 
 export const providerDocumentationBusinessPolicyType = "provider_documentation_completeness";
 export const delegateUmSlaBonusBusinessPolicyType = "delegate_um_sla_bonus";
+export const specialtyRxFulfillmentBusinessPolicyType = "specialty_rx_fulfillment_sla";
 const providerDocumentationBusinessPolicyTitle = "Provider Documentation Completeness";
 const delegateUmSlaBonusBusinessPolicyTitle = "Delegate UM SLA Bonus";
+const specialtyRxFulfillmentBusinessPolicyTitle = "Specialty Rx Fulfillment SLA";
 const delegateUmSlaHours = 24;
 
 export function buildBusinessPolicyCards(policy: IncentivePolicy | null | undefined): PolicySummary[] {
@@ -48,6 +50,10 @@ export function buildBusinessPolicyCards(policy: IncentivePolicy | null | undefi
 
   if (policy.evaluationType === delegateUmSlaBonusBusinessPolicyType) {
     return buildDelegateUmSlaBonusBusinessPolicyCards(policy);
+  }
+
+  if (policy.evaluationType === specialtyRxFulfillmentBusinessPolicyType) {
+    return buildSpecialtyRxFulfillmentBusinessPolicyCards(policy);
   }
 
   return [];
@@ -111,6 +117,38 @@ function buildDelegateUmSlaBonusBusinessPolicyCards(policy: IncentivePolicy): Po
         { label: "Payout", value: `${policy.payout.amountPerEligibleRequest} ${token}` }
       ],
       detailSections: buildDelegateUmSlaBonusDetailSections(policy, token)
+    }
+  ];
+}
+
+function buildSpecialtyRxFulfillmentBusinessPolicyCards(policy: IncentivePolicy): PolicySummary[] {
+  const token = policy.payout.token;
+  const status = policy.status === "active" ? "Active" : "Disabled";
+
+  return [
+    {
+      id: policy.policyId,
+      title: specialtyRxFulfillmentBusinessPolicyTitle,
+      category: "business",
+      source: "Plan/specialty pharmacy contract policy",
+      appliesTo: specialtyRxFulfillmentBusinessPolicyTitle,
+      payoutOrControl: `${policy.payout.amountPerEligibleRequest} ${token} per eligible fulfillment case`,
+      status,
+      summary: "Specialty Rx fulfillment SLA incentive for contracted post-approval fulfillment execution.",
+      previewItems: [
+        { label: "Policy ID", value: policy.policyId },
+        { label: "Plan", value: policy.contractPair.planName },
+        { label: "Pharmacy", value: policy.contractPair.providerName },
+        requestTypePreview(policy),
+        { label: "Payout", value: `${policy.payout.amountPerEligibleRequest} ${token}` },
+        {
+          label: "Cold-chain add-on",
+          value: policy.payout.coldChainHandlingAddOn
+            ? `${policy.payout.coldChainHandlingAddOn.amount} ${token}`
+            : "none"
+        }
+      ],
+      detailSections: buildSpecialtyRxFulfillmentDetailSections(policy, token)
     }
   ];
 }
@@ -311,6 +349,58 @@ function buildDelegateUmSlaBonusDetailSections(policy: IncentivePolicy, token: s
   ];
 }
 
+function buildSpecialtyRxFulfillmentDetailSections(policy: IncentivePolicy, token: string): PolicyDetailSection[] {
+  return [
+    {
+      title: "Policy identity",
+      items: [
+        `Policy ID: ${policy.policyId}`,
+        `Version: ${policy.version}`,
+        `Evaluation type: ${policy.evaluationType}`,
+        "Storage collection: incentivePolicies"
+      ]
+    },
+    {
+      title: "Contract pair",
+      items: [
+        `Plan: ${policy.contractPair.planName} (${policy.contractPair.planId})`,
+        `Pharmacy: ${policy.contractPair.providerName} (${policy.contractPair.providerId})`,
+        `Effective from: ${policy.effectivePeriod.startsOn}`,
+        `Effective through: ${policy.effectivePeriod.endsOn ?? "none"}`
+      ]
+    },
+    {
+      title: "Incentive scope",
+      items: requestTypeDetailItems(policy)
+    },
+    {
+      title: "Eligibility criteria",
+      items: specialtyRxCriteriaDetailItems(policy)
+    },
+    {
+      title: "Payout",
+      items: [
+        `Amount per eligible request: ${policy.payout.amountPerEligibleRequest} ${token}`,
+        `Monthly cap: ${policy.payout.monthlyCap} ${token}`,
+        `Cold-chain handling add-on: ${
+          policy.payout.coldChainHandlingAddOn
+            ? `${policy.payout.coldChainHandlingAddOn.amount} ${token}, max ${policy.payout.coldChainHandlingAddOn.maxPerRequest} ${token} per request`
+            : "none"
+        }`,
+        `Token: ${token}`
+      ]
+    },
+    {
+      title: "Settlement",
+      items: [
+        `Settlement mode: ${formatSettlementMode(policy.settlement.mode)}`,
+        `Recipient wallet ID: ${policy.settlement.recipientWalletId}`,
+        `Human approval required: ${formatBoolean(policy.settlement.requiresHumanApproval)}`
+      ]
+    }
+  ];
+}
+
 function requestTypeDetailItems(policy: IncentivePolicy): string[] {
   if (policy.incentiveScope.eligibleRequestTypes?.length) {
     return [`Eligible request types: ${policy.incentiveScope.eligibleRequestTypes.map(formatRequestTypeWithCode).join(", ")}`];
@@ -333,6 +423,24 @@ function serviceCodeDetailItems(policy: IncentivePolicy): string[] {
   }
 
   return ["Service codes: none"];
+}
+
+function specialtyRxCriteriaDetailItems(policy: IncentivePolicy): string[] {
+  const labels = {
+    requiresShipmentScheduledWithinSla: "Shipment scheduled within SLA",
+    requiresDeliveryConfirmedWithinSla: "Delivery confirmed within SLA",
+    requiresColdChainEvidenceWhenRequired: "Cold-chain evidence required when applicable",
+    requiresRemsAuthorizationWhenRequired: "REMS authorization required when applicable",
+    prohibitsAvoidableFulfillmentException: "No avoidable fulfillment exception"
+  } as const;
+
+  return [
+    `${labels.requiresShipmentScheduledWithinSla}: ${formatBoolean(Boolean(policy.eligibilityCriteria.requiresShipmentScheduledWithinSla))}`,
+    `${labels.requiresDeliveryConfirmedWithinSla}: ${formatBoolean(Boolean(policy.eligibilityCriteria.requiresDeliveryConfirmedWithinSla))}`,
+    `${labels.requiresColdChainEvidenceWhenRequired}: ${formatBoolean(Boolean(policy.eligibilityCriteria.requiresColdChainEvidenceWhenRequired))}`,
+    `${labels.requiresRemsAuthorizationWhenRequired}: ${formatBoolean(Boolean(policy.eligibilityCriteria.requiresRemsAuthorizationWhenRequired))}`,
+    `${labels.prohibitsAvoidableFulfillmentException}: ${formatBoolean(Boolean(policy.eligibilityCriteria.prohibitsAvoidableFulfillmentException))}`
+  ];
 }
 
 function formatBoolean(value: boolean): "Yes" | "No" {

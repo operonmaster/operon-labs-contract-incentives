@@ -144,32 +144,24 @@ Incentive trigger:
 
 - appeal packet is complete, timely, and audit-ready
 
-### Demo App 4: Provider Directory Data Quality
+### Demo App 3: Specialty Rx Fulfillment SLA
 
-Business purpose: reward provider groups or roster vendors for accurate, validated provider directory updates.
+Business purpose: reward a contracted specialty pharmacy for clean post-approval fulfillment execution after an approved pharmacy prior authorization.
 
-Submitter:
+Workflow:
 
-- provider group admin team, credentialing vendor, or roster-management vendor
+1. Intake & Triage
+2. Clear To Fill
+3. Schedule Shipment
+4. Confirm Fulfillment
 
-Policy evaluates:
+Policy guardrails:
 
-- submitted before monthly deadline
-- NPI validation passed
-- TIN validation passed
-- address validation passed
-- specialty validation passed
-- accepting-new-patients flag present
-- location phone present
-- duplicate record count below threshold
-- correction rate below threshold
-- payment not tied to referral volume
-- payment not tied to network steering
-- no PHI on-chain or in payment metadata
-
-Incentive trigger:
-
-- provider directory update is accurate, complete, and timely
+- incentive starts from clear-to-fill execution readiness
+- no drug-choice, fill-volume, adherence, savings, or pharmacy-steering payout basis
+- cold-chain add-on is a handling complexity adjustment
+- external blockers are separated from avoidable pharmacy exceptions
+- no PHI appears in settlement metadata
 
 ## Policy Model
 
@@ -308,7 +300,7 @@ Recommended demo flow:
    - Delegate UM SLA Bonus
    - Provider Documentation Completeness
    - Appeals Packet Quality
-   - Provider Directory Data Quality
+   - Specialty Rx Fulfillment SLA
 3. Demo app shows a synthetic work item and evidence object.
 4. User submits the evidence object for evaluation.
 5. Agent identifies the matching policy.
@@ -356,7 +348,7 @@ operon-labs-contract-incentives/
     delegate-um/
     provider-documentation/
     appeals/
-    provider-directory/
+    specialty-rx/
   docs/
     architecture.md
     policy-model.md
