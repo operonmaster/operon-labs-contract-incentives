@@ -102,7 +102,7 @@ describe("provider documentation workflow", () => {
       paymentPolicyControls: expect.arrayContaining([
         expect.objectContaining({ id: "businessEvaluationAttestation", label: "Business evaluation attestation", status: "passed" }),
         expect.objectContaining({ id: "paymentToken", label: "Payment token", status: "passed", expected: "HBAR", actual: "HBAR" }),
-        expect.objectContaining({ id: "maxPaymentPerRequest", label: "Max payment per request", status: "passed", expected: "<= 5 HBAR", actual: "5 HBAR" }),
+        expect.objectContaining({ id: "maxPaymentPerRequest", label: "Max payment per request", status: "passed", expected: "<= 7 HBAR", actual: "5 HBAR" }),
         expect.objectContaining({ id: "duplicatePaymentPrevention", label: "Duplicate payment prevention", status: "passed" }),
         expect.objectContaining({ id: "paymentEnvelopeIntegrity", label: "Payment envelope integrity", status: "passed" })
       ])
@@ -187,7 +187,7 @@ describe("provider documentation workflow", () => {
         businessEvaluationAttestation: true,
         duplicatePaymentPrevention: true,
         paymentToken: "HBAR",
-        maxPaymentAmount: 5
+        maxPaymentAmount: 7
       })
     });
     const businessEvaluationStore = executePolicyBoundPaymentMock.mock.calls[0]![1]!.businessEvaluationStore;
@@ -743,7 +743,7 @@ describe("provider documentation workflow", () => {
       expect.objectContaining({
         planPolicy: expect.objectContaining({
           planId: "summit-health-hmo",
-          maxPaymentAmount: 5
+          maxPaymentAmount: 7
         })
       })
     );
@@ -777,7 +777,7 @@ describe("provider documentation workflow", () => {
         expect.objectContaining({
           id: "maxPaymentPerRequest",
           status: "failed",
-          expected: "<= 5 HBAR",
+          expected: "<= 7 HBAR",
           actual: "20 HBAR",
           failureCode: "HEDERA_PAYMENT_AMOUNT_EXCEEDS_PLAN_MAX"
         }),

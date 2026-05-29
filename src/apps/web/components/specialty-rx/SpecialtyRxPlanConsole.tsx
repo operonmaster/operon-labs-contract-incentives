@@ -67,15 +67,15 @@ export function SpecialtyRxPlanConsole({
 
       setRows(payload.rows);
       setSelectedFulfillmentCaseId((currentFulfillmentCaseId) => {
+        if (currentFulfillmentCaseId && payload.rows.some((row) => row.fulfillmentCaseId === currentFulfillmentCaseId)) {
+          return currentFulfillmentCaseId;
+        }
+
         if (
           requestedFulfillmentCaseId &&
           payload.rows.some((row) => row.fulfillmentCaseId === requestedFulfillmentCaseId)
         ) {
           return requestedFulfillmentCaseId;
-        }
-
-        if (currentFulfillmentCaseId && payload.rows.some((row) => row.fulfillmentCaseId === currentFulfillmentCaseId)) {
-          return currentFulfillmentCaseId;
         }
 
         return payload.rows[0]?.fulfillmentCaseId ?? null;

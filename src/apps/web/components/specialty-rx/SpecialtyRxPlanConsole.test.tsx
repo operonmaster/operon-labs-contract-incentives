@@ -1,10 +1,30 @@
 import { createElement } from "react";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { SpecialtyRxPlanAuditRow } from "../../lib/specialty-rx-workflow";
 import { SpecialtyRxPlanDetailsModal } from "./SpecialtyRxPlanDetailsModal";
 
 describe("SpecialtyRxPlanConsole", () => {
+  it("keeps an existing selected fulfillment case ahead of the initial deep link on refresh", () => {
+    const source = readFileSync(
+      path.join(process.cwd(), "src/apps/web/components/specialty-rx/SpecialtyRxPlanConsole.tsx"),
+      "utf8"
+    );
+
+    const currentSelectionCheck = source.indexOf(
+      "currentFulfillmentCaseId && payload.rows.some((row) => row.fulfillmentCaseId === currentFulfillmentCaseId)"
+    );
+    const requestedSelectionCheck = source.indexOf(
+      "requestedFulfillmentCaseId &&\n          payload.rows.some((row) => row.fulfillmentCaseId === requestedFulfillmentCaseId)"
+    );
+
+    expect(currentSelectionCheck).toBeGreaterThan(-1);
+    expect(requestedSelectionCheck).toBeGreaterThan(-1);
+    expect(currentSelectionCheck).toBeLessThan(requestedSelectionCheck);
+  });
+
   it("renders specialty fulfillment plan audit details with separated policy sections", () => {
     const markup = renderToStaticMarkup(
       createElement(SpecialtyRxPlanDetailsModal, {

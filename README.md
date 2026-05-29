@@ -46,7 +46,7 @@ Demo sequence:
 6. In the plan console, review the `0 HBAR` policy-blocked row with missing documentation reasons.
 7. Return to the provider portal and submit `Full-body wellness MRI screening` after acknowledging the not-covered warning.
 8. In the plan console, review the `0 HBAR` policy-blocked row with `BENEFIT_NOT_COVERED`.
-9. Select `Andre Williams`, `Summit Health HMO`, and `Knee MRI after injury` to see an approved `20 HBAR` business policy blocked by the plan-level Hedera Agent Kit `5 HBAR` request maximum.
+9. Select `Andre Williams`, `Summit Health HMO`, and `Knee MRI after injury` to see an approved `20 HBAR` business policy blocked by the plan-level Hedera Agent Kit `7 HBAR` request maximum.
 
 ## API Routes
 
@@ -64,7 +64,7 @@ Provider-documentation incentives are triggered asynchronously after `PAS_SUBMIT
 
 ## Hedera Settlement
 
-Provider-documentation incentives are policy-defined: the business policy owns the amount, cap, recipient wallet mapping, and token symbol. Most bootstrapped demo policies compute a `5 HBAR` incentive for eligible provider-documentation requests. The Summit outpatient policy intentionally computes `20 HBAR` so the plan-level Hedera Agent Kit controls can block settlement at the `5 HBAR` per-request maximum.
+Provider-documentation incentives are policy-defined: the business policy owns the amount, cap, recipient wallet mapping, and token symbol. Most bootstrapped demo policies compute a `5 HBAR` incentive for eligible provider-documentation requests. The Summit outpatient policy intentionally computes `20 HBAR` so the plan-level Hedera Agent Kit controls can block settlement because it exceeds the `7 HBAR` per-request maximum.
 
 The policy model can represent `HBAR`, `USDC`, `OPER`, `OPRN`, or another token symbol. Real settlement for non-HBAR tokens requires a future HTS token-transfer executor; those policy evaluations should not be treated as settled until that adapter exists.
 

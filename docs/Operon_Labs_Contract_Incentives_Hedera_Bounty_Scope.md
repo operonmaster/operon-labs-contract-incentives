@@ -69,30 +69,7 @@ The shared layer performs the following steps:
 10. Execute HBAR or USDC payment through Hedera Agent Kit when the policy permits auto-settlement.
 11. Record audit trail: request hash, policy ID/version, decision, reason codes, transaction ID.
 
-### Demo App 1: Delegate UM SLA Bonus
-
-Business purpose: reward delegated UM vendors for timely, complete, audit-ready operational work.
-
-Submitter:
-
-- delegated UM vendor
-
-Policy evaluates:
-
-- SLA met
-- documentation complete
-- quality audit passed
-- no rework required
-- submitter is approved
-- recipient wallet is approved
-- incentive not tied to denial rate, approval rate, medical spend, or avoided utilization
-- no PHI on-chain or in payment metadata
-
-Incentive trigger:
-
-- vendor completed work under contract quality terms
-
-### Demo App 2: Provider Documentation Completeness
+### Demo App 1: Provider Documentation Completeness
 
 Business purpose: reward provider admin teams for submitting complete prior-auth-ready documentation upfront.
 
@@ -118,7 +95,30 @@ Incentive trigger:
 - eligible requests auto-settle on Hedera testnet under the plan's pre-authorized policy guardrails
 - non-covered or incomplete-documentation requests are still submitted, but policy blocks payment and records `0 HBAR`
 
-### Demo App 3: Appeals Packet Quality
+### Demo App 2: Delegate UM SLA Bonus
+
+Business purpose: reward delegated UM vendors for timely, complete, audit-ready operational work.
+
+Submitter:
+
+- delegated UM vendor
+
+Policy evaluates:
+
+- SLA met
+- documentation complete
+- quality audit passed
+- no rework required
+- submitter is approved
+- recipient wallet is approved
+- incentive not tied to denial rate, approval rate, medical spend, or avoided utilization
+- no PHI on-chain or in payment metadata
+
+Incentive trigger:
+
+- vendor completed work under contract quality terms
+
+### Exception Path: Appeals Packet Quality
 
 Business purpose: reward appeals teams for complete, timely, well-rationalized appeal packets.
 
@@ -296,11 +296,11 @@ The hosted demo should make the policy and payment flow obvious.
 Recommended demo flow:
 
 1. User opens the hosted app.
-2. User selects one of four demo apps:
-   - Delegate UM SLA Bonus
+2. User selects one of three normal-path demo apps or the exception path:
    - Provider Documentation Completeness
-   - Appeals Packet Quality
+   - Delegate UM SLA Bonus
    - Specialty Rx Fulfillment SLA
+   - Appeals Packet Quality
 3. Demo app shows a synthetic work item and evidence object.
 4. User submits the evidence object for evaluation.
 5. Agent identifies the matching policy.

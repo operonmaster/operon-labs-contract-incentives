@@ -293,7 +293,7 @@ describe("delegate UM workflow", () => {
           id: "maxPaymentPerRequest",
           label: "Max payment per request",
           status: "passed",
-          expected: "<= 5 HBAR",
+          expected: "<= 7 HBAR",
           actual: "5 HBAR"
         }),
         expect.objectContaining({
@@ -373,7 +373,7 @@ describe("delegate UM workflow", () => {
         expect.objectContaining({
           id: "maxPaymentPerRequest",
           status: "passed",
-          expected: "<= 5 HBAR",
+          expected: "<= 7 HBAR",
           actual: "5 HBAR"
         })
       ])
@@ -920,7 +920,7 @@ function buildPaidDelegateRow(request: UMRequest): DelegatePlanAuditRow {
         id: "maxPaymentPerRequest",
         label: "Max payment per request",
         status: "passed",
-        expected: "<= 5 HBAR",
+        expected: "<= 7 HBAR",
         actual: "5 HBAR"
       },
       {
