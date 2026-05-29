@@ -38,6 +38,21 @@ describe("demo policy selection", () => {
     expect(policy).toBeNull();
   });
 
+  it("does not select a specialty rx policy when the submitter and pharmacy disagree", async () => {
+    const request: EvaluationRequest = {
+      ...getDemoEvaluationRequest("specialty_rx_fulfillment_sla"),
+      submitter: { id: "other-specialty-rx" },
+      requestObject: {
+        ...getDemoEvaluationRequest("specialty_rx_fulfillment_sla").requestObject,
+        pharmacyId: "atlas-specialty-rx"
+      }
+    };
+
+    const policy = await findPolicyForEvaluationRequest(request, createInMemoryPolicyStore(defaultIncentivePolicies));
+
+    expect(policy).toBeNull();
+  });
+
   it("selects provider documentation policy by plan, provider, and request type", async () => {
     const request: EvaluationRequest = {
       ...getDemoEvaluationRequest("provider_documentation_completeness"),
