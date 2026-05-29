@@ -27,7 +27,6 @@ const caseRecord: SpecialtyFulfillmentCase = {
   deliveryConfirmedAt: null,
   exceptionRecordedAt: null,
   scheduleSlaHours: 24,
-  deliverySlaHours: 72,
   intake: {
     approvedPaLinked: true,
     prescriptionPresent: true,
@@ -120,6 +119,37 @@ describe("specialty rx case store", () => {
     expect((await store.getPlanRow(row.fulfillmentCaseId))?.paymentPolicyControls[0]).not.toHaveProperty("failureCode");
     await expect(store.listPlanRows()).resolves.toHaveLength(1);
   });
+
+  it("normalizes legacy plan-row SLA fields to fulfillmentSlaStatus without returning deliverySlaStatus", async () => {
+    const firestore = createFakeFirestore();
+    const store = createFirestoreSpecialtyRxCaseStore(
+      { projectId: "operon-labs-nonprod", databaseId: "(default)" },
+      firestore
+    );
+    const legacyRow = {
+      ...buildPlanRow({
+        fulfillmentSlaStatus: undefined as unknown as SpecialtyRxPlanAuditRow["fulfillmentSlaStatus"]
+      }),
+      scheduleSlaStatus: "within_sla",
+      deliverySlaStatus: "breached"
+    };
+
+    await firestore.collection("specialtyRxPlanAuditRows").doc(legacyRow.fulfillmentCaseId).set(legacyRow);
+
+    const row = await store.getPlanRow(legacyRow.fulfillmentCaseId);
+    const [listedRow] = await store.listPlanRows();
+
+    expect(row).toMatchObject({
+      fulfillmentCaseId: legacyRow.fulfillmentCaseId,
+      fulfillmentSlaStatus: "within_sla"
+    });
+    expect(row).not.toHaveProperty("deliverySlaStatus");
+    expect(listedRow).toMatchObject({
+      fulfillmentCaseId: legacyRow.fulfillmentCaseId,
+      fulfillmentSlaStatus: "within_sla"
+    });
+    expect(listedRow).not.toHaveProperty("deliverySlaStatus");
+  });
 });
 
 function buildPlanRow(overrides: Partial<SpecialtyRxPlanAuditRow> = {}): SpecialtyRxPlanAuditRow {
@@ -138,8 +168,7 @@ function buildPlanRow(overrides: Partial<SpecialtyRxPlanAuditRow> = {}): Special
     clearToFillAt: caseRecord.clearToFillAt,
     shipmentScheduledAt: caseRecord.shipmentScheduledAt,
     deliveryConfirmedAt: caseRecord.deliveryConfirmedAt,
-    scheduleSlaStatus: "pending",
-    deliverySlaStatus: "pending",
+    fulfillmentSlaStatus: "pending",
     businessPolicyStatus: null,
     paymentPolicyStatus: null,
     incentiveStatus: "pending",

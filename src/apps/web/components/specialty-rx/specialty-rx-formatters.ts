@@ -16,7 +16,7 @@ export function formatFulfillmentState(state: SpecialtyFulfillmentCase["state"])
   }
 }
 
-export function formatSlaStatus(status: SpecialtyRxPlanAuditRow["scheduleSlaStatus"]): string {
+export function formatSlaStatus(status: SpecialtyRxPlanAuditRow["fulfillmentSlaStatus"]): string {
   switch (status) {
     case "within_sla":
       return "Within SLA";
@@ -133,7 +133,7 @@ export function paymentPolicyStatusBadgeVariant(
 }
 
 export function specialtySlaBadgeVariant(
-  status: SpecialtyRxPlanAuditRow["scheduleSlaStatus"]
+  status: SpecialtyRxPlanAuditRow["fulfillmentSlaStatus"]
 ): "info" | "success" | "warning" | "neutral" {
   if (status === "within_sla") {
     return "success";
@@ -184,7 +184,7 @@ export function formatNullableDateTime(value: string | null): string {
   }).format(date);
 }
 
-function getFulfillmentSlaStatus(caseRecord: SpecialtyFulfillmentCase): SpecialtyRxPlanAuditRow["scheduleSlaStatus"] {
+function getFulfillmentSlaStatus(caseRecord: SpecialtyFulfillmentCase): SpecialtyRxPlanAuditRow["fulfillmentSlaStatus"] {
   if (!caseRecord.clearToFillAt || !caseRecord.shipmentScheduledAt) {
     return "pending";
   }

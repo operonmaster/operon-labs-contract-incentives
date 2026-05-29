@@ -4,12 +4,16 @@ import { createElement } from "react";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SpecialtyFulfillmentCase } from "../../lib/specialty-rx-store";
 import { formatNullableDateTime } from "./specialty-rx-formatters";
 import { SpecialtyRxWorkflowModal } from "./SpecialtyRxWorkflowModal";
 
 describe("SpecialtyRxWorkflowModal", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("renders the fulfillment workflow steps", () => {
     const markup = renderToStaticMarkup(
       createElement(SpecialtyRxWorkflowModal, {
@@ -43,6 +47,59 @@ describe("SpecialtyRxWorkflowModal", () => {
 
     expect(markup).toContain("Fulfillment SLA");
     expect(markup).toContain("Closed - Within SLA");
+  });
+
+  it("shows active Fulfillment SLA time remaining during clear to fill and shipment scheduling", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-28T16:00:00.000Z"));
+
+    const clearToFillMarkup = renderToStaticMarkup(
+      createElement(SpecialtyRxWorkflowModal, {
+        caseRecord: {
+          ...buildSpecialtyFulfillmentCase(),
+          state: "clear_to_fill",
+          clearToFillAt: "2026-05-28T15:00:00.000Z"
+        },
+        onClose: () => undefined,
+        onUpdated: () => undefined
+      })
+    );
+    const scheduleShipmentMarkup = renderToStaticMarkup(
+      createElement(SpecialtyRxWorkflowModal, {
+        caseRecord: {
+          ...buildSpecialtyFulfillmentCase(),
+          state: "shipment_scheduled",
+          clearToFillAt: "2026-05-28T15:00:00.000Z"
+        },
+        onClose: () => undefined,
+        onUpdated: () => undefined
+      })
+    );
+
+    expect(clearToFillMarkup).toContain("Fulfillment SLA");
+    expect(clearToFillMarkup).toContain("23h remaining");
+    expect(scheduleShipmentMarkup).toContain("Fulfillment SLA");
+    expect(scheduleShipmentMarkup).toContain("23h remaining");
+  });
+
+  it("shows breached Fulfillment SLA time while shipment scheduling is still open", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-29T16:30:00.000Z"));
+
+    const markup = renderToStaticMarkup(
+      createElement(SpecialtyRxWorkflowModal, {
+        caseRecord: {
+          ...buildSpecialtyFulfillmentCase(),
+          state: "shipment_scheduled",
+          clearToFillAt: "2026-05-28T15:00:00.000Z"
+        },
+        onClose: () => undefined,
+        onUpdated: () => undefined
+      })
+    );
+
+    expect(markup).toContain("Fulfillment SLA");
+    expect(markup).toContain("Breached by 1h 30m");
   });
 
   it("uses Fulfillment SLA as the workqueue clock column", () => {
@@ -114,7 +171,6 @@ function buildSpecialtyFulfillmentCase(): SpecialtyFulfillmentCase {
     deliveryConfirmedAt: null,
     exceptionRecordedAt: null,
     scheduleSlaHours: 24,
-    deliverySlaHours: 72,
     intake: {
       approvedPaLinked: true,
       prescriptionPresent: false,

@@ -45,7 +45,7 @@ export interface IncentivePolicy {
     requiresDeterminationWithinSla?: boolean;
     requiresClinicalReviewCompletion?: boolean;
     requiresShipmentScheduledWithinSla?: boolean;
-    requiresDeliveryConfirmedWithinSla?: boolean;
+    requiresDeliveryClosureEvidence?: boolean;
     requiresColdChainEvidenceWhenRequired?: boolean;
     requiresRemsAuthorizationWhenRequired?: boolean;
     prohibitsAvoidableFulfillmentException?: boolean;
@@ -370,6 +370,14 @@ function evaluateSpecialtyRxFulfillmentPolicy(input: EvaluatePolicyInput): Polic
     !externalBlockerDocumented
   ) {
     reasonCodes.push("SHIPMENT_SLA_EXCEEDED");
+  }
+
+  if (
+    policy.eligibilityCriteria.requiresDeliveryClosureEvidence &&
+    typeof request.requestObject.deliveryConfirmedAt !== "string" &&
+    !externalBlockerDocumented
+  ) {
+    reasonCodes.push("DELIVERY_CLOSURE_EVIDENCE_MISSING");
   }
 
   const amount = specialtyRxFulfillmentAmount(policy, request);

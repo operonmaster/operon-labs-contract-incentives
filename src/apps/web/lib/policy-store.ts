@@ -673,7 +673,7 @@ function specialtyRxFulfillmentSlaPolicy({
       appliesOnlyToCoveredBenefits: false,
       requiresDtrCompletionWhenRequested: false,
       requiresShipmentScheduledWithinSla: true,
-      requiresDeliveryConfirmedWithinSla: true,
+      requiresDeliveryClosureEvidence: true,
       requiresColdChainEvidenceWhenRequired: true,
       requiresRemsAuthorizationWhenRequired: true,
       prohibitsAvoidableFulfillmentException: true

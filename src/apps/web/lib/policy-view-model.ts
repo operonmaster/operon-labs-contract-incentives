@@ -428,7 +428,7 @@ function serviceCodeDetailItems(policy: IncentivePolicy): string[] {
 function specialtyRxCriteriaDetailItems(policy: IncentivePolicy): string[] {
   const labels = {
     requiresShipmentScheduledWithinSla: "Fulfillment SLA met by shipment scheduling",
-    requiresDeliveryConfirmedWithinSla: "Delivery closure evidence recorded",
+    requiresDeliveryClosureEvidence: "Delivery closure evidence recorded",
     requiresColdChainEvidenceWhenRequired: "Cold-chain evidence required when applicable",
     requiresRemsAuthorizationWhenRequired: "REMS authorization required when applicable",
     prohibitsAvoidableFulfillmentException: "No avoidable fulfillment exception"
@@ -436,7 +436,7 @@ function specialtyRxCriteriaDetailItems(policy: IncentivePolicy): string[] {
 
   return [
     `${labels.requiresShipmentScheduledWithinSla}: ${formatBoolean(Boolean(policy.eligibilityCriteria.requiresShipmentScheduledWithinSla))}`,
-    `${labels.requiresDeliveryConfirmedWithinSla}: ${formatBoolean(Boolean(policy.eligibilityCriteria.requiresDeliveryConfirmedWithinSla))}`,
+    `${labels.requiresDeliveryClosureEvidence}: ${formatBoolean(Boolean(policy.eligibilityCriteria.requiresDeliveryClosureEvidence))}`,
     `${labels.requiresColdChainEvidenceWhenRequired}: ${formatBoolean(Boolean(policy.eligibilityCriteria.requiresColdChainEvidenceWhenRequired))}`,
     `${labels.requiresRemsAuthorizationWhenRequired}: ${formatBoolean(Boolean(policy.eligibilityCriteria.requiresRemsAuthorizationWhenRequired))}`,
     `${labels.prohibitsAvoidableFulfillmentException}: ${formatBoolean(Boolean(policy.eligibilityCriteria.prohibitsAvoidableFulfillmentException))}`

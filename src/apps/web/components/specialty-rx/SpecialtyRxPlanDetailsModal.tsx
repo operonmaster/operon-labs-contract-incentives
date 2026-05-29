@@ -82,8 +82,8 @@ export function SpecialtyRxPlanDetailsModal({ row, onClose }: SpecialtyRxPlanDet
           <div>
             <dt>Fulfillment SLA</dt>
             <dd>
-              <LabsBadge variant={specialtySlaBadgeVariant(row.scheduleSlaStatus)}>
-                {formatSlaStatus(row.scheduleSlaStatus)}
+              <LabsBadge variant={specialtySlaBadgeVariant(row.fulfillmentSlaStatus)}>
+                {formatSlaStatus(row.fulfillmentSlaStatus)}
               </LabsBadge>
             </dd>
           </div>

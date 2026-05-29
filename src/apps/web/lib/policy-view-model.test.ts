@@ -193,7 +193,16 @@ describe("policy view model", () => {
     expect(cards[0]?.title).toBe("Specialty Rx Fulfillment SLA");
     expect(cards[0]?.detailSections.flatMap((section) => section.items).join(" ")).toContain("Cold-chain evidence");
     expect(cards[0]?.detailSections.flatMap((section) => section.items)).toContain(
+      "Delivery closure evidence recorded: Yes"
+    );
+    expect(cards[0]?.detailSections.flatMap((section) => section.items)).toContain(
       "No avoidable fulfillment exception: Yes"
+    );
+    expect(defaultIncentivePolicies.specialty_rx_acme_fulfillment_sla.eligibilityCriteria).toMatchObject({
+      requiresDeliveryClosureEvidence: true
+    });
+    expect(defaultIncentivePolicies.specialty_rx_acme_fulfillment_sla.eligibilityCriteria).not.toHaveProperty(
+      "requiresDeliveryConfirmedWithinSla"
     );
   });
 

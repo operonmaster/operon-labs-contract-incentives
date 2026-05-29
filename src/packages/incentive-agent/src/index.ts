@@ -55,11 +55,9 @@ export interface SpecialtyRxFulfillmentEvidence {
   shipmentScheduledAt: string | null;
   deliveryConfirmedAt: string | null;
   scheduleSlaHours: 24;
-  deliverySlaHours: 72;
   intakeComplete: boolean;
   clearToFillComplete: boolean;
   shipmentScheduledWithinSla: boolean;
-  deliveryConfirmedWithinSla: boolean;
   remsRequired: boolean;
   remsAuthorizationConfirmed: boolean;
   coldChainRequired: boolean;
@@ -254,11 +252,9 @@ export function evaluateSpecialtyRxFulfillmentEvent(
       shipmentScheduledAt: evidence.shipmentScheduledAt,
       deliveryConfirmedAt: evidence.deliveryConfirmedAt,
       scheduleSlaHours: evidence.scheduleSlaHours,
-      deliverySlaHours: evidence.deliverySlaHours,
       intakeComplete: evidence.intakeComplete,
       clearToFillComplete: evidence.clearToFillComplete,
       shipmentScheduledWithinSla: evidence.shipmentScheduledWithinSla,
-      deliveryConfirmedWithinSla: evidence.deliveryConfirmedWithinSla,
       remsRequired: evidence.remsRequired,
       remsAuthorizationConfirmed: evidence.remsAuthorizationConfirmed,
       coldChainRequired: evidence.coldChainRequired,
@@ -413,11 +409,9 @@ const demoRequests: Record<string, EvaluationRequest> = {
       shipmentScheduledAt: "2026-06-19T09:30:00.000Z",
       deliveryConfirmedAt: "2026-06-20T14:00:00.000Z",
       scheduleSlaHours: 24,
-      deliverySlaHours: 72,
       intakeComplete: true,
       clearToFillComplete: true,
       shipmentScheduledWithinSla: true,
-      deliveryConfirmedWithinSla: true,
       remsRequired: false,
       remsAuthorizationConfirmed: true,
       coldChainRequired: true,

@@ -1,5 +1,5 @@
 import type { FirestoreDatabase } from "./pas-persistence";
-import type { SpecialtyRxPlanAuditRow } from "./specialty-rx-workflow";
+import type { SpecialtyRxPlanAuditRow, SpecialtyRxSlaStatus } from "./specialty-rx-workflow";
 
 export type SpecialtyRxStoreBackend = "firestore" | "memory";
 export type SpecialtyFulfillmentState =
@@ -29,7 +29,6 @@ export interface SpecialtyFulfillmentCase {
   deliveryConfirmedAt: string | null;
   exceptionRecordedAt: string | null;
   scheduleSlaHours: 24;
-  deliverySlaHours: 72;
   intake: {
     approvedPaLinked: boolean;
     prescriptionPresent: boolean;
@@ -354,16 +353,65 @@ function isSpecialtyRxPlanAuditRowShape(value: unknown): value is SpecialtyRxPla
   );
 }
 
+type SpecialtyFulfillmentCaseWithLegacyDeliverySla = SpecialtyFulfillmentCase & {
+  deliverySlaHours?: number;
+};
+
 function copyCase(caseRecord: SpecialtyFulfillmentCase): SpecialtyFulfillmentCase {
-  return structuredClone(caseRecord);
+  const clone = structuredClone(caseRecord) as SpecialtyFulfillmentCaseWithLegacyDeliverySla;
+  delete clone.deliverySlaHours;
+
+  return clone;
 }
 
+type SpecialtyRxPlanAuditRowWithLegacySlaFields = SpecialtyRxPlanAuditRow & {
+  scheduleSlaStatus?: SpecialtyRxSlaStatus;
+  deliverySlaStatus?: SpecialtyRxSlaStatus;
+};
+
 function copyPlanRow(row: SpecialtyRxPlanAuditRow): SpecialtyRxPlanAuditRow {
-  return structuredClone(row);
+  const clone = structuredClone(row) as SpecialtyRxPlanAuditRowWithLegacySlaFields;
+  const { scheduleSlaStatus, deliverySlaStatus, ...rowWithoutLegacySlaFields } = clone;
+
+  return {
+    ...rowWithoutLegacySlaFields,
+    fulfillmentSlaStatus:
+      normalizeSlaStatus(clone.fulfillmentSlaStatus) ??
+      normalizeSlaStatus(scheduleSlaStatus) ??
+      inferFulfillmentSlaStatus(clone) ??
+      normalizeSlaStatus(deliverySlaStatus) ??
+      "pending"
+  };
 }
 
 function comparePlanRows(left: SpecialtyRxPlanAuditRow, right: SpecialtyRxPlanAuditRow): number {
   return (right.deliveryConfirmedAt ?? right.fulfillmentCase.updatedAt).localeCompare(
     left.deliveryConfirmedAt ?? left.fulfillmentCase.updatedAt
   );
+}
+
+function normalizeSlaStatus(value: unknown): SpecialtyRxSlaStatus | null {
+  return value === "pending" || value === "within_sla" || value === "breached" || value === "not_applicable"
+    ? value
+    : null;
+}
+
+function inferFulfillmentSlaStatus(row: SpecialtyRxPlanAuditRow): SpecialtyRxSlaStatus | null {
+  if (!row.clearToFillAt) {
+    return "pending";
+  }
+
+  if (!row.shipmentScheduledAt) {
+    return "not_applicable";
+  }
+
+  const slaHours = row.fulfillmentCase.scheduleSlaHours;
+  const dueAt = new Date(row.clearToFillAt).getTime() + slaHours * 60 * 60 * 1000;
+  const shipmentScheduledAt = new Date(row.shipmentScheduledAt).getTime();
+
+  if (Number.isNaN(dueAt) || Number.isNaN(shipmentScheduledAt)) {
+    return null;
+  }
+
+  return shipmentScheduledAt <= dueAt ? "within_sla" : "breached";
 }

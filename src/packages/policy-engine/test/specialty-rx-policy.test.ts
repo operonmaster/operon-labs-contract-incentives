@@ -23,7 +23,7 @@ const policy: IncentivePolicy = {
     appliesOnlyToCoveredBenefits: false,
     requiresDtrCompletionWhenRequested: false,
     requiresShipmentScheduledWithinSla: true,
-    requiresDeliveryConfirmedWithinSla: true,
+    requiresDeliveryClosureEvidence: true,
     requiresColdChainEvidenceWhenRequired: true,
     requiresRemsAuthorizationWhenRequired: true,
     prohibitsAvoidableFulfillmentException: true
@@ -63,9 +63,7 @@ const approvedRequest: EvaluationRequest = {
     shipmentScheduledAt: "2026-06-19T09:30:00.000Z",
     deliveryConfirmedAt: "2026-06-20T14:00:00.000Z",
     scheduleSlaHours: 24,
-    deliverySlaHours: 72,
     shipmentScheduledWithinSla: true,
-    deliveryConfirmedWithinSla: true,
     remsRequired: false,
     remsAuthorizationConfirmed: true,
     coldChainRequired: true,
@@ -123,7 +121,7 @@ describe("specialty_rx_fulfillment_sla policy", () => {
         ...approvedRequest,
         requestObject: {
           ...approvedRequest.requestObject,
-          deliveryConfirmedWithinSla: false
+          deliveryConfirmedAt: "2026-06-22T17:00:00.000Z"
         }
       },
       monthToDateAmount: 0
@@ -135,6 +133,28 @@ describe("specialty_rx_fulfillment_sla policy", () => {
       walletId: "0.0.9049549",
       reasonCodes: []
     });
+  });
+
+  it("blocks missing delivery closure evidence without using delivery SLA reason codes", () => {
+    const result = evaluatePolicy({
+      policy,
+      request: {
+        ...approvedRequest,
+        requestObject: {
+          ...approvedRequest.requestObject,
+          deliveryConfirmedAt: null
+        }
+      },
+      monthToDateAmount: 0
+    });
+
+    expect(result).toMatchObject({
+      decision: "blocked",
+      amount: 0,
+      walletId: null,
+      reasonCodes: ["DELIVERY_CLOSURE_EVIDENCE_MISSING"]
+    });
+    expect(result.reasonCodes).not.toContain("DELIVERY_SLA_EXCEEDED");
   });
 
   it("blocks prohibited commercial metrics and PHI payment metadata", () => {
@@ -176,8 +196,7 @@ describe("specialty_rx_fulfillment_sla policy", () => {
         requestObject: {
           ...approvedRequest.requestObject,
           state: "exception",
-          externalBlockerDocumented: true,
-          deliveryConfirmedWithinSla: false
+          externalBlockerDocumented: true
         }
       },
       monthToDateAmount: 0

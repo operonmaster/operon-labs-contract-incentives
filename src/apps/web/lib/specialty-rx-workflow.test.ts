@@ -142,6 +142,51 @@ describe("specialty rx workflow", () => {
     );
   });
 
+  it("pays when shipment meets the Fulfillment SLA even if delivery closes after the old delivery window", async () => {
+    const { workflow, umRequest } = await createApprovedSpecialtyRxCase("PA-260526-0900-RX232323");
+    const [created] = await workflow.listWorkqueue();
+
+    await completeHappyPathBeforeFulfillment(workflow, created!.id);
+    await workflow.confirmFulfillment(
+      created!.id,
+      {
+        shipped: true,
+        deliveryConfirmed: true,
+        deliveryAttemptDocumented: true,
+        temperatureLogValid: true,
+        avoidableFulfillmentException: false,
+        externalBlockerDocumented: false,
+        exceptionReasonCode: null
+      },
+      new Date("2026-06-22T17:00:00.000Z")
+    );
+
+    const [row] = await workflow.listPlanRows();
+
+    expect(row).toMatchObject({
+      fulfillmentCaseId: created!.id,
+      umRequestId: umRequest.id,
+      fulfillmentSlaStatus: "within_sla",
+      businessPolicyStatus: "approved",
+      paymentPolicyStatus: "paid",
+      incentiveStatus: "paid",
+      paymentStatus: "auto_executed",
+      incentiveValue: 7,
+      reasonCodes: []
+    });
+    expect(row).not.toHaveProperty("deliverySlaStatus");
+    expect(row!.reasonCodes).not.toContain("DELIVERY_SLA_EXCEEDED");
+    expect(executePolicyBoundPaymentMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        umRequestId: umRequest.id,
+        triggerEvent: "SPECIALTY_FULFILLMENT_COMPLETED",
+        amount: 7,
+        walletId: "0.0.9049549"
+      }),
+      expect.any(Object)
+    );
+  });
+
   it("persists paid plan rows across workflow re-instantiation with the same Specialty Rx store", async () => {
     const caseStore = createInMemorySpecialtyRxCaseStore();
     const { workflow, platform } = await createApprovedSpecialtyRxCase(

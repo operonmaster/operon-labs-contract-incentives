@@ -184,8 +184,8 @@ export function SpecialtyRxPlanConsole({
                     <LabsBadge variant={fulfillmentStateBadgeVariant(row.state)}>{formatFulfillmentState(row.state)}</LabsBadge>
                   </td>
                   <td className="badge-cell">
-                    <LabsBadge variant={specialtySlaBadgeVariant(row.scheduleSlaStatus)}>
-                      {formatSlaStatus(row.scheduleSlaStatus)}
+                    <LabsBadge variant={specialtySlaBadgeVariant(row.fulfillmentSlaStatus)}>
+                      {formatSlaStatus(row.fulfillmentSlaStatus)}
                     </LabsBadge>
                   </td>
                   <td className="badge-cell">

@@ -100,8 +100,7 @@ export interface SpecialtyRxPlanAuditRow {
   clearToFillAt: string | null;
   shipmentScheduledAt: string | null;
   deliveryConfirmedAt: string | null;
-  scheduleSlaStatus: SpecialtyRxSlaStatus;
-  deliverySlaStatus: SpecialtyRxSlaStatus;
+  fulfillmentSlaStatus: SpecialtyRxSlaStatus;
   businessPolicyStatus: BusinessPolicyStatus | null;
   paymentPolicyStatus: PaymentPolicyStatus | null;
   incentiveStatus: SpecialtyRxIncentiveStatus;
@@ -148,7 +147,6 @@ export interface SpecialtyRxWorkflow {
 export const SPECIALTY_PHARMACY_ID = "atlas-specialty-rx";
 export const SPECIALTY_PHARMACY_DISPLAY = "Atlas Specialty Rx";
 export const SCHEDULE_SLA_HOURS = 24 as const;
-export const DELIVERY_SLA_HOURS = 72 as const;
 
 const SPECIALTY_POLICY_CONTROLS = [
   "Approved pharmacy benefit PA linked",
@@ -400,7 +398,6 @@ function buildCaseFromApprovedRequest(request: UMRequest): SpecialtyFulfillmentC
     deliveryConfirmedAt: null,
     exceptionRecordedAt: null,
     scheduleSlaHours: SCHEDULE_SLA_HOURS,
-    deliverySlaHours: DELIVERY_SLA_HOURS,
     intake: {
       approvedPaLinked: true,
       prescriptionPresent: false,
@@ -839,8 +836,7 @@ function buildBaseRow(caseRecord: SpecialtyFulfillmentCase): SpecialtyRxPlanAudi
     clearToFillAt: caseRecord.clearToFillAt,
     shipmentScheduledAt: caseRecord.shipmentScheduledAt,
     deliveryConfirmedAt: caseRecord.deliveryConfirmedAt,
-    scheduleSlaStatus: buildSlaStatus(caseRecord.clearToFillAt, caseRecord.shipmentScheduledAt, SCHEDULE_SLA_HOURS),
-    deliverySlaStatus: buildSlaStatus(caseRecord.clearToFillAt, caseRecord.deliveryConfirmedAt, DELIVERY_SLA_HOURS),
+    fulfillmentSlaStatus: buildSlaStatus(caseRecord.clearToFillAt, caseRecord.shipmentScheduledAt, caseRecord.scheduleSlaHours),
     businessPolicyStatus: null,
     paymentPolicyStatus: null,
     incentiveStatus: "pending",
@@ -875,11 +871,9 @@ function buildSpecialtyRxEvidence(caseRecord: SpecialtyFulfillmentCase): Special
     shipmentScheduledAt: caseRecord.shipmentScheduledAt,
     deliveryConfirmedAt: caseRecord.deliveryConfirmedAt,
     scheduleSlaHours: caseRecord.scheduleSlaHours,
-    deliverySlaHours: caseRecord.deliverySlaHours,
     intakeComplete: Object.values(caseRecord.intake).every(Boolean),
     clearToFillComplete: isClearToFillEvidenceComplete(caseRecord),
     shipmentScheduledWithinSla: isWithinSla(caseRecord.clearToFillAt, caseRecord.shipmentScheduledAt, caseRecord.scheduleSlaHours),
-    deliveryConfirmedWithinSla: isWithinSla(caseRecord.clearToFillAt, caseRecord.deliveryConfirmedAt, caseRecord.deliverySlaHours),
     remsRequired: caseRecord.clearToFill.remsRequired,
     remsAuthorizationConfirmed: caseRecord.clearToFill.remsAuthorizationConfirmed,
     coldChainRequired: caseRecord.fulfillment.externalBlockerDocumented ? false : caseRecord.shipment.coldChainRequired,
@@ -939,8 +933,8 @@ function summarizeSpecialtyRxReason(reasonCodes: string[]): string {
   if (reasonCodes.includes("SHIPMENT_SLA_EXCEEDED")) {
     return "Fulfillment SLA missed at shipment scheduling";
   }
-  if (reasonCodes.includes("DELIVERY_SLA_EXCEEDED")) {
-    return "Delivery closure evidence timing recorded after target";
+  if (reasonCodes.includes("DELIVERY_CLOSURE_EVIDENCE_MISSING")) {
+    return "Delivery closure evidence missing";
   }
 
   return reasonCodes.join(", ");
@@ -976,14 +970,14 @@ function buildSpecialtyRxPolicyCriteria(
       reasonCode: "SHIPMENT_SLA_EXCEEDED"
     }),
     criterion({
-      id: "deliveryConfirmedWithinSla",
+      id: "deliveryClosureEvidence",
       label: "Delivery closure evidence recorded",
       expected: "Delivery confirmed or external blocker documented",
       actual: formatYesNo(Boolean(evidence.deliveryConfirmedAt) || evidence.externalBlockerDocumented),
       passed:
         (Boolean(evidence.deliveryConfirmedAt) || evidence.externalBlockerDocumented) &&
-        !reasonCodes.includes("DELIVERY_SLA_EXCEEDED"),
-      reasonCode: "DELIVERY_SLA_EXCEEDED"
+        !reasonCodes.includes("DELIVERY_CLOSURE_EVIDENCE_MISSING"),
+      reasonCode: "DELIVERY_CLOSURE_EVIDENCE_MISSING"
     }),
     criterion({
       id: "externalBlocker",

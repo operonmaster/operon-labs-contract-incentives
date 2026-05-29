@@ -23,7 +23,7 @@ const policy: IncentivePolicy = {
     appliesOnlyToCoveredBenefits: false,
     requiresDtrCompletionWhenRequested: false,
     requiresShipmentScheduledWithinSla: true,
-    requiresDeliveryConfirmedWithinSla: true,
+    requiresDeliveryClosureEvidence: true,
     requiresColdChainEvidenceWhenRequired: true,
     requiresRemsAuthorizationWhenRequired: true,
     prohibitsAvoidableFulfillmentException: true
@@ -49,11 +49,9 @@ const evidence: SpecialtyRxFulfillmentEvidence = {
   shipmentScheduledAt: "2026-06-19T09:30:00.000Z",
   deliveryConfirmedAt: "2026-06-20T14:00:00.000Z",
   scheduleSlaHours: 24,
-  deliverySlaHours: 72,
   intakeComplete: true,
   clearToFillComplete: true,
   shipmentScheduledWithinSla: true,
-  deliveryConfirmedWithinSla: true,
   remsRequired: false,
   remsAuthorizationConfirmed: true,
   coldChainRequired: true,
@@ -101,11 +99,9 @@ describe("evaluateSpecialtyRxFulfillmentEvent", () => {
         shipmentScheduledAt: "2026-06-19T09:30:00.000Z",
         deliveryConfirmedAt: "2026-06-20T14:00:00.000Z",
         scheduleSlaHours: 24,
-        deliverySlaHours: 72,
         intakeComplete: true,
         clearToFillComplete: true,
         shipmentScheduledWithinSla: true,
-        deliveryConfirmedWithinSla: true,
         remsRequired: false,
         remsAuthorizationConfirmed: true,
         coldChainRequired: true,
@@ -120,6 +116,8 @@ describe("evaluateSpecialtyRxFulfillmentEvent", () => {
         containsPhi: false
       }
     });
+    expect(evaluation.request.requestObject).not.toHaveProperty("deliverySlaHours");
+    expect(evaluation.request.requestObject).not.toHaveProperty("deliveryConfirmedWithinSla");
     expect(evaluation.result).toMatchObject({
       decision: "approved",
       amount: 7,
@@ -242,7 +240,9 @@ describe("evaluateSpecialtyRxFulfillmentEvent", () => {
 
 describe("specialty Rx demo requests", () => {
   it("returns the specialty Rx fulfillment SLA demo request", () => {
-    expect(getDemoEvaluationRequest("specialty_rx_fulfillment_sla")).toMatchObject({
+    const request = getDemoEvaluationRequest("specialty_rx_fulfillment_sla");
+
+    expect(request).toMatchObject({
       evaluationType: "specialty_rx_fulfillment_sla",
       submitter: { id: "atlas-specialty-rx" },
       requestObject: {
@@ -256,6 +256,8 @@ describe("specialty Rx demo requests", () => {
         containsPhi: false
       }
     });
+    expect(request.requestObject).not.toHaveProperty("deliverySlaHours");
+    expect(request.requestObject).not.toHaveProperty("deliveryConfirmedWithinSla");
   });
 
   it("does not register the provider directory quality demo request", () => {
