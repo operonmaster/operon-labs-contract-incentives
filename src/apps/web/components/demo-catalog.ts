@@ -25,19 +25,20 @@ export const demoScenarios: DemoScenario[] = [
     status: "active"
   },
   {
+    slug: "specialty-rx",
+    title: "Specialty Rx Fulfillment SLA",
+    submitter: "Specialty pharmacy",
+    purpose:
+      "Reward contracted specialty pharmacy fulfillment that clears, schedules, and confirms approved therapy within SLA without avoidable exceptions.",
+    evaluationType: "specialty_rx_fulfillment_sla",
+    status: "active"
+  },
+  {
     slug: "appeals",
     title: "Appeals Packet Quality",
     submitter: "Appeals operations partner",
     purpose: "Reward complete, timely, well-rationalized appeal packets without outcome incentives.",
     evaluationType: "appeals_packet_quality",
-    status: "dormant"
-  },
-  {
-    slug: "provider-directory",
-    title: "Provider Directory Data Quality",
-    submitter: "Roster-management vendor",
-    purpose: "Reward accurate, validated provider directory updates submitted before deadline.",
-    evaluationType: "provider_directory_quality",
     status: "dormant"
   }
 ];

@@ -76,6 +76,8 @@ const PROVIDER_ID = "lakeside-provider-admin";
 const PROVIDER_WALLET_ID = "0.0.9049549";
 const DELEGATE_VENDOR_ID = "northstar-um";
 const DELEGATE_VENDOR_WALLET_ID = "0.0.9049549";
+const SPECIALTY_PHARMACY_ID = "atlas-specialty-rx";
+const SPECIALTY_PHARMACY_WALLET_ID = "0.0.9049549";
 
 export const defaultIncentivePolicies: Record<string, IncentivePolicy> = {
   provider_documentation_acme_outpatient: providerDocumentationPolicy({
@@ -138,6 +140,10 @@ export const defaultIncentivePolicies: Record<string, IncentivePolicy> = {
     policyId: "delegate-um-summit-outpatient-sla-bonus-v1",
     planId: "summit-health-hmo",
     requestType: "outpatient_service"
+  }),
+  specialty_rx_acme_fulfillment_sla: specialtyRxFulfillmentSlaPolicy({
+    policyId: "specialty-rx-fulfillment-sla-v1",
+    planId: "acme-health-ppo"
   })
 };
 
@@ -638,6 +644,57 @@ function delegateUmSlaBonusPolicy({
   };
 }
 
+function specialtyRxFulfillmentSlaPolicy({
+  planId,
+  policyId
+}: {
+  policyId: string;
+  planId: string;
+}): IncentivePolicy {
+  return {
+    policyId,
+    version: "v1",
+    status: "active",
+    evaluationType: "specialty_rx_fulfillment_sla",
+    contractPair: {
+      planId,
+      planName: planNameForId(planId),
+      providerId: SPECIALTY_PHARMACY_ID,
+      providerName: providerNameForId(SPECIALTY_PHARMACY_ID)
+    },
+    effectivePeriod: {
+      startsOn: "2026-05-01",
+      endsOn: null
+    },
+    incentiveScope: {
+      eligibleRequestTypes: ["pharmacy_benefit"]
+    },
+    eligibilityCriteria: {
+      appliesOnlyToCoveredBenefits: false,
+      requiresDtrCompletionWhenRequested: false,
+      requiresShipmentScheduledWithinSla: true,
+      requiresDeliveryConfirmedWithinSla: true,
+      requiresColdChainEvidenceWhenRequired: true,
+      requiresRemsAuthorizationWhenRequired: true,
+      prohibitsAvoidableFulfillmentException: true
+    },
+    payout: {
+      token: "HBAR",
+      amountPerEligibleRequest: 5,
+      monthlyCap: 700,
+      coldChainHandlingAddOn: {
+        amount: 2,
+        maxPerRequest: 7
+      }
+    },
+    settlement: {
+      mode: "auto",
+      recipientWalletId: SPECIALTY_PHARMACY_WALLET_ID,
+      requiresHumanApproval: false
+    }
+  };
+}
+
 function requestTypeScope(policy: IncentivePolicy): IncentivePolicy["incentiveScope"] {
   const scope = policy.incentiveScope;
 
@@ -715,6 +772,8 @@ function providerNameForId(providerId: string): string {
       return "Lakeside Provider Admin";
     case DELEGATE_VENDOR_ID:
       return "Northstar UM";
+    case SPECIALTY_PHARMACY_ID:
+      return "Atlas Specialty Rx";
     default:
       return providerId;
   }

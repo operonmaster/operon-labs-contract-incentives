@@ -12,11 +12,23 @@ describe("demo catalog", () => {
     const homePage = readFileSync(path.join(process.cwd(), "src/apps/web/app/page.tsx"), "utf8");
     const styles = readFileSync(path.join(process.cwd(), "src/apps/web/app/styles.css"), "utf8");
 
+    expect(demoScenarios.map((scenario) => scenario.slug)).toEqual([
+      "provider-documentation",
+      "delegate-um",
+      "specialty-rx",
+      "appeals"
+    ]);
+    expect(demoScenarios.find((scenario) => scenario.slug === "specialty-rx")).toMatchObject({
+      title: "Specialty Rx Fulfillment SLA",
+      submitter: "Specialty pharmacy",
+      evaluationType: "specialty_rx_fulfillment_sla",
+      status: "active"
+    });
+    expect(demoScenarios.some((scenario) => scenario.slug === "provider-directory")).toBe(false);
     expect(demoScenarios.find((scenario) => scenario.slug === "provider-documentation")?.status).toBe("active");
     expect(demoScenarios.find((scenario) => scenario.slug === "delegate-um")?.status).toBe("active");
     expect(demoScenarios.filter((scenario) => scenario.status === "dormant").map((scenario) => scenario.slug)).toEqual([
-      "appeals",
-      "provider-directory"
+      "appeals"
     ]);
     expect(homePage).toContain('{scenario.status === "dormant" ? <em>Dormant</em> : null}');
     expect(styles).toContain(".card > em");
@@ -31,7 +43,7 @@ describe("demo catalog", () => {
   });
 
   it("keeps Firestore-backed demo policy pages dynamically rendered", () => {
-    for (const route of ["delegate-um", "appeals", "provider-directory"]) {
+    for (const route of ["delegate-um", "appeals"]) {
       const source = readFileSync(path.join(process.cwd(), "src/apps/web/app", route, "page.tsx"), "utf8");
 
       expect(source).toContain('export const dynamic = "force-dynamic"');

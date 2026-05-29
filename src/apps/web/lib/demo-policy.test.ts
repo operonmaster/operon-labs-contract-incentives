@@ -1,7 +1,7 @@
 import { getDemoEvaluationRequest } from "@operon-labs/incentive-agent";
 import type { EvaluationRequest } from "@operon-labs/policy-engine";
 import { describe, expect, it } from "vitest";
-import { findPolicyForEvaluationRequest } from "./demo-policy";
+import { findDemoPolicy, findPolicyForEvaluationRequest } from "./demo-policy";
 import { createInMemoryPolicyStore, defaultIncentivePolicies } from "./policy-store";
 
 describe("demo policy selection", () => {
@@ -52,5 +52,20 @@ describe("demo policy selection", () => {
     const policy = await findPolicyForEvaluationRequest(request, createInMemoryPolicyStore(defaultIncentivePolicies));
 
     expect(policy?.policyId).toBe("plcy_5R1T8W3Y6B0D9F2H4K7M");
+  });
+
+  it("finds specialty rx policies by plan, pharmacy, and request type", async () => {
+    const store = createInMemoryPolicyStore({
+      specialty_rx_acme_fulfillment_sla: defaultIncentivePolicies.specialty_rx_acme_fulfillment_sla
+    });
+
+    await expect(findDemoPolicy("specialty_rx_fulfillment_sla", store)).resolves.toMatchObject({
+      policyId: "specialty-rx-fulfillment-sla-v1",
+      evaluationType: "specialty_rx_fulfillment_sla",
+      contractPair: {
+        planId: "acme-health-ppo",
+        providerId: "atlas-specialty-rx"
+      }
+    });
   });
 });

@@ -32,6 +32,23 @@ export async function findPolicyForEvaluationRequest(
     });
   }
 
+  if (request.evaluationType === "specialty_rx_fulfillment_sla") {
+    const planId = stringValue(request.requestObject.planId);
+    const pharmacyId = stringValue(request.requestObject.pharmacyId);
+    const requestType = stringValue(request.requestObject.requestType);
+
+    if (!planId || !pharmacyId || !requestType || request.submitter.id !== pharmacyId) {
+      return null;
+    }
+
+    return store.findPolicy({
+      evaluationType: request.evaluationType,
+      planId,
+      providerId: pharmacyId,
+      requestType
+    });
+  }
+
   if (request.evaluationType === "provider_documentation_completeness") {
     const planId = stringValue(request.requestObject.planId);
     const providerId = stringValue(request.requestObject.providerId);

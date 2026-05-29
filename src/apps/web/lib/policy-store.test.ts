@@ -19,9 +19,40 @@ describe("policy store", () => {
 
     const policies = await store.listPolicies("provider_documentation_completeness");
     const delegatePolicies = await store.listPolicies("delegate_um_sla_bonus");
+    const specialtyRxPolicies = await store.listPolicies("specialty_rx_fulfillment_sla");
 
     expect(policies).toHaveLength(4);
     expect(delegatePolicies).toHaveLength(4);
+    expect(specialtyRxPolicies).toHaveLength(1);
+    expect(specialtyRxPolicies).toEqual([
+      expect.objectContaining({
+        policyId: "specialty-rx-fulfillment-sla-v1",
+        evaluationType: "specialty_rx_fulfillment_sla",
+        contractPair: {
+          planId: "acme-health-ppo",
+          planName: "Acme Health PPO",
+          providerId: "atlas-specialty-rx",
+          providerName: "Atlas Specialty Rx"
+        },
+        incentiveScope: {
+          eligibleRequestTypes: ["pharmacy_benefit"]
+        },
+        payout: {
+          token: "HBAR",
+          amountPerEligibleRequest: 5,
+          monthlyCap: 700,
+          coldChainHandlingAddOn: {
+            amount: 2,
+            maxPerRequest: 7
+          }
+        },
+        settlement: {
+          mode: "auto",
+          recipientWalletId: "0.0.9049549",
+          requiresHumanApproval: false
+        }
+      })
+    ]);
     expect(delegatePolicies.map((policy) => policy.policyId).sort()).toEqual([
       "delegate-um-acme-outpatient-sla-bonus-v1",
       "delegate-um-sla-bonus-v1",
@@ -122,7 +153,7 @@ describe("policy store", () => {
       ])
     );
     expect(policies.every((policy) => !("displayName" in policy))).toBe(true);
-    expect((await firestore.collection("incentivePolicies").get()).docs).toHaveLength(8);
+    expect((await firestore.collection("incentivePolicies").get()).docs).toHaveLength(9);
     expect(firestore.collectionNames()).toEqual(expect.arrayContaining(["incentivePolicies"]));
     expect(firestore.collectionNames()).not.toEqual(expect.arrayContaining(["policies", "policyYaml"]));
   });
@@ -191,6 +222,13 @@ describe("policy store", () => {
       requestType: "outpatient_service",
       submittedAt: "2026-05-25T12:00:00.000Z"
     });
+    const specialtyRx = await store.findPolicy({
+      evaluationType: "specialty_rx_fulfillment_sla",
+      planId: "acme-health-ppo",
+      providerId: "atlas-specialty-rx",
+      requestType: "pharmacy_benefit",
+      submittedAt: "2026-05-25T12:00:00.000Z"
+    });
 
     expect(pairPolicies.map((policy) => policy.policyId).sort()).toEqual([
       "plcy_2N7P5R8T0V4X6Z1B3D9F",
@@ -202,6 +240,7 @@ describe("policy store", () => {
     expect(acmeOutpatientDelegate?.policyId).toBe("delegate-um-acme-outpatient-sla-bonus-v1");
     expect(summitPharmacyDelegate?.policyId).toBe("delegate-um-summit-pharmacy-sla-bonus-v1");
     expect(summitOutpatientDelegate?.policyId).toBe("delegate-um-summit-outpatient-sla-bonus-v1");
+    expect(specialtyRx?.policyId).toBe("specialty-rx-fulfillment-sla-v1");
     expect(missing).toBeNull();
   });
 
@@ -416,7 +455,7 @@ describe("policy store", () => {
         }
       })
     ]));
-    expect(docs).toHaveLength(8);
+    expect(docs).toHaveLength(9);
   });
 
   it("stores either included or excluded scope lists, not both, for request types and service codes", async () => {
