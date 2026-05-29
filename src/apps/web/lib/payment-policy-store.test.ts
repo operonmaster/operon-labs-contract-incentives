@@ -119,6 +119,31 @@ describe("payment policy store", () => {
     expect(policy?.maxPaymentAmount).toBe(2);
   });
 
+  it("preserves seed-actor stamped customized old max policies during seed migration", async () => {
+    const firestore = createFakeFirestore();
+    await firestore.collection("paymentPolicies").doc("acme-health-ppo").set({
+      ...defaultPaymentPlanPolicies["acme-health-ppo"],
+      businessEvaluationAttestation: false,
+      maxPaymentAmount: 5,
+      updatedAt: "2026-05-28T00:00:00.000Z",
+      updatedBy: "operon-labs-contract-incentives"
+    });
+    const store = createFirestorePaymentPolicyStore(
+      {
+        projectId: "operon-labs-nonprod",
+        databaseId: "(default)"
+      },
+      firestore
+    );
+
+    const policy = await store.getPolicyForPlan("acme-health-ppo");
+
+    expect(policy).toMatchObject({
+      businessEvaluationAttestation: false,
+      maxPaymentAmount: 5
+    });
+  });
+
   it("prefers PAYMENT_POLICY_STORE_BACKEND while keeping HEDERA_POLICY_STORE_BACKEND as a temporary fallback", () => {
     expect(createPaymentPolicyStoreFromEnv({ PAYMENT_POLICY_STORE_BACKEND: "memory" }).backend).toBe("memory");
     expect(createPaymentPolicyStoreFromEnv({ HEDERA_POLICY_STORE_BACKEND: "memory" }).backend).toBe("memory");

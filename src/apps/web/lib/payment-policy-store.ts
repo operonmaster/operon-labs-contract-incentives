@@ -296,7 +296,7 @@ function isSeedOwnedOldDefaultPaymentPolicy(value: unknown, currentDefault: Paym
     return false;
   }
 
-  return candidate.updatedBy === POLICY_SEED_ACTOR || matchesHistoricalGeneratedDefault(candidate, currentDefault);
+  return matchesHistoricalGeneratedDefault(candidate, currentDefault);
 }
 
 function matchesHistoricalGeneratedDefault(
@@ -304,7 +304,6 @@ function matchesHistoricalGeneratedDefault(
   currentDefault: PaymentPlanPolicy
 ): boolean {
   return (
-    candidate.updatedBy === undefined &&
     candidate.planId === currentDefault.planId &&
     candidate.planName === currentDefault.planName &&
     candidate.status === currentDefault.status &&
