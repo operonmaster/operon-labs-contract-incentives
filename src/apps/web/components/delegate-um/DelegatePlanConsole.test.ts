@@ -30,6 +30,20 @@ describe("DelegatePlanConsole source", () => {
     expect(source).not.toContain("Selected request");
   });
 
+  it("keeps an existing selected UM request ahead of the initial delegate deep link on refresh", () => {
+    const source = readFileSync(path.join(process.cwd(), "src/apps/web/components/delegate-um/DelegatePlanConsole.tsx"), "utf8");
+    const currentSelectionCheck = source.indexOf(
+      "currentUmRequestId && payload.rows.some((row) => row.umRequestId === currentUmRequestId)"
+    );
+    const requestedSelectionCheck = source.indexOf(
+      "requestedUmRequestId && payload.rows.some((row) => row.umRequestId === requestedUmRequestId)"
+    );
+
+    expect(currentSelectionCheck).toBeGreaterThan(-1);
+    expect(requestedSelectionCheck).toBeGreaterThan(-1);
+    expect(currentSelectionCheck).toBeLessThan(requestedSelectionCheck);
+  });
+
   it("renders delegate policy details with the shared plan audit modal treatment", () => {
     const source = readFileSync(
       path.join(process.cwd(), "src/apps/web/components/delegate-um/DelegatePlanAuditDetailsModal.tsx"),
@@ -237,7 +251,7 @@ describe("DelegatePlanConsole source", () => {
               id: "paymentAmountLimitExceeded",
               label: "Payment amount limit",
               status: "failed",
-              expected: "<= 5 HBAR",
+              expected: "<= 7 HBAR",
               actual: "6 HBAR",
               failureCode: "PAYMENT_AMOUNT_LIMIT_EXCEEDED"
             },
@@ -282,7 +296,7 @@ describe("DelegatePlanConsole source", () => {
     expect(markup).not.toContain("<dt>Payment policy / plan</dt>");
     expect(markup).toContain("Criterion/Control");
     expect(markup).toContain("Expected: Yes");
-    expect(markup).toContain("Expected: &lt;= 5 HBAR");
+    expect(markup).toContain("Expected: &lt;= 7 HBAR");
     expect(markup).toContain("Expected: Recorded");
     expect(markup).not.toContain("Expected: Not recorded");
     expect(markup).toContain("Actual");
@@ -514,7 +528,7 @@ function buildPaymentPolicyControls(): PaymentPolicyControlEvidence[] {
       id: "maxPaymentPerRequest",
       label: "Max payment per request",
       status: "passed",
-      expected: "<= 5 HBAR",
+      expected: "<= 7 HBAR",
       actual: "5 HBAR"
     },
     {

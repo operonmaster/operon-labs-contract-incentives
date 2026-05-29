@@ -48,7 +48,7 @@ describe("payment policy evidence store", () => {
           id: "maxPaymentPerRequest",
           label: "Max payment per request",
           status: "failed",
-          expected: "<= 5 HBAR",
+          expected: "<= 7 HBAR",
           actual: "20 HBAR",
           failureCode: "HEDERA_PAYMENT_AMOUNT_EXCEEDS_PLAN_MAX"
         }

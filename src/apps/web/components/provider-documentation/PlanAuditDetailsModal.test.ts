@@ -59,7 +59,7 @@ describe("plan audit details modal", () => {
           paymentPolicyControls: [
             { id: "businessEvaluationAttestation", label: "Business evaluation attestation", status: "passed" },
             { id: "paymentToken", label: "Payment token", status: "passed", expected: "HBAR", actual: "HBAR" },
-            { id: "maxPaymentPerRequest", label: "Max payment per request", status: "passed", expected: "<= 5 HBAR", actual: "5 HBAR" },
+            { id: "maxPaymentPerRequest", label: "Max payment per request", status: "passed", expected: "<= 7 HBAR", actual: "5 HBAR" },
             { id: "duplicatePaymentPrevention", label: "Duplicate payment prevention", status: "passed" },
             { id: "paymentEnvelopeIntegrity", label: "Payment envelope integrity", status: "passed" }
           ]
@@ -259,6 +259,20 @@ describe("plan audit details modal", () => {
     expect(source).not.toContain("initialCaseId");
     expect(source).not.toContain("row.caseId");
     expect(source).not.toContain('className="panel detail-panel"');
+  });
+
+  it("keeps an existing selected UM request ahead of the initial provider deep link on refresh", () => {
+    const source = readRepoFile("src/apps/web/components/provider-documentation/PlanIncentivesConsole.tsx");
+    const currentSelectionCheck = source.indexOf(
+      "currentUmRequestId && payload.rows.some((row) => row.umRequestId === currentUmRequestId)"
+    );
+    const requestedSelectionCheck = source.indexOf(
+      "requestedUmRequestId && payload.rows.some((row) => row.umRequestId === requestedUmRequestId)"
+    );
+
+    expect(currentSelectionCheck).toBeGreaterThan(-1);
+    expect(requestedSelectionCheck).toBeGreaterThan(-1);
+    expect(currentSelectionCheck).toBeLessThan(requestedSelectionCheck);
   });
 
   it("keeps the incentives worklist concise without a reason column", () => {

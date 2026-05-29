@@ -55,12 +55,12 @@ export function PlanIncentivesConsole({ initialUmRequestId = null }: { initialUm
 
       setRows(payload.rows);
       setSelectedUmRequestId((currentUmRequestId) => {
-        if (requestedUmRequestId && payload.rows.some((row) => row.umRequestId === requestedUmRequestId)) {
-          return requestedUmRequestId;
-        }
-
         if (currentUmRequestId && payload.rows.some((row) => row.umRequestId === currentUmRequestId)) {
           return currentUmRequestId;
+        }
+
+        if (requestedUmRequestId && payload.rows.some((row) => row.umRequestId === requestedUmRequestId)) {
+          return requestedUmRequestId;
         }
 
         return payload.rows[0]?.umRequestId ?? null;
