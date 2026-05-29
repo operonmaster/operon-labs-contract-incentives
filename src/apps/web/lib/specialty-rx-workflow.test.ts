@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  buildBusinessEvaluationId,
   buildPaymentIntentId,
   executePolicyBoundPayment,
+  type PaymentIntent,
   type PaymentApprovalRequest
 } from "@operon-labs/hedera-executor";
 import { createInMemoryUmPlatform } from "@operon-labs/um-platform";
@@ -9,7 +11,7 @@ import {
   createSpecialtyRxWorkflow,
   type SpecialtyRxWorkflow
 } from "./specialty-rx-workflow";
-import { createInMemorySpecialtyRxCaseStore } from "./specialty-rx-store";
+import { createInMemorySpecialtyRxCaseStore, type SpecialtyRxCaseStore } from "./specialty-rx-store";
 import { createInMemoryPaymentPolicyStore, defaultPaymentPlanPolicies } from "./payment-policy-store";
 import { createInMemoryPolicyStore, defaultIncentivePolicies } from "./policy-store";
 
@@ -138,6 +140,202 @@ describe("specialty rx workflow", () => {
       }),
       expect.any(Object)
     );
+  });
+
+  it("persists paid plan rows across workflow re-instantiation with the same Specialty Rx store", async () => {
+    const caseStore = createInMemorySpecialtyRxCaseStore();
+    const { workflow, platform } = await createApprovedSpecialtyRxCase(
+      "PA-260526-0900-RX888888",
+      undefined,
+      undefined,
+      caseStore
+    );
+    const [created] = await workflow.listWorkqueue();
+
+    await completeHappyPathBeforeFulfillment(workflow, created!.id);
+    await workflow.confirmFulfillment(
+      created!.id,
+      {
+        shipped: true,
+        deliveryConfirmed: true,
+        deliveryAttemptDocumented: true,
+        temperatureLogValid: true,
+        avoidableFulfillmentException: false,
+        externalBlockerDocumented: false,
+        exceptionReasonCode: null
+      },
+      new Date("2026-06-20T14:00:00.000Z")
+    );
+
+    const restartedWorkflow = createSpecialtyRxWorkflow(
+      platform,
+      undefined,
+      caseStore,
+      createInMemoryPolicyStore({
+        specialty_rx_acme_fulfillment_sla: defaultIncentivePolicies.specialty_rx_acme_fulfillment_sla
+      }),
+      undefined,
+      createInMemoryPaymentPolicyStore(defaultPaymentPlanPolicies)
+    );
+
+    await expect(restartedWorkflow.listPlanRows()).resolves.toEqual([
+      expect.objectContaining({
+        fulfillmentCaseId: created!.id,
+        businessPolicyStatus: "approved",
+        paymentPolicyStatus: "paid",
+        incentiveStatus: "paid",
+        paymentStatus: "auto_executed"
+      })
+    ]);
+    expect(executePolicyBoundPaymentMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("recovers a terminal fulfilled case with a missing in-memory plan row through listPlanRows", async () => {
+    const caseStore = createInMemorySpecialtyRxCaseStore();
+    const { workflow, platform } = await createApprovedSpecialtyRxCase(
+      "PA-260526-0900-RX999999",
+      undefined,
+      undefined,
+      caseStore
+    );
+    const [created] = await workflow.listWorkqueue();
+
+    await completeHappyPathBeforeFulfillment(workflow, created!.id);
+    const scheduled = await caseStore.getCase(created!.id);
+    await caseStore.saveCase({
+      ...scheduled!,
+      state: "fulfilled",
+      deliveryConfirmedAt: "2026-06-20T14:00:00.000Z",
+      fulfillment: {
+        shipped: true,
+        deliveryConfirmed: true,
+        deliveryAttemptDocumented: true,
+        temperatureLogValid: true,
+        avoidableFulfillmentException: false,
+        externalBlockerDocumented: false,
+        exceptionReasonCode: null
+      },
+      updatedAt: "2026-06-20T14:00:00.000Z"
+    });
+
+    const restartedWorkflow = createSpecialtyRxWorkflow(
+      platform,
+      undefined,
+      caseStore,
+      createInMemoryPolicyStore({
+        specialty_rx_acme_fulfillment_sla: defaultIncentivePolicies.specialty_rx_acme_fulfillment_sla
+      }),
+      undefined,
+      createInMemoryPaymentPolicyStore(defaultPaymentPlanPolicies)
+    );
+
+    await expect(restartedWorkflow.listPlanRows()).resolves.toEqual([
+      expect.objectContaining({
+        fulfillmentCaseId: created!.id,
+        businessPolicyStatus: "approved",
+        paymentPolicyStatus: "paid",
+        incentiveStatus: "paid",
+        paymentStatus: "auto_executed"
+      })
+    ]);
+    expect(executePolicyBoundPaymentMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("recovers a paid terminal case from a submitted payment intent when the plan row is missing", async () => {
+    const caseStore = createInMemorySpecialtyRxCaseStore();
+    const { workflow, platform, umRequest } = await createApprovedSpecialtyRxCase(
+      "PA-260526-0900-RX101010",
+      undefined,
+      undefined,
+      caseStore
+    );
+    const [created] = await workflow.listWorkqueue();
+
+    await completeHappyPathBeforeFulfillment(workflow, created!.id);
+    const scheduled = await caseStore.getCase(created!.id);
+    await caseStore.saveCase({
+      ...scheduled!,
+      state: "fulfilled",
+      deliveryConfirmedAt: "2026-06-20T14:00:00.000Z",
+      fulfillment: {
+        shipped: true,
+        deliveryConfirmed: true,
+        deliveryAttemptDocumented: true,
+        temperatureLogValid: true,
+        avoidableFulfillmentException: false,
+        externalBlockerDocumented: false,
+        exceptionReasonCode: null
+      },
+      updatedAt: "2026-06-20T14:00:00.000Z"
+    });
+
+    const businessPolicyId = "specialty-rx-fulfillment-sla-v1";
+    const incentiveEvaluationId = buildBusinessEvaluationId({
+      umRequestId: umRequest.id,
+      businessPolicyId
+    });
+    const paymentIntentId = buildPaymentIntentId({
+      umRequestId: umRequest.id,
+      caseId: umRequest.id,
+      incentiveEvaluationId,
+      businessPolicyId,
+      paymentPolicyId: "acme-health-ppo"
+    });
+    const submittedIntent: PaymentIntent = {
+      id: paymentIntentId,
+      auditId: "audit-specialty-rx-recovery",
+      umRequestId: umRequest.id,
+      caseId: umRequest.id,
+      incentiveEvaluationId,
+      planId: "acme-health-ppo",
+      policyId: businessPolicyId,
+      businessPolicyId,
+      paymentPolicyId: "acme-health-ppo",
+      policyVersion: "v1",
+      triggerEvent: "SPECIALTY_FULFILLMENT_COMPLETED",
+      token: "HBAR",
+      amount: 7,
+      sourceAccountId: "0.0.6870566",
+      recipientAccountId: "0.0.9049549",
+      transactionMemo: umRequest.id,
+      status: "submitted",
+      transactionId: "0.0.6870566@1781978400.000000001",
+      createdAt: "2026-06-20T14:00:00.000Z",
+      updatedAt: "2026-06-20T14:00:01.000Z"
+    };
+    const paymentIntentStore = {
+      reserveIntent: vi.fn(async () => ({
+        allowed: false,
+        reasonCode: "DUPLICATE_PAYMENT_BLOCKED",
+        intent: submittedIntent
+      })),
+      markIntentSubmitted: vi.fn(async () => undefined),
+      markIntentFailed: vi.fn(async () => undefined),
+      getIntent: vi.fn(async (intentId: string) => intentId === paymentIntentId ? submittedIntent : null)
+    };
+    executePolicyBoundPaymentMock.mockRejectedValueOnce(new Error("DUPLICATE_PAYMENT_BLOCKED"));
+
+    const restartedWorkflow = createSpecialtyRxWorkflow(
+      platform,
+      undefined,
+      caseStore,
+      createInMemoryPolicyStore({
+        specialty_rx_acme_fulfillment_sla: defaultIncentivePolicies.specialty_rx_acme_fulfillment_sla
+      }),
+      paymentIntentStore,
+      createInMemoryPaymentPolicyStore(defaultPaymentPlanPolicies)
+    );
+
+    await expect(restartedWorkflow.listPlanRows()).resolves.toEqual([
+      expect.objectContaining({
+        fulfillmentCaseId: created!.id,
+        paymentPolicyStatus: "paid",
+        paymentIntentId,
+        transactionId: submittedIntent.transactionId
+      })
+    ]);
+    expect(executePolicyBoundPaymentMock).toHaveBeenCalledTimes(1);
+    expect(paymentIntentStore.getIntent).toHaveBeenCalledWith(paymentIntentId);
   });
 
   it("keeps external blockers distinct from avoidable pharmacy exceptions", async () => {
@@ -367,16 +565,18 @@ async function createApprovedSpecialtyRxCase(
   policyStore = createInMemoryPolicyStore({
     specialty_rx_acme_fulfillment_sla: defaultIncentivePolicies.specialty_rx_acme_fulfillment_sla
   }),
-  paymentPolicyStore = createInMemoryPaymentPolicyStore(defaultPaymentPlanPolicies)
+  paymentPolicyStore = createInMemoryPaymentPolicyStore(defaultPaymentPlanPolicies),
+  caseStore: SpecialtyRxCaseStore = createInMemorySpecialtyRxCaseStore()
 ): Promise<{
   workflow: SpecialtyRxWorkflow;
+  platform: ReturnType<typeof createInMemoryUmPlatform>;
   umRequest: ReturnType<ReturnType<typeof createInMemoryUmPlatform>["submitPriorAuth"]>;
 }> {
   const platform = createInMemoryUmPlatform({ generateCaseId: () => caseId });
   const workflow = createSpecialtyRxWorkflow(
     platform,
     undefined,
-    createInMemorySpecialtyRxCaseStore(),
+    caseStore,
     policyStore,
     undefined,
     paymentPolicyStore
@@ -395,7 +595,7 @@ async function createApprovedSpecialtyRxCase(
     decisionRationaleDocumented: true
   });
 
-  return { workflow, umRequest };
+  return { workflow, platform, umRequest };
 }
 
 async function completeHappyPathBeforeFulfillment(

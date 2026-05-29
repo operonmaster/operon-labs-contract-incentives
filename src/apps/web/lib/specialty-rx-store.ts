@@ -1,4 +1,5 @@
 import type { FirestoreDatabase } from "./pas-persistence";
+import type { SpecialtyRxPlanAuditRow } from "./specialty-rx-workflow";
 
 export type SpecialtyRxStoreBackend = "firestore" | "memory";
 export type SpecialtyFulfillmentState =
@@ -72,6 +73,9 @@ export interface SpecialtyRxCaseStore {
   saveCase(caseRecord: SpecialtyFulfillmentCase): Promise<void>;
   getCase(fulfillmentCaseId: string): Promise<SpecialtyFulfillmentCase | null>;
   listCases(): Promise<SpecialtyFulfillmentCase[]>;
+  savePlanRow(row: SpecialtyRxPlanAuditRow): Promise<void>;
+  getPlanRow(fulfillmentCaseId: string): Promise<SpecialtyRxPlanAuditRow | null>;
+  listPlanRows(): Promise<SpecialtyRxPlanAuditRow[]>;
 }
 /* eslint-enable no-unused-vars */
 
@@ -93,6 +97,7 @@ const DEFAULT_SPECIALTY_RX_STORE_BACKEND = "firestore";
 const DEFAULT_GCP_PROJECT_ID = "operon-labs-nonprod";
 const DEFAULT_FIRESTORE_DATABASE_ID = "(default)";
 const SPECIALTY_FULFILLMENT_CASES_COLLECTION = "specialtyFulfillmentCases";
+const SPECIALTY_PLAN_AUDIT_ROWS_COLLECTION = "specialtyRxPlanAuditRows";
 
 export function createInMemorySpecialtyRxCaseStore(
   cases: SpecialtyFulfillmentCase[] = []
@@ -132,6 +137,7 @@ export function createFirestoreSpecialtyRxCaseStore(
 class InMemorySpecialtyRxCaseStore implements SpecialtyRxCaseStore {
   readonly backend = "memory" as const;
   private readonly cases = new Map<string, SpecialtyFulfillmentCase>();
+  private readonly planRows = new Map<string, SpecialtyRxPlanAuditRow>();
 
   constructor(cases: SpecialtyFulfillmentCase[]) {
     for (const caseRecord of cases) {
@@ -154,6 +160,22 @@ class InMemorySpecialtyRxCaseStore implements SpecialtyRxCaseStore {
     return [...this.cases.values()]
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
       .map(copyCase);
+  }
+
+  async savePlanRow(row: SpecialtyRxPlanAuditRow): Promise<void> {
+    validateSpecialtyRxPlanAuditRow(row);
+    this.planRows.set(row.fulfillmentCaseId, copyPlanRow(row));
+  }
+
+  async getPlanRow(fulfillmentCaseId: string): Promise<SpecialtyRxPlanAuditRow | null> {
+    const row = this.planRows.get(fulfillmentCaseId);
+    return row ? copyPlanRow(row) : null;
+  }
+
+  async listPlanRows(): Promise<SpecialtyRxPlanAuditRow[]> {
+    return [...this.planRows.values()]
+      .sort(comparePlanRows)
+      .map(copyPlanRow);
   }
 }
 
@@ -196,6 +218,35 @@ class FirestoreSpecialtyRxCaseStore implements SpecialtyRxCaseStore {
       .map(copyCase);
   }
 
+  async savePlanRow(row: SpecialtyRxPlanAuditRow): Promise<void> {
+    validateSpecialtyRxPlanAuditRow(row);
+    await (await this.getFirestore())
+      .collection(SPECIALTY_PLAN_AUDIT_ROWS_COLLECTION)
+      .doc(row.fulfillmentCaseId)
+      .set(copyPlanRow(row));
+  }
+
+  async getPlanRow(fulfillmentCaseId: string): Promise<SpecialtyRxPlanAuditRow | null> {
+    const snapshot = await (await this.getFirestore())
+      .collection(SPECIALTY_PLAN_AUDIT_ROWS_COLLECTION)
+      .doc(fulfillmentCaseId)
+      .get();
+
+    return snapshot.exists ? normalizeSpecialtyRxPlanAuditRow(snapshot.data()) : null;
+  }
+
+  async listPlanRows(): Promise<SpecialtyRxPlanAuditRow[]> {
+    const snapshot = await (await this.getFirestore())
+      .collection(SPECIALTY_PLAN_AUDIT_ROWS_COLLECTION)
+      .get();
+
+    return snapshot.docs
+      .map((doc) => normalizeSpecialtyRxPlanAuditRow(doc.data()))
+      .filter((row): row is SpecialtyRxPlanAuditRow => Boolean(row))
+      .sort(comparePlanRows)
+      .map(copyPlanRow);
+  }
+
   private async getFirestore(): Promise<FirestoreDatabase> {
     if (!this.firestore) {
       const { Firestore } = await import("@google-cloud/firestore");
@@ -217,9 +268,23 @@ function normalizeSpecialtyFulfillmentCase(value: unknown): SpecialtyFulfillment
   return copyCase(value);
 }
 
+function normalizeSpecialtyRxPlanAuditRow(value: unknown): SpecialtyRxPlanAuditRow | null {
+  if (!isSpecialtyRxPlanAuditRowShape(value)) {
+    return null;
+  }
+
+  return copyPlanRow(value);
+}
+
 function validateSpecialtyFulfillmentCase(value: SpecialtyFulfillmentCase): void {
   if (!isSpecialtyFulfillmentCaseShape(value)) {
     throw new Error("INVALID_SPECIALTY_FULFILLMENT_CASE");
+  }
+}
+
+function validateSpecialtyRxPlanAuditRow(value: SpecialtyRxPlanAuditRow): void {
+  if (!isSpecialtyRxPlanAuditRowShape(value)) {
+    throw new Error("INVALID_SPECIALTY_RX_PLAN_AUDIT_ROW");
   }
 }
 
@@ -242,6 +307,44 @@ function isSpecialtyFulfillmentCaseShape(value: unknown): value is SpecialtyFulf
   );
 }
 
+function isSpecialtyRxPlanAuditRowShape(value: unknown): value is SpecialtyRxPlanAuditRow {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Partial<SpecialtyRxPlanAuditRow>;
+
+  return (
+    candidate.evaluationType === "specialty_rx_fulfillment_sla" &&
+    typeof candidate.fulfillmentCaseId === "string" &&
+    candidate.fulfillmentCaseId.startsWith("RXF-") &&
+    typeof candidate.umRequestId === "string" &&
+    candidate.umRequestId.startsWith("PA-") &&
+    typeof candidate.id === "string" &&
+    typeof candidate.planId === "string" &&
+    typeof candidate.pharmacyId === "string" &&
+    candidate.requestType === "pharmacy_benefit" &&
+    typeof candidate.state === "string" &&
+    typeof candidate.incentiveStatus === "string" &&
+    typeof candidate.paymentStatus === "string" &&
+    typeof candidate.incentiveValue === "number" &&
+    Array.isArray(candidate.reasonCodes) &&
+    typeof candidate.settlementToken === "object" &&
+    candidate.settlementToken !== null &&
+    isSpecialtyFulfillmentCaseShape(candidate.fulfillmentCase)
+  );
+}
+
 function copyCase(caseRecord: SpecialtyFulfillmentCase): SpecialtyFulfillmentCase {
   return structuredClone(caseRecord);
+}
+
+function copyPlanRow(row: SpecialtyRxPlanAuditRow): SpecialtyRxPlanAuditRow {
+  return structuredClone(row);
+}
+
+function comparePlanRows(left: SpecialtyRxPlanAuditRow, right: SpecialtyRxPlanAuditRow): number {
+  return (right.deliveryConfirmedAt ?? right.fulfillmentCase.updatedAt).localeCompare(
+    left.deliveryConfirmedAt ?? left.fulfillmentCase.updatedAt
+  );
 }

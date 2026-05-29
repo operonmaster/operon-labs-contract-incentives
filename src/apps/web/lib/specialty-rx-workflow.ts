@@ -3,6 +3,7 @@ import {
   buildBusinessEvaluationId,
   buildPaymentIntentId,
   executePolicyBoundPayment,
+  type PaymentIntent,
   type PaymentApprovalRequest,
   type PaymentIntentStore
 } from "@operon-labs/hedera-executor";
@@ -206,7 +207,17 @@ export function createSpecialtyRxWorkflow(
         .sort((left, right) => right.intakeStartedAt.localeCompare(left.intakeStartedAt));
     },
     async listPlanRows() {
-      await ensureApprovedCases();
+      const caseRecords = await ensureApprovedCases();
+      await loadStoredSpecialtyRows(caseStore, rows);
+      await recoverTerminalSpecialtyRows(caseRecords, {
+        rows,
+        caseStore,
+        policyStore,
+        paymentIntentStore,
+        paymentPolicyStore,
+        paymentPolicyEvidenceStore
+      });
+
       return [...rows.values()].sort((left, right) =>
         (right.deliveryConfirmedAt ?? right.fulfillmentCase.updatedAt).localeCompare(
           left.deliveryConfirmedAt ?? left.fulfillmentCase.updatedAt
@@ -290,6 +301,26 @@ export function createSpecialtyRxWorkflow(
 
       const settlement = (async () => {
         const caseRecord = await getCase(fulfillmentCaseId);
+        if (isTerminalSpecialtyCase(caseRecord)) {
+          const storedRow = rows.get(caseRecord.id) ?? (await caseStore.getPlanRow(caseRecord.id));
+          if (storedRow && isTerminalSpecialtyRow(storedRow)) {
+            rows.set(caseRecord.id, storedRow);
+            return caseRecord;
+          }
+
+          const recoveredRow = await settleFulfillment(caseRecord, {
+            rows,
+            caseStore,
+            policyStore,
+            paymentIntentStore,
+            paymentPolicyStore,
+            paymentPolicyEvidenceStore
+          });
+          rows.set(caseRecord.id, recoveredRow);
+          await caseStore.savePlanRow(recoveredRow);
+          return caseRecord;
+        }
+
         if (caseRecord.state !== "shipment_scheduled" || !caseRecord.clearToFillAt) {
           throw new Error(`SPECIALTY_RX_NOT_READY_FOR_FULFILLMENT:${caseRecord.id}`);
         }
@@ -308,15 +339,17 @@ export function createSpecialtyRxWorkflow(
           fulfillment: { ...input },
           updatedAt: timestamp
         };
-        await caseStore.saveCase(updated);
         const row = await settleFulfillment(updated, {
           rows,
+          caseStore,
           policyStore,
           paymentIntentStore,
           paymentPolicyStore,
           paymentPolicyEvidenceStore
         });
         rows.set(updated.id, row);
+        await caseStore.savePlanRow(row);
+        await caseStore.saveCase(updated);
         return updated;
       })();
       settlementsInFlight.set(fulfillmentCaseId, settlement);
@@ -417,10 +450,15 @@ function isClearToFillComplete(input: ClearToFillInput): boolean {
   );
 }
 
+function isTerminalSpecialtyCase(caseRecord: SpecialtyFulfillmentCase): boolean {
+  return caseRecord.state === "fulfilled" || caseRecord.state === "exception";
+}
+
 async function settleFulfillment(
   caseRecord: SpecialtyFulfillmentCase,
   dependencies: {
     rows: Map<string, SpecialtyRxPlanAuditRow>;
+    caseStore: SpecialtyRxCaseStore;
     policyStore: PolicyStore;
     paymentIntentStore: PaymentIntentStore | undefined;
     paymentPolicyStore: PaymentPolicyStore;
@@ -604,6 +642,23 @@ async function settleFulfillment(
       }
     );
   } catch (error) {
+    const paidIntent = requestedPaymentIntentId
+      ? await getSubmittedPaymentIntent(dependencies.paymentIntentStore, requestedPaymentIntentId)
+      : null;
+    if (paidIntent && paymentPolicy) {
+      return buildPaidSpecialtyRowFromSubmittedIntent({
+        baseRow,
+        audit,
+        paymentPolicy,
+        paymentIntent: paidIntent
+      });
+    }
+
+    const paidRow = await dependencies.caseStore.getPlanRow(caseRecord.id);
+    if (paidRow && isImmutablePaidSpecialtyRow(paidRow)) {
+      return paidRow;
+    }
+
     const failedRow: SpecialtyRxPlanAuditRow = {
       ...baseRow,
       businessPolicyStatus: "approved",
@@ -670,6 +725,101 @@ async function settleFulfillment(
   return {
     ...paidRow,
     paymentPolicyControls: evidenceRecord.controls
+  };
+}
+
+async function loadStoredSpecialtyRows(
+  caseStore: SpecialtyRxCaseStore,
+  rows: Map<string, SpecialtyRxPlanAuditRow>
+): Promise<void> {
+  for (const row of await caseStore.listPlanRows()) {
+    rows.set(row.fulfillmentCaseId, row);
+  }
+}
+
+async function recoverTerminalSpecialtyRows(
+  caseRecords: SpecialtyFulfillmentCase[],
+  dependencies: {
+    rows: Map<string, SpecialtyRxPlanAuditRow>;
+    caseStore: SpecialtyRxCaseStore;
+    policyStore: PolicyStore;
+    paymentIntentStore: PaymentIntentStore | undefined;
+    paymentPolicyStore: PaymentPolicyStore;
+    paymentPolicyEvidenceStore: PaymentPolicyEvidenceStore | undefined;
+  }
+): Promise<void> {
+  for (const caseRecord of caseRecords) {
+    if (!isTerminalSpecialtyCase(caseRecord) || dependencies.rows.has(caseRecord.id)) {
+      continue;
+    }
+
+    const row = await settleFulfillment(caseRecord, dependencies);
+    dependencies.rows.set(caseRecord.id, row);
+    await dependencies.caseStore.savePlanRow(row);
+  }
+}
+
+function isTerminalSpecialtyRow(row: SpecialtyRxPlanAuditRow): boolean {
+  return row.businessPolicyStatus !== null && row.paymentPolicyStatus !== null;
+}
+
+function isImmutablePaidSpecialtyRow(row: SpecialtyRxPlanAuditRow): boolean {
+  return (row.paymentPolicyStatus === "paid" || row.incentiveStatus === "paid") && Boolean(row.transactionId || row.paymentIntentId);
+}
+
+/* eslint-disable no-unused-vars -- Interface method signatures require parameter names. */
+interface PaymentIntentLookupStore extends PaymentIntentStore {
+  getIntent(paymentIntentId: string): Promise<PaymentIntent | null>;
+}
+/* eslint-enable no-unused-vars */
+
+function hasPaymentIntentLookupStore(store: PaymentIntentStore | undefined): store is PaymentIntentLookupStore {
+  return Boolean(store && "getIntent" in store && typeof (store as PaymentIntentLookupStore).getIntent === "function");
+}
+
+async function getSubmittedPaymentIntent(
+  store: PaymentIntentStore | undefined,
+  paymentIntentId: string
+): Promise<PaymentIntent | null> {
+  if (!hasPaymentIntentLookupStore(store)) {
+    return null;
+  }
+
+  const intent = await store.getIntent(paymentIntentId);
+  return intent?.status === "submitted" && intent.transactionId ? intent : null;
+}
+
+function buildPaidSpecialtyRowFromSubmittedIntent({
+  baseRow,
+  audit,
+  paymentPolicy,
+  paymentIntent
+}: {
+  baseRow: SpecialtyRxPlanAuditRow;
+  audit: AuditRecord;
+  paymentPolicy: PaymentPlanPolicy;
+  paymentIntent: PaymentIntent;
+}): SpecialtyRxPlanAuditRow {
+  const paidRow: SpecialtyRxPlanAuditRow = {
+    ...baseRow,
+    paymentPolicyStatus: "paid",
+    paymentPolicyId: paymentPolicy.planId,
+    paymentIntentId: paymentIntent.id,
+    transactionId: paymentIntent.transactionId,
+    audit: {
+      ...audit,
+      transactionId: paymentIntent.transactionId
+    }
+  };
+
+  return {
+    ...paidRow,
+    paymentPolicyControls: buildSpecialtyPaymentPolicyControlEvidence({
+      row: paidRow,
+      paymentPolicy,
+      outcome: "paid",
+      failureCode: null
+    })
   };
 }
 
