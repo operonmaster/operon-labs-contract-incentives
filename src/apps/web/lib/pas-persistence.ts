@@ -296,11 +296,12 @@ class FirestorePasPersistenceStore implements UmPasPersistenceStore {
 
     const firestore = await this.getFirestore();
     const documentId = buildIncentiveRowDocumentId(canonicalRow);
-    await firestore.collection(INCENTIVE_EVALUATIONS_COLLECTION).doc(documentId).set({
+    const firestoreRow = removeUndefinedFields({
       ...canonicalRow,
       id: documentId,
       storedAt: new Date().toISOString()
     });
+    await firestore.collection(INCENTIVE_EVALUATIONS_COLLECTION).doc(documentId).set(firestoreRow);
   }
 
   async listIncentiveRows(): Promise<PersistedIncentiveWorklistRow[]> {
@@ -440,6 +441,25 @@ function validateIncentiveRowPolicyStatuses(row: PersistedIncentiveWorklistRow):
   if (paymentPolicyStatus !== null && derivedPaymentPolicyStatus !== null && paymentPolicyStatus !== derivedPaymentPolicyStatus) {
     throw new Error("PAS_POLICY_STATUS_MISMATCH:row.paymentPolicyStatus");
   }
+}
+
+function removeUndefinedFields(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(removeUndefinedFields);
+  }
+
+  if (typeof value !== "object" || value === null) {
+    return value;
+  }
+
+  const cleaned: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value)) {
+    if (child !== undefined) {
+      cleaned[key] = removeUndefinedFields(child);
+    }
+  }
+
+  return cleaned;
 }
 
 function buildIncentiveRowDocumentId(row: PersistedIncentiveWorklistRow): string {

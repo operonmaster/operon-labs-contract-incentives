@@ -226,6 +226,49 @@ describe("PAS persistence store selection", () => {
     });
   });
 
+  it("strips undefined nested payment policy control fields before saving incentive rows", async () => {
+    const firestore = createFakeFirestore({ rejectUndefinedFields: true });
+    const store = createFirestorePasPersistenceStore(
+      { projectId: "operon-labs-nonprod", databaseId: "(default)" },
+      firestore
+    );
+    const platform = createInMemoryUmPlatform({ generateCaseId: () => "PA-260526-0900-ROWUNDF" });
+    const umRequest = platform.submitPriorAuth({ requestType: "outpatient_service", serviceCode: "knee_mri" });
+    const row = buildPersistedIncentiveRow(umRequest, {
+      paymentPolicyControls: [
+        {
+          id: "businessEvaluationAttestation",
+          label: "Business evaluation attestation",
+          status: "passed",
+          failureCode: undefined
+        }
+      ]
+    });
+
+    await expect(store.saveIncentiveRow(row)).resolves.toBeUndefined();
+
+    const rawRow = (await firestore.collection("incentiveEvaluations").doc(row.id).get()).data() as PersistedIncentiveWorklistRow;
+    expect(rawRow.paymentPolicyControls).toEqual([
+      {
+        id: "businessEvaluationAttestation",
+        label: "Business evaluation attestation",
+        status: "passed"
+      }
+    ]);
+    await expect(store.getIncentiveRow(umRequest.id)).resolves.toMatchObject({
+      paymentPolicyControls: [
+        {
+          id: "businessEvaluationAttestation",
+          label: "Business evaluation attestation",
+          status: "passed"
+        }
+      ]
+    });
+    expect((await store.getIncentiveRow(umRequest.id))?.paymentPolicyControls[0]).not.toHaveProperty("failureCode");
+    const rows = await store.listIncentiveRows();
+    expect(rows[0].paymentPolicyControls[0]).not.toHaveProperty("failureCode");
+  });
+
   it("updates workflow state in umRequests without mutating the submitted PAS FHIR claim", async () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(
@@ -1259,7 +1302,9 @@ function buildPersistedIncentiveRow(
   };
 }
 
-function createFakeFirestore(): FirestoreDatabase & { collectionNames(): string[]; batchCommits(): number } {
+function createFakeFirestore(
+  options: { rejectUndefinedFields?: boolean } = {}
+): FirestoreDatabase & { collectionNames(): string[]; batchCommits(): number } {
   const collections = new Map<string, Map<string, unknown>>();
   let batchCommitCount = 0;
 
@@ -1289,6 +1334,9 @@ function createFakeFirestore(): FirestoreDatabase & { collectionNames(): string[
         doc(id) {
           return {
             async set(value) {
+              if (options.rejectUndefinedFields) {
+                assertNoUndefinedFields(value);
+              }
               collection.set(id, structuredClone(value));
             },
             async get() {
@@ -1343,6 +1391,25 @@ function createFakeFirestore(): FirestoreDatabase & { collectionNames(): string[
       return batchCommitCount;
     }
   };
+}
+
+function assertNoUndefinedFields(value: unknown, path = "data"): void {
+  if (value === undefined) {
+    throw new Error(`Cannot use undefined as a Firestore value (found in field "${path}")`);
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((child, index) => assertNoUndefinedFields(child, `${path}.${index}`));
+    return;
+  }
+
+  if (!value || typeof value !== "object") {
+    return;
+  }
+
+  for (const [key, child] of Object.entries(value)) {
+    assertNoUndefinedFields(child, `${path}.${key}`);
+  }
 }
 
 function getNestedValue(value: unknown, path: string): unknown {
