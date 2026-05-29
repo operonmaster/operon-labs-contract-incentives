@@ -43,6 +43,43 @@ export interface DelegateUmSlaEvaluationDependencies {
   monthToDateAmount?: number;
 }
 
+export interface SpecialtyRxFulfillmentEvidence {
+  fulfillmentCaseId: string;
+  umRequestId: string;
+  planId: string;
+  pharmacyId: string;
+  requestType: string;
+  paOutcomeStatus: "approved" | "denied";
+  state: "intake_triage" | "clear_to_fill" | "shipment_scheduled" | "fulfilled" | "exception";
+  clearToFillAt: string | null;
+  shipmentScheduledAt: string | null;
+  deliveryConfirmedAt: string | null;
+  scheduleSlaHours: 24;
+  deliverySlaHours: 72;
+  intakeComplete: boolean;
+  clearToFillComplete: boolean;
+  shipmentScheduledWithinSla: boolean;
+  deliveryConfirmedWithinSla: boolean;
+  remsRequired: boolean;
+  remsAuthorizationConfirmed: boolean;
+  coldChainRequired: boolean;
+  coldChainPackoutValidated: boolean;
+  temperatureLogValid: boolean;
+  avoidableFulfillmentException: boolean;
+  externalBlockerDocumented: boolean;
+  drugChoiceMetricUsed: boolean;
+  fillVolumeMetricUsed: boolean;
+  pharmacySteeringMetricUsed: boolean;
+  patientAdherenceMetricUsed: boolean;
+  containsPhi: boolean;
+}
+
+export interface SpecialtyRxFulfillmentEvaluationDependencies {
+  getEvidenceByFulfillmentCaseId: (fulfillmentCaseId: string) => SpecialtyRxFulfillmentEvidence | null;
+  policy: IncentivePolicy;
+  monthToDateAmount?: number;
+}
+
 export function evaluateDemoScenario(evaluationType: string, policy: IncentivePolicy): DemoEvaluation {
   const request = getDemoEvaluationRequest(evaluationType);
 
@@ -187,6 +224,70 @@ export function evaluateDelegateUmSlaEvent(
   };
 }
 
+export function evaluateSpecialtyRxFulfillmentEvent(
+  event: { eventType: string; fulfillmentCaseId: string; umRequestId: string },
+  dependencies: SpecialtyRxFulfillmentEvaluationDependencies
+): DemoEvaluation {
+  if (event.eventType !== "SPECIALTY_FULFILLMENT_COMPLETED") {
+    throw new Error("UNSUPPORTED_SPECIALTY_RX_EVENT");
+  }
+  assertSpecialtyRxEventIds(event);
+
+  const evidence = dependencies.getEvidenceByFulfillmentCaseId(event.fulfillmentCaseId);
+  if (!evidence) {
+    throw new Error(`SPECIALTY_RX_EVIDENCE_NOT_FOUND:${event.fulfillmentCaseId}`);
+  }
+  assertSpecialtyRxEvidenceMatchesEvent(evidence, event);
+
+  const request: EvaluationRequest = {
+    evaluationType: "specialty_rx_fulfillment_sla",
+    submitter: { id: evidence.pharmacyId },
+    requestObject: {
+      fulfillmentCaseId: evidence.fulfillmentCaseId,
+      umRequestId: evidence.umRequestId,
+      planId: evidence.planId,
+      pharmacyId: evidence.pharmacyId,
+      requestType: evidence.requestType,
+      paOutcomeStatus: evidence.paOutcomeStatus,
+      state: evidence.state,
+      clearToFillAt: evidence.clearToFillAt,
+      shipmentScheduledAt: evidence.shipmentScheduledAt,
+      deliveryConfirmedAt: evidence.deliveryConfirmedAt,
+      scheduleSlaHours: evidence.scheduleSlaHours,
+      deliverySlaHours: evidence.deliverySlaHours,
+      intakeComplete: evidence.intakeComplete,
+      clearToFillComplete: evidence.clearToFillComplete,
+      shipmentScheduledWithinSla: evidence.shipmentScheduledWithinSla,
+      deliveryConfirmedWithinSla: evidence.deliveryConfirmedWithinSla,
+      remsRequired: evidence.remsRequired,
+      remsAuthorizationConfirmed: evidence.remsAuthorizationConfirmed,
+      coldChainRequired: evidence.coldChainRequired,
+      coldChainPackoutValidated: evidence.coldChainPackoutValidated,
+      temperatureLogValid: evidence.temperatureLogValid,
+      avoidableFulfillmentException: evidence.avoidableFulfillmentException,
+      externalBlockerDocumented: evidence.externalBlockerDocumented,
+      drugChoiceMetricUsed: evidence.drugChoiceMetricUsed,
+      fillVolumeMetricUsed: evidence.fillVolumeMetricUsed,
+      pharmacySteeringMetricUsed: evidence.pharmacySteeringMetricUsed,
+      patientAdherenceMetricUsed: evidence.patientAdherenceMetricUsed,
+      containsPhi: evidence.containsPhi
+    }
+  };
+
+  const result = evaluatePolicy({
+    policy: dependencies.policy,
+    request,
+    monthToDateAmount: dependencies.monthToDateAmount ?? 0
+  });
+
+  return {
+    request,
+    policy: dependencies.policy,
+    result,
+    explanation: explainDecision(result)
+  };
+}
+
 function assertProviderDocumentationEventIdsMatch(event: { umRequestId: string; caseId?: string }): void {
   if (event.caseId !== undefined && event.caseId !== event.umRequestId) {
     throw new Error(`PROVIDER_DOCUMENTATION_EVENT_ID_MISMATCH:${event.umRequestId}`);
@@ -223,6 +324,24 @@ function assertDelegateUmCanonicalPaId(umRequestId: string): void {
 function assertDelegateUmEvidenceMatchesEvent(evidence: DelegateUmSlaEvidence, umRequestId: string): void {
   if (evidence.id !== umRequestId || evidence.umRequestId !== umRequestId) {
     throw new Error(`DELEGATE_UM_EVIDENCE_ID_MISMATCH:${umRequestId}`);
+  }
+}
+
+function assertSpecialtyRxEventIds(event: { fulfillmentCaseId: string; umRequestId: string }): void {
+  if (!event.fulfillmentCaseId.startsWith("RXF-")) {
+    throw new Error(`SPECIALTY_RX_EVENT_ID_NOT_CANONICAL:${event.fulfillmentCaseId}`);
+  }
+  if (!event.umRequestId.startsWith("PA-")) {
+    throw new Error(`SPECIALTY_RX_UM_REQUEST_ID_NOT_CANONICAL:${event.umRequestId}`);
+  }
+}
+
+function assertSpecialtyRxEvidenceMatchesEvent(
+  evidence: SpecialtyRxFulfillmentEvidence,
+  event: { fulfillmentCaseId: string; umRequestId: string }
+): void {
+  if (evidence.fulfillmentCaseId !== event.fulfillmentCaseId || evidence.umRequestId !== event.umRequestId) {
+    throw new Error(`SPECIALTY_RX_EVIDENCE_ID_MISMATCH:${event.fulfillmentCaseId}`);
   }
 }
 
@@ -279,18 +398,37 @@ const demoRequests: Record<string, EvaluationRequest> = {
       containsPhi: false
     }
   },
-  provider_directory_quality: {
-    evaluationType: "provider_directory_quality",
-    submitter: { id: "clearpath-rosters" },
+  specialty_rx_fulfillment_sla: {
+    evaluationType: "specialty_rx_fulfillment_sla",
+    submitter: { id: "atlas-specialty-rx" },
     requestObject: {
-      rosterBatchId: "synthetic-roster-2026-06",
-      submittedBeforeDeadline: true,
-      npiValidationPassed: true,
-      tinValidationPassed: true,
-      addressValidationPassed: true,
-      specialtyValidationPassed: true,
-      referralVolumeMetricUsed: false,
-      networkSteeringMetricUsed: false,
+      fulfillmentCaseId: "RXF-260526-0900-DELEGATE",
+      umRequestId: "PA-260526-0900-DELEGATE",
+      planId: "acme-health-ppo",
+      pharmacyId: "atlas-specialty-rx",
+      requestType: "pharmacy_benefit",
+      paOutcomeStatus: "approved",
+      state: "fulfilled",
+      clearToFillAt: "2026-06-18T16:00:00.000Z",
+      shipmentScheduledAt: "2026-06-19T09:30:00.000Z",
+      deliveryConfirmedAt: "2026-06-20T14:00:00.000Z",
+      scheduleSlaHours: 24,
+      deliverySlaHours: 72,
+      intakeComplete: true,
+      clearToFillComplete: true,
+      shipmentScheduledWithinSla: true,
+      deliveryConfirmedWithinSla: true,
+      remsRequired: false,
+      remsAuthorizationConfirmed: true,
+      coldChainRequired: true,
+      coldChainPackoutValidated: true,
+      temperatureLogValid: true,
+      avoidableFulfillmentException: false,
+      externalBlockerDocumented: false,
+      drugChoiceMetricUsed: false,
+      fillVolumeMetricUsed: false,
+      pharmacySteeringMetricUsed: false,
+      patientAdherenceMetricUsed: false,
       containsPhi: false
     }
   }
