@@ -272,15 +272,7 @@ function evaluateSpecialtyRxFulfillmentPolicy(input: EvaluatePolicyInput): Polic
   const { policy, request, monthToDateAmount } = input;
   const reasonCodes: string[] = [];
   const token = policy.payout.token;
-
-  if (request.requestObject.externalBlockerDocumented === true) {
-    return result({
-      decision: "not_applicable",
-      policy,
-      reasonCodes: ["EXTERNAL_BLOCKER_DOCUMENTED"],
-      token
-    });
-  }
+  const externalBlockerDocumented = request.requestObject.externalBlockerDocumented === true;
 
   if (request.evaluationType !== policy.evaluationType) {
     reasonCodes.push("EVALUATION_TYPE_MISMATCH");
@@ -311,7 +303,7 @@ function evaluateSpecialtyRxFulfillmentPolicy(input: EvaluatePolicyInput): Polic
     reasonCodes.push("LINKED_PA_NOT_APPROVED");
   }
 
-  if (request.requestObject.state !== "fulfilled") {
+  if (request.requestObject.state !== "fulfilled" && !externalBlockerDocumented) {
     reasonCodes.push("FULFILLMENT_NOT_COMPLETE");
   }
 
@@ -323,12 +315,24 @@ function evaluateSpecialtyRxFulfillmentPolicy(input: EvaluatePolicyInput): Polic
     reasonCodes.push("CLEAR_TO_FILL_INCOMPLETE");
   }
 
-  if (policy.eligibilityCriteria.requiresShipmentScheduledWithinSla && request.requestObject.shipmentScheduledWithinSla !== true) {
-    reasonCodes.push("SHIPMENT_SLA_EXCEEDED");
+  if (request.requestObject.drugChoiceMetricUsed === true) {
+    reasonCodes.push("PROHIBITED_DRUG_CHOICE_METRIC");
   }
 
-  if (policy.eligibilityCriteria.requiresDeliveryConfirmedWithinSla && request.requestObject.deliveryConfirmedWithinSla !== true) {
-    reasonCodes.push("DELIVERY_SLA_EXCEEDED");
+  if (request.requestObject.fillVolumeMetricUsed === true) {
+    reasonCodes.push("PROHIBITED_FILL_VOLUME_METRIC");
+  }
+
+  if (request.requestObject.pharmacySteeringMetricUsed === true) {
+    reasonCodes.push("PROHIBITED_PHARMACY_STEERING_METRIC");
+  }
+
+  if (request.requestObject.patientAdherenceMetricUsed === true) {
+    reasonCodes.push("PROHIBITED_PATIENT_ADHERENCE_METRIC");
+  }
+
+  if (request.requestObject.containsPhi === true) {
+    reasonCodes.push("PHI_IN_PAYMENT_METADATA");
   }
 
   if (
@@ -351,24 +355,29 @@ function evaluateSpecialtyRxFulfillmentPolicy(input: EvaluatePolicyInput): Polic
     reasonCodes.push("AVOIDABLE_FULFILLMENT_EXCEPTION");
   }
 
-  if (request.requestObject.drugChoiceMetricUsed === true) {
-    reasonCodes.push("PROHIBITED_DRUG_CHOICE_METRIC");
+  if (externalBlockerDocumented && reasonCodes.length === 0) {
+    return result({
+      decision: "not_applicable",
+      policy,
+      reasonCodes: ["EXTERNAL_BLOCKER_DOCUMENTED"],
+      token
+    });
   }
 
-  if (request.requestObject.fillVolumeMetricUsed === true) {
-    reasonCodes.push("PROHIBITED_FILL_VOLUME_METRIC");
+  if (
+    policy.eligibilityCriteria.requiresShipmentScheduledWithinSla &&
+    request.requestObject.shipmentScheduledWithinSla !== true &&
+    !externalBlockerDocumented
+  ) {
+    reasonCodes.push("SHIPMENT_SLA_EXCEEDED");
   }
 
-  if (request.requestObject.pharmacySteeringMetricUsed === true) {
-    reasonCodes.push("PROHIBITED_PHARMACY_STEERING_METRIC");
-  }
-
-  if (request.requestObject.patientAdherenceMetricUsed === true) {
-    reasonCodes.push("PROHIBITED_PATIENT_ADHERENCE_METRIC");
-  }
-
-  if (request.requestObject.containsPhi === true) {
-    reasonCodes.push("PHI_IN_PAYMENT_METADATA");
+  if (
+    policy.eligibilityCriteria.requiresDeliveryConfirmedWithinSla &&
+    request.requestObject.deliveryConfirmedWithinSla !== true &&
+    !externalBlockerDocumented
+  ) {
+    reasonCodes.push("DELIVERY_SLA_EXCEEDED");
   }
 
   const amount = specialtyRxFulfillmentAmount(policy, request);

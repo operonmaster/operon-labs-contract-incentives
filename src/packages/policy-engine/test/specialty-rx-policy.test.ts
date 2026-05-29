@@ -170,6 +170,62 @@ describe("specialty_rx_fulfillment_sla policy", () => {
     });
   });
 
+  it("does not let external blockers hide contract or payment-safety failures", () => {
+    const result = evaluatePolicy({
+      policy,
+      request: {
+        ...approvedRequest,
+        submitter: {
+          id: "unknown-specialty-rx"
+        },
+        requestObject: {
+          ...approvedRequest.requestObject,
+          planId: "wrong-plan",
+          pharmacyId: "unknown-specialty-rx",
+          externalBlockerDocumented: true,
+          drugChoiceMetricUsed: true,
+          containsPhi: true
+        }
+      },
+      monthToDateAmount: 0
+    });
+
+    expect(result).toMatchObject({
+      decision: "blocked",
+      amount: 0,
+      walletId: null,
+      reasonCodes: [
+        "PLAN_NOT_IN_CONTRACT",
+        "SPECIALTY_PHARMACY_NOT_IN_CONTRACT",
+        "PROHIBITED_DRUG_CHOICE_METRIC",
+        "PHI_IN_PAYMENT_METADATA"
+      ]
+    });
+  });
+
+  it("routes manual specialty policies to manual review", () => {
+    const result = evaluatePolicy({
+      policy: {
+        ...policy,
+        settlement: {
+          ...policy.settlement,
+          mode: "manual",
+          requiresHumanApproval: true
+        }
+      },
+      request: approvedRequest,
+      monthToDateAmount: 0
+    });
+
+    expect(result).toMatchObject({
+      decision: "manual_review",
+      amount: 0,
+      walletId: null,
+      requiresHumanApproval: true,
+      reasonCodes: ["MANUAL_REVIEW_REQUIRED"]
+    });
+  });
+
   it("enforces the monthly cap after cold-chain add-on calculation", () => {
     const result = evaluatePolicy({ policy, request: approvedRequest, monthToDateAmount: 698 });
 
