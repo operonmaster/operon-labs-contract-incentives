@@ -372,14 +372,6 @@ function evaluateSpecialtyRxFulfillmentPolicy(input: EvaluatePolicyInput): Polic
     reasonCodes.push("SHIPMENT_SLA_EXCEEDED");
   }
 
-  if (
-    policy.eligibilityCriteria.requiresDeliveryConfirmedWithinSla &&
-    request.requestObject.deliveryConfirmedWithinSla !== true &&
-    !externalBlockerDocumented
-  ) {
-    reasonCodes.push("DELIVERY_SLA_EXCEEDED");
-  }
-
   const amount = specialtyRxFulfillmentAmount(policy, request);
   if (monthToDateAmount + amount > policy.payout.monthlyCap) {
     reasonCodes.push("MONTHLY_CAP_EXCEEDED");

@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 
 import { createElement } from "react";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { SpecialtyFulfillmentCase } from "../../lib/specialty-rx-store";
@@ -21,6 +23,37 @@ describe("SpecialtyRxWorkflowModal", () => {
     expect(markup).toContain("Clear To Fill");
     expect(markup).toContain("Schedule Shipment");
     expect(markup).toContain("Confirm Fulfillment");
+    expect(markup).toContain("Fulfillment SLA");
+    expect(markup).toContain("Not started");
+  });
+
+  it("shows a closed Fulfillment SLA on the confirmation step after shipment is scheduled", () => {
+    const markup = renderToStaticMarkup(
+      createElement(SpecialtyRxWorkflowModal, {
+        caseRecord: {
+          ...buildSpecialtyFulfillmentCase(),
+          state: "shipment_scheduled",
+          clearToFillAt: "2026-05-28T15:00:00.000Z",
+          shipmentScheduledAt: "2026-05-28T16:00:00.000Z"
+        },
+        onClose: () => undefined,
+        onUpdated: () => undefined
+      })
+    );
+
+    expect(markup).toContain("Fulfillment SLA");
+    expect(markup).toContain("Closed - Within SLA");
+  });
+
+  it("uses Fulfillment SLA as the workqueue clock column", () => {
+    const source = readFileSync(
+      path.join(process.cwd(), "src/apps/web/components/specialty-rx/SpecialtyRxConsole.tsx"),
+      "utf8"
+    );
+
+    expect(source).toContain("Fulfillment SLA");
+    expect(source).not.toContain("<th>Clear to fill</th>");
+    expect(source).not.toContain("<th>Shipment</th>");
   });
 
   it("marks the active workflow step for assistive technology", () => {

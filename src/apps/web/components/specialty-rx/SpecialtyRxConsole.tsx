@@ -6,8 +6,9 @@ import { LabsBadge, LabsHero, LabsPageShell } from "../labs-ui";
 import type { SpecialtyFulfillmentCase } from "../../lib/specialty-rx-store";
 import { SpecialtyRxUseCaseNavigation } from "./SpecialtyRxUseCaseNavigation";
 import {
+  formatFulfillmentSlaClock,
   formatFulfillmentState,
-  formatNullableDateTime,
+  fulfillmentSlaBadgeVariant,
   fulfillmentStateBadgeVariant
 } from "./specialty-rx-formatters";
 import { SpecialtyRxWorkflowModal } from "./SpecialtyRxWorkflowModal";
@@ -173,15 +174,14 @@ export function SpecialtyRxConsole() {
                 <th>Pharmacy</th>
                 <th>Drug/service</th>
                 <th>State</th>
-                <th>Clear to fill</th>
-                <th>Shipment</th>
+                <th>Fulfillment SLA</th>
                 <th>Action</th>
               </tr>
             </thead>
             <tbody>
               {initialLoading ? (
                 <tr className="loading-row">
-                  <td colSpan={8}>
+                  <td colSpan={7}>
                     <div className="loading-indicator" role="status" aria-live="polite">
                       <span className="loading-dot" aria-hidden="true" />
                       <span>Loading specialty fulfillment cases</span>
@@ -198,8 +198,9 @@ export function SpecialtyRxConsole() {
                   <td className="badge-cell">
                     <LabsBadge variant={fulfillmentStateBadgeVariant(row.state)}>{formatFulfillmentState(row.state)}</LabsBadge>
                   </td>
-                  <td>{formatNullableDateTime(row.clearToFillAt)}</td>
-                  <td>{formatNullableDateTime(row.shipmentScheduledAt)}</td>
+                  <td className="badge-cell">
+                    <LabsBadge variant={fulfillmentSlaBadgeVariant(row)}>{formatFulfillmentSlaClock(row)}</LabsBadge>
+                  </td>
                   <td>
                     <button
                       className="row-action"
@@ -217,7 +218,7 @@ export function SpecialtyRxConsole() {
               ))}
               {!initialLoading && rows.length === 0 ? (
                 <tr>
-                  <td className="empty-state" colSpan={8}>
+                  <td className="empty-state" colSpan={7}>
                     No specialty fulfillment cases waiting.
                   </td>
                 </tr>

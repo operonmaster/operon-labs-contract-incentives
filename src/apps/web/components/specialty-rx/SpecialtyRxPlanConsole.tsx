@@ -155,8 +155,7 @@ export function SpecialtyRxPlanConsole({
                 <th>Linked PA</th>
                 <th>Pharmacy</th>
                 <th>State</th>
-                <th className="badge-cell">Schedule SLA</th>
-                <th className="badge-cell">Delivery SLA</th>
+                <th className="badge-cell">Fulfillment SLA</th>
                 <th className="badge-cell">Business Policy</th>
                 <th className="badge-cell">Payment Policy</th>
                 <th>Action</th>
@@ -165,7 +164,7 @@ export function SpecialtyRxPlanConsole({
             <tbody>
               {initialLoading ? (
                 <tr className="loading-row">
-                  <td colSpan={9}>
+                  <td colSpan={8}>
                     <div className="loading-indicator" role="status" aria-live="polite">
                       <span className="loading-dot" aria-hidden="true" />
                       <span>Loading specialty fulfillment plan audit rows</span>
@@ -187,11 +186,6 @@ export function SpecialtyRxPlanConsole({
                   <td className="badge-cell">
                     <LabsBadge variant={specialtySlaBadgeVariant(row.scheduleSlaStatus)}>
                       {formatSlaStatus(row.scheduleSlaStatus)}
-                    </LabsBadge>
-                  </td>
-                  <td className="badge-cell">
-                    <LabsBadge variant={specialtySlaBadgeVariant(row.deliverySlaStatus)}>
-                      {formatSlaStatus(row.deliverySlaStatus)}
                     </LabsBadge>
                   </td>
                   <td className="badge-cell">
@@ -220,7 +214,7 @@ export function SpecialtyRxPlanConsole({
               ))}
               {!initialLoading && rows.length === 0 ? (
                 <tr>
-                  <td className="empty-state" colSpan={9}>
+                  <td className="empty-state" colSpan={8}>
                     No specialty fulfillment events have been submitted to the plan audit log.
                   </td>
                 </tr>

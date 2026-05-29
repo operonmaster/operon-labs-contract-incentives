@@ -35,9 +35,23 @@ describe("SpecialtyRxPlanConsole", () => {
 
     expect(markup).toContain("RXF-260526-0900-DELEGATE");
     expect(markup).toContain("PA-260526-0900-DELEGATE");
+    expect(markup).toContain("Fulfillment SLA");
+    expect(markup).not.toContain("Schedule SLA");
+    expect(markup).not.toContain("Delivery SLA");
     expect(markup).toContain("Clear To Fill");
     expect(markup).toContain("Business policy");
     expect(markup).toContain("Payment policy");
+  });
+
+  it("uses Fulfillment SLA language instead of schedule or delivery SLA columns", () => {
+    const source = readFileSync(
+      path.join(process.cwd(), "src/apps/web/components/specialty-rx/SpecialtyRxPlanConsole.tsx"),
+      "utf8"
+    );
+
+    expect(source).toContain("Fulfillment SLA");
+    expect(source).not.toContain("Schedule SLA");
+    expect(source).not.toContain("Delivery SLA");
   });
 });
 

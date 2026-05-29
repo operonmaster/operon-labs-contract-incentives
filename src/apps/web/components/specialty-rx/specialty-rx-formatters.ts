@@ -29,6 +29,45 @@ export function formatSlaStatus(status: SpecialtyRxPlanAuditRow["scheduleSlaStat
   }
 }
 
+export function formatFulfillmentSlaClock(caseRecord: SpecialtyFulfillmentCase): string {
+  if (caseRecord.state === "intake_triage") {
+    return "Not started";
+  }
+
+  if (caseRecord.shipmentScheduledAt) {
+    const status = getFulfillmentSlaStatus(caseRecord);
+    return `Closed - ${formatSlaStatus(status)}`;
+  }
+
+  if (!caseRecord.clearToFillAt) {
+    return "Active - awaiting clear to fill";
+  }
+
+  const dueAt = new Date(caseRecord.clearToFillAt).getTime() + caseRecord.scheduleSlaHours * 60 * 60 * 1000;
+  const deltaMs = dueAt - Date.now();
+  const formattedDuration = formatDuration(Math.abs(deltaMs));
+
+  return deltaMs >= 0 ? `${formattedDuration} remaining` : `Breached by ${formattedDuration}`;
+}
+
+export function fulfillmentSlaBadgeVariant(caseRecord: SpecialtyFulfillmentCase): "info" | "success" | "warning" | "neutral" {
+  if (caseRecord.state === "intake_triage") {
+    return "neutral";
+  }
+
+  if (caseRecord.shipmentScheduledAt) {
+    return getFulfillmentSlaStatus(caseRecord) === "breached" ? "warning" : "success";
+  }
+
+  if (!caseRecord.clearToFillAt) {
+    return "info";
+  }
+
+  return Date.now() <= new Date(caseRecord.clearToFillAt).getTime() + caseRecord.scheduleSlaHours * 60 * 60 * 1000
+    ? "info"
+    : "warning";
+}
+
 export function formatBusinessPolicyStatus(status: SpecialtyRxPlanAuditRow["businessPolicyStatus"]): string {
   switch (status) {
     case "approved":
@@ -143,4 +182,29 @@ export function formatNullableDateTime(value: string | null): string {
     minute: "2-digit",
     month: "short"
   }).format(date);
+}
+
+function getFulfillmentSlaStatus(caseRecord: SpecialtyFulfillmentCase): SpecialtyRxPlanAuditRow["scheduleSlaStatus"] {
+  if (!caseRecord.clearToFillAt || !caseRecord.shipmentScheduledAt) {
+    return "pending";
+  }
+
+  const dueAt = new Date(caseRecord.clearToFillAt).getTime() + caseRecord.scheduleSlaHours * 60 * 60 * 1000;
+  return new Date(caseRecord.shipmentScheduledAt).getTime() <= dueAt ? "within_sla" : "breached";
+}
+
+function formatDuration(milliseconds: number): string {
+  const totalMinutes = Math.max(1, Math.ceil(milliseconds / 60000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  if (hours === 0) {
+    return `${minutes}m`;
+  }
+
+  if (minutes === 0) {
+    return `${hours}h`;
+  }
+
+  return `${hours}h ${minutes}m`;
 }

@@ -4,8 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { LabsBadge } from "../labs-ui";
 import type { SpecialtyFulfillmentCase } from "../../lib/specialty-rx-store";
 import {
+  formatFulfillmentSlaClock,
   formatFulfillmentState,
   formatNullableDateTime,
+  fulfillmentSlaBadgeVariant,
   fulfillmentStateBadgeVariant
 } from "./specialty-rx-formatters";
 
@@ -128,6 +130,12 @@ export function SpecialtyRxWorkflowModal({ caseRecord, onClose, onUpdated }: Spe
             <dt>Code</dt>
             <dd>
               {caseRecord.codingSystem} {caseRecord.billingCode}
+            </dd>
+          </div>
+          <div>
+            <dt>Fulfillment SLA</dt>
+            <dd>
+              <LabsBadge variant={fulfillmentSlaBadgeVariant(caseRecord)}>{formatFulfillmentSlaClock(caseRecord)}</LabsBadge>
             </dd>
           </div>
         </dl>

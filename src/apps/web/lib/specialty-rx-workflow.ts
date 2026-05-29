@@ -152,9 +152,9 @@ export const DELIVERY_SLA_HOURS = 72 as const;
 
 const SPECIALTY_POLICY_CONTROLS = [
   "Approved pharmacy benefit PA linked",
-  "Clear-to-fill timestamp starts SLA",
-  "Shipment scheduled within SLA",
-  "Delivery confirmed within SLA",
+  "Clear-to-fill timestamp starts Fulfillment SLA",
+  "Fulfillment SLA met by shipment scheduling",
+  "Delivery confirmation recorded as closure evidence",
   "External blockers excluded from pharmacy reward"
 ];
 
@@ -937,10 +937,10 @@ function summarizeSpecialtyRxReason(reasonCodes: string[]): string {
     return "Avoidable pharmacy fulfillment exception";
   }
   if (reasonCodes.includes("SHIPMENT_SLA_EXCEEDED")) {
-    return "Shipment scheduling missed the SLA";
+    return "Fulfillment SLA missed at shipment scheduling";
   }
   if (reasonCodes.includes("DELIVERY_SLA_EXCEEDED")) {
-    return "Delivery confirmation missed the SLA";
+    return "Delivery closure evidence timing recorded after target";
   }
 
   return reasonCodes.join(", ");
@@ -969,7 +969,7 @@ function buildSpecialtyRxPolicyCriteria(
     }),
     criterion({
       id: "shipmentScheduledWithinSla",
-      label: "Shipment scheduled within SLA",
+      label: "Fulfillment SLA met",
       expected: "Yes",
       actual: formatYesNo(evidence.shipmentScheduledWithinSla),
       passed: evidence.shipmentScheduledWithinSla && !reasonCodes.includes("SHIPMENT_SLA_EXCEEDED"),
@@ -977,11 +977,11 @@ function buildSpecialtyRxPolicyCriteria(
     }),
     criterion({
       id: "deliveryConfirmedWithinSla",
-      label: "Delivery confirmed within SLA",
-      expected: "Yes",
-      actual: formatYesNo(evidence.deliveryConfirmedWithinSla),
+      label: "Delivery closure evidence recorded",
+      expected: "Delivery confirmed or external blocker documented",
+      actual: formatYesNo(Boolean(evidence.deliveryConfirmedAt) || evidence.externalBlockerDocumented),
       passed:
-        (evidence.deliveryConfirmedWithinSla || evidence.externalBlockerDocumented) &&
+        (Boolean(evidence.deliveryConfirmedAt) || evidence.externalBlockerDocumented) &&
         !reasonCodes.includes("DELIVERY_SLA_EXCEEDED"),
       reasonCode: "DELIVERY_SLA_EXCEEDED"
     }),

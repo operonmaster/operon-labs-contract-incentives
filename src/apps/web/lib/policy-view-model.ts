@@ -427,8 +427,8 @@ function serviceCodeDetailItems(policy: IncentivePolicy): string[] {
 
 function specialtyRxCriteriaDetailItems(policy: IncentivePolicy): string[] {
   const labels = {
-    requiresShipmentScheduledWithinSla: "Shipment scheduled within SLA",
-    requiresDeliveryConfirmedWithinSla: "Delivery confirmed within SLA",
+    requiresShipmentScheduledWithinSla: "Fulfillment SLA met by shipment scheduling",
+    requiresDeliveryConfirmedWithinSla: "Delivery closure evidence recorded",
     requiresColdChainEvidenceWhenRequired: "Cold-chain evidence required when applicable",
     requiresRemsAuthorizationWhenRequired: "REMS authorization required when applicable",
     prohibitsAvoidableFulfillmentException: "No avoidable fulfillment exception"

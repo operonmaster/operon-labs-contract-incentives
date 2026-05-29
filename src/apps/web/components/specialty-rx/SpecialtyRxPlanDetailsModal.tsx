@@ -80,7 +80,7 @@ export function SpecialtyRxPlanDetailsModal({ row, onClose }: SpecialtyRxPlanDet
             </dd>
           </div>
           <div>
-            <dt>Schedule SLA</dt>
+            <dt>Fulfillment SLA</dt>
             <dd>
               <LabsBadge variant={specialtySlaBadgeVariant(row.scheduleSlaStatus)}>
                 {formatSlaStatus(row.scheduleSlaStatus)}
@@ -88,12 +88,8 @@ export function SpecialtyRxPlanDetailsModal({ row, onClose }: SpecialtyRxPlanDet
             </dd>
           </div>
           <div>
-            <dt>Delivery SLA</dt>
-            <dd>
-              <LabsBadge variant={specialtySlaBadgeVariant(row.deliverySlaStatus)}>
-                {formatSlaStatus(row.deliverySlaStatus)}
-              </LabsBadge>
-            </dd>
+            <dt>Closure evidence</dt>
+            <dd>{formatNullableDateTime(row.deliveryConfirmedAt)}</dd>
           </div>
           <div>
             <dt>Amount</dt>

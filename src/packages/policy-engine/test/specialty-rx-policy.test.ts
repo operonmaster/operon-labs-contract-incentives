@@ -116,6 +116,27 @@ describe("specialty_rx_fulfillment_sla policy", () => {
     });
   });
 
+  it("does not treat delivery timing as the paid fulfillment SLA", () => {
+    const result = evaluatePolicy({
+      policy,
+      request: {
+        ...approvedRequest,
+        requestObject: {
+          ...approvedRequest.requestObject,
+          deliveryConfirmedWithinSla: false
+        }
+      },
+      monthToDateAmount: 0
+    });
+
+    expect(result).toMatchObject({
+      decision: "approved",
+      amount: 7,
+      walletId: "0.0.9049549",
+      reasonCodes: []
+    });
+  });
+
   it("blocks prohibited commercial metrics and PHI payment metadata", () => {
     const result = evaluatePolicy({
       policy,
