@@ -296,6 +296,10 @@ export function createSpecialtyRxWorkflow(
 
         const timestamp = now.toISOString();
         const isException = input.avoidableFulfillmentException || input.externalBlockerDocumented;
+        if (!input.deliveryConfirmed && !isException) {
+          throw new Error("SPECIALTY_RX_DELIVERY_NOT_CONFIRMED");
+        }
+
         const updated = {
           ...caseRecord,
           state: isException ? "exception" as const : "fulfilled" as const,

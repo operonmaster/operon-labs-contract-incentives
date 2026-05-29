@@ -142,6 +142,14 @@ class FirestorePaymentPolicyStore implements PaymentPolicyStore {
         const ref = firestore.collection(PAYMENT_POLICIES_COLLECTION).doc(policy.planId);
         const existing = await ref.get();
         if (existing.exists) {
+          const existingPolicy = existing.data();
+          if (isSeedOwnedOldDefaultPaymentPolicy(existingPolicy, policy)) {
+            await ref.set({
+              ...copyPolicy(policy),
+              updatedAt,
+              updatedBy: POLICY_SEED_ACTOR
+            } satisfies StoredPaymentPlanPolicy);
+          }
           return;
         }
 
@@ -271,6 +279,42 @@ function copyPolicy(policy: PaymentPlanPolicy): PaymentPlanPolicy {
     maxPaymentAmount: copy.maxPaymentAmount,
     paymentEnvelopeIntegrity: copy.paymentEnvelopeIntegrity
   };
+}
+
+function isSeedOwnedOldDefaultPaymentPolicy(value: unknown, currentDefault: PaymentPlanPolicy): boolean {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Partial<StoredPaymentPlanPolicy>;
+  if (
+    currentDefault.maxPaymentAmount !== 7 ||
+    candidate.maxPaymentAmount !== 5 ||
+    candidate.paymentToken !== "HBAR" ||
+    candidate.maxPaymentPerRequest !== true
+  ) {
+    return false;
+  }
+
+  return candidate.updatedBy === POLICY_SEED_ACTOR || matchesHistoricalGeneratedDefault(candidate, currentDefault);
+}
+
+function matchesHistoricalGeneratedDefault(
+  candidate: Partial<StoredPaymentPlanPolicy>,
+  currentDefault: PaymentPlanPolicy
+): boolean {
+  return (
+    candidate.updatedBy === undefined &&
+    candidate.planId === currentDefault.planId &&
+    candidate.planName === currentDefault.planName &&
+    candidate.status === currentDefault.status &&
+    candidate.version === currentDefault.version &&
+    candidate.businessEvaluationAttestation === currentDefault.businessEvaluationAttestation &&
+    candidate.duplicatePaymentPrevention === currentDefault.duplicatePaymentPrevention &&
+    candidate.paymentToken === currentDefault.paymentToken &&
+    candidate.maxPaymentPerRequest === currentDefault.maxPaymentPerRequest &&
+    candidate.paymentEnvelopeIntegrity === currentDefault.paymentEnvelopeIntegrity
+  );
 }
 
 export type HederaAgentPolicyStoreBackend = PaymentPolicyStoreBackend;

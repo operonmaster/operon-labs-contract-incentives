@@ -333,6 +333,33 @@ describe("specialty rx workflow", () => {
     expect(row!.policyCriteria.length).toBeGreaterThan(0);
     expect(executePolicyBoundPaymentMock).not.toHaveBeenCalled();
   });
+
+  it("rejects fulfilled state without delivery confirmation unless an exception is documented", async () => {
+    const { workflow } = await createApprovedSpecialtyRxCase("PA-260526-0900-RX777777");
+    const [created] = await workflow.listWorkqueue();
+
+    await completeHappyPathBeforeFulfillment(workflow, created!.id);
+
+    await expect(
+      workflow.confirmFulfillment(created!.id, {
+        shipped: true,
+        deliveryConfirmed: false,
+        deliveryAttemptDocumented: true,
+        temperatureLogValid: true,
+        avoidableFulfillmentException: false,
+        externalBlockerDocumented: false,
+        exceptionReasonCode: null
+      })
+    ).rejects.toThrow("SPECIALTY_RX_DELIVERY_NOT_CONFIRMED");
+    await expect(workflow.listWorkqueue()).resolves.toEqual([
+      expect.objectContaining({
+        id: created!.id,
+        state: "shipment_scheduled"
+      })
+    ]);
+    await expect(workflow.listPlanRows()).resolves.toEqual([]);
+    expect(executePolicyBoundPaymentMock).not.toHaveBeenCalled();
+  });
 });
 
 async function createApprovedSpecialtyRxCase(

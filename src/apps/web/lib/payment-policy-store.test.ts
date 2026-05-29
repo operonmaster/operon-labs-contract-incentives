@@ -73,6 +73,52 @@ describe("payment policy store", () => {
     expect(policy?.maxPaymentAmount).toBe(2);
   });
 
+  it("migrates existing seed-owned old default payment max to the current default", async () => {
+    const firestore = createFakeFirestore();
+    await firestore.collection("paymentPolicies").doc("acme-health-ppo").set({
+      ...defaultPaymentPlanPolicies["acme-health-ppo"],
+      maxPaymentAmount: 5,
+      updatedAt: "2026-05-28T00:00:00.000Z",
+      updatedBy: "operon-labs-contract-incentives"
+    });
+    const store = createFirestorePaymentPolicyStore(
+      {
+        projectId: "operon-labs-nonprod",
+        databaseId: "(default)"
+      },
+      firestore
+    );
+
+    const policy = await store.getPolicyForPlan("acme-health-ppo");
+    const storedDoc = (await firestore.collection("paymentPolicies").doc("acme-health-ppo").get()).data() as {
+      maxPaymentAmount?: number;
+    };
+
+    expect(policy?.maxPaymentAmount).toBe(7);
+    expect(storedDoc.maxPaymentAmount).toBe(7);
+  });
+
+  it("preserves existing customized lower payment max during seed migration", async () => {
+    const firestore = createFakeFirestore();
+    await firestore.collection("paymentPolicies").doc("acme-health-ppo").set({
+      ...defaultPaymentPlanPolicies["acme-health-ppo"],
+      maxPaymentAmount: 2,
+      updatedAt: "2026-05-28T00:00:00.000Z",
+      updatedBy: "operator"
+    });
+    const store = createFirestorePaymentPolicyStore(
+      {
+        projectId: "operon-labs-nonprod",
+        databaseId: "(default)"
+      },
+      firestore
+    );
+
+    const policy = await store.getPolicyForPlan("acme-health-ppo");
+
+    expect(policy?.maxPaymentAmount).toBe(2);
+  });
+
   it("prefers PAYMENT_POLICY_STORE_BACKEND while keeping HEDERA_POLICY_STORE_BACKEND as a temporary fallback", () => {
     expect(createPaymentPolicyStoreFromEnv({ PAYMENT_POLICY_STORE_BACKEND: "memory" }).backend).toBe("memory");
     expect(createPaymentPolicyStoreFromEnv({ HEDERA_POLICY_STORE_BACKEND: "memory" }).backend).toBe("memory");
