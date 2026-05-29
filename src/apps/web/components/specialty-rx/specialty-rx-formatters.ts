@@ -16,6 +16,16 @@ export function formatFulfillmentState(state: SpecialtyFulfillmentCase["state"])
   }
 }
 
+export function formatFulfillmentCaseState(
+  caseRecord: Pick<SpecialtyFulfillmentCase, "state" | "shipmentScheduledAt">
+): string {
+  if (caseRecord.state === "shipment_scheduled" && !caseRecord.shipmentScheduledAt) {
+    return "Schedule Shipment";
+  }
+
+  return formatFulfillmentState(caseRecord.state);
+}
+
 export function formatSlaStatus(status: SpecialtyRxPlanAuditRow["fulfillmentSlaStatus"]): string {
   switch (status) {
     case "within_sla":

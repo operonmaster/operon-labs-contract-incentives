@@ -6,8 +6,8 @@ import { LabsBadge, LabsHero, LabsPageShell } from "../labs-ui";
 import type { SpecialtyFulfillmentCase } from "../../lib/specialty-rx-store";
 import { SpecialtyRxUseCaseNavigation } from "./SpecialtyRxUseCaseNavigation";
 import {
+  formatFulfillmentCaseState,
   formatFulfillmentSlaClock,
-  formatFulfillmentState,
   fulfillmentSlaBadgeVariant,
   fulfillmentStateBadgeVariant
 } from "./specialty-rx-formatters";
@@ -196,7 +196,9 @@ export function SpecialtyRxConsole() {
                   <td>{row.pharmacyDisplay}</td>
                   <td>{row.serviceLabel}</td>
                   <td className="badge-cell">
-                    <LabsBadge variant={fulfillmentStateBadgeVariant(row.state)}>{formatFulfillmentState(row.state)}</LabsBadge>
+                    <LabsBadge variant={fulfillmentStateBadgeVariant(row.state)}>
+                      {formatFulfillmentCaseState(row)}
+                    </LabsBadge>
                   </td>
                   <td className="badge-cell">
                     <LabsBadge variant={fulfillmentSlaBadgeVariant(row)}>{formatFulfillmentSlaClock(row)}</LabsBadge>

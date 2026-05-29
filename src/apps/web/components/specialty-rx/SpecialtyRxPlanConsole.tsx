@@ -9,7 +9,7 @@ import { SpecialtyRxPlanDetailsModal } from "./SpecialtyRxPlanDetailsModal";
 import {
   businessPolicyStatusBadgeVariant,
   formatBusinessPolicyStatus,
-  formatFulfillmentState,
+  formatFulfillmentCaseState,
   formatPaymentPolicyStatus,
   formatSlaStatus,
   fulfillmentStateBadgeVariant,
@@ -181,7 +181,9 @@ export function SpecialtyRxPlanConsole({
                   <td className="mono-cell">{row.umRequestId}</td>
                   <td>{row.pharmacyDisplay}</td>
                   <td className="badge-cell">
-                    <LabsBadge variant={fulfillmentStateBadgeVariant(row.state)}>{formatFulfillmentState(row.state)}</LabsBadge>
+                    <LabsBadge variant={fulfillmentStateBadgeVariant(row.state)}>
+                      {formatFulfillmentCaseState(row)}
+                    </LabsBadge>
                   </td>
                   <td className="badge-cell">
                     <LabsBadge variant={specialtySlaBadgeVariant(row.fulfillmentSlaStatus)}>

@@ -7,7 +7,7 @@ import {
   businessPolicyStatusBadgeVariant,
   formatBusinessPolicyStatus,
   formatCurrency,
-  formatFulfillmentState,
+  formatFulfillmentCaseState,
   formatNullableDateTime,
   formatPaymentPolicyStatus,
   formatRequestType,
@@ -127,7 +127,7 @@ export function SpecialtyRxPlanDetailsModal({ row, onClose }: SpecialtyRxPlanDet
                 <dt>State</dt>
                 <dd>
                   <LabsBadge variant={fulfillmentStateBadgeVariant(row.state)}>
-                    {formatFulfillmentState(row.state)}
+                    {formatFulfillmentCaseState(row)}
                   </LabsBadge>
                 </dd>
               </div>

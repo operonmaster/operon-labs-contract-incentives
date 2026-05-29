@@ -50,6 +50,43 @@ describe("SpecialtyRxWorkflowModal", () => {
     expect(markup).toContain("Closed - Within SLA");
   });
 
+  it("renders Schedule Shipment as the state badge before shipment is scheduled", () => {
+    const markup = renderToStaticMarkup(
+      createElement(SpecialtyRxWorkflowModal, {
+        caseRecord: {
+          ...buildSpecialtyFulfillmentCase(),
+          state: "shipment_scheduled",
+          fulfillmentSlaStartedAt: "2026-05-28T15:00:00.000Z",
+          clearToFillAt: "2026-05-28T15:00:00.000Z",
+          shipmentScheduledAt: null
+        },
+        onClose: () => undefined,
+        onUpdated: () => undefined
+      })
+    );
+
+    expect(getWorkflowStateBadgeText(markup)).toBe("Schedule Shipment");
+    expect(markup).not.toContain(">Shipment Scheduled<");
+  });
+
+  it("renders Shipment Scheduled as the state badge after shipment is scheduled", () => {
+    const markup = renderToStaticMarkup(
+      createElement(SpecialtyRxWorkflowModal, {
+        caseRecord: {
+          ...buildSpecialtyFulfillmentCase(),
+          state: "shipment_scheduled",
+          fulfillmentSlaStartedAt: "2026-05-28T15:00:00.000Z",
+          clearToFillAt: "2026-05-28T15:00:00.000Z",
+          shipmentScheduledAt: "2026-05-28T16:00:00.000Z"
+        },
+        onClose: () => undefined,
+        onUpdated: () => undefined
+      })
+    );
+
+    expect(getWorkflowStateBadgeText(markup)).toBe("Shipment Scheduled");
+  });
+
   it("shows active Fulfillment SLA time remaining during clear to fill and shipment scheduling", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-05-28T16:00:00.000Z"));
@@ -212,4 +249,10 @@ function buildSpecialtyFulfillmentCase(): SpecialtyFulfillmentCase {
     },
     updatedAt: "2026-05-28T15:05:00.000Z"
   };
+}
+
+function getWorkflowStateBadgeText(markup: string): string | null | undefined {
+  const root = document.createElement("div");
+  root.innerHTML = markup;
+  return root.querySelector(".delegate-review-id-line .op-badge")?.textContent;
 }
