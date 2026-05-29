@@ -223,7 +223,7 @@ class FirestoreSpecialtyRxCaseStore implements SpecialtyRxCaseStore {
     await (await this.getFirestore())
       .collection(SPECIALTY_PLAN_AUDIT_ROWS_COLLECTION)
       .doc(row.fulfillmentCaseId)
-      .set(copyPlanRow(row));
+      .set(removeUndefinedFields(copyPlanRow(row)));
   }
 
   async getPlanRow(fulfillmentCaseId: string): Promise<SpecialtyRxPlanAuditRow | null> {
@@ -286,6 +286,25 @@ function validateSpecialtyRxPlanAuditRow(value: SpecialtyRxPlanAuditRow): void {
   if (!isSpecialtyRxPlanAuditRowShape(value)) {
     throw new Error("INVALID_SPECIALTY_RX_PLAN_AUDIT_ROW");
   }
+}
+
+function removeUndefinedFields(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(removeUndefinedFields);
+  }
+
+  if (typeof value !== "object" || value === null) {
+    return value;
+  }
+
+  const cleaned: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value)) {
+    if (child !== undefined) {
+      cleaned[key] = removeUndefinedFields(child);
+    }
+  }
+
+  return cleaned;
 }
 
 function isSpecialtyFulfillmentCaseShape(value: unknown): value is SpecialtyFulfillmentCase {
