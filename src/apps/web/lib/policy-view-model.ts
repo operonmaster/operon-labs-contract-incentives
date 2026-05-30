@@ -159,7 +159,15 @@ function buildSpecialtyRxFulfillmentBusinessPolicyCards(policy: IncentivePolicy)
   ];
 }
 
-export function buildAppealsPacketQualityBusinessPolicyCards(policy: IncentivePolicy): PolicySummary[] {
+export function buildAppealsPacketQualityBusinessPolicyCards(policy: IncentivePolicy | null | undefined): PolicySummary[] {
+  if (!policy) {
+    return [];
+  }
+
+  if (policy.evaluationType !== appealsPacketQualityBusinessPolicyType) {
+    return [];
+  }
+
   const token = policy.payout.token;
   const status = policy.status === "active" ? "Active" : "Disabled";
 

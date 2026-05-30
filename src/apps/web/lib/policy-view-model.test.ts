@@ -3,6 +3,7 @@ import type { IncentivePolicy } from "@operon-labs/policy-engine";
 import { defaultPaymentPlanPolicies } from "./payment-policy-store";
 import { defaultIncentivePolicies } from "./policy-store";
 import {
+  buildAppealsPacketQualityBusinessPolicyCards,
   buildBusinessPolicyCards,
   delegateUmSlaBonusBusinessPolicyType,
   buildHederaAgentKitPlanPolicyCards,
@@ -217,6 +218,12 @@ describe("policy view model", () => {
     });
     expect(JSON.stringify(cards)).toContain("packet-readiness SLA");
     expect(JSON.stringify(cards)).toContain("No appeal outcome incentive");
+  });
+
+  it("does not build Appeals Packet Quality cards for unrelated policy types", () => {
+    const cards = buildAppealsPacketQualityBusinessPolicyCards(defaultIncentivePolicies.provider_documentation_acme_outpatient);
+
+    expect(cards).toEqual([]);
   });
 
   it("lists plan-level payment policies separately from business eligibility", () => {

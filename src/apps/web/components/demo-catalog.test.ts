@@ -30,6 +30,7 @@ describe("demo catalog", () => {
     const appeals = getScenario("appeals");
     expect(appeals.status).toBe("active");
     expect(appeals.title).toBe("Appeals Packet Quality");
+    expect(appeals.submitter).toBe("Provider appeals team");
     expect(demoScenarios.filter((scenario) => scenario.status === "dormant").map((scenario) => scenario.slug)).toEqual([]);
     expect(homePage).toContain('{scenario.status === "dormant" ? <em>Dormant</em> : null}');
     expect(styles).toContain(".card > em");
@@ -49,5 +50,13 @@ describe("demo catalog", () => {
 
       expect(source).toContain('export const dynamic = "force-dynamic"');
     }
+  });
+
+  it("wires the appeals policy catalog page to the appeals business policy store query", () => {
+    const source = readFileSync(path.join(process.cwd(), "src/apps/web/app/appeals/policies/page.tsx"), "utf8");
+
+    expect(source).toContain('export const dynamic = "force-dynamic"');
+    expect(source).toContain("policyStore.listPolicies");
+    expect(source).toContain("appeals_packet_quality");
   });
 });

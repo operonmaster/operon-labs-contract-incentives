@@ -36,7 +36,7 @@ export const demoScenarios: DemoScenario[] = [
   {
     slug: "appeals",
     title: "Appeals Packet Quality",
-    submitter: "Appeals operations partner",
+    submitter: "Provider appeals team",
     purpose: "Reward complete, timely, well-rationalized appeal packets without outcome incentives.",
     evaluationType: "appeals_packet_quality",
     status: "active"

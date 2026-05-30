@@ -20,10 +20,37 @@ describe("policy store", () => {
     const policies = await store.listPolicies("provider_documentation_completeness");
     const delegatePolicies = await store.listPolicies("delegate_um_sla_bonus");
     const specialtyRxPolicies = await store.listPolicies("specialty_rx_fulfillment_sla");
+    const appealsPolicies = await store.listPolicies("appeals_packet_quality");
 
     expect(policies).toHaveLength(4);
     expect(delegatePolicies).toHaveLength(4);
     expect(specialtyRxPolicies).toHaveLength(1);
+    expect(appealsPolicies).toHaveLength(1);
+    expect(appealsPolicies).toEqual([
+      expect.objectContaining({
+        policyId: "appeals-packet-quality-v1",
+        evaluationType: "appeals_packet_quality",
+        contractPair: {
+          planId: "acme-health-ppo",
+          planName: "Acme Health PPO",
+          providerId: "lakeside-provider-admin",
+          providerName: "Lakeside Provider Admin"
+        },
+        incentiveScope: {
+          eligibleRequestTypes: ["pharmacy_benefit", "outpatient_service"]
+        },
+        payout: {
+          token: "HBAR",
+          amountPerEligibleRequest: 6,
+          monthlyCap: 700
+        },
+        settlement: {
+          mode: "auto",
+          recipientWalletId: "0.0.9049549",
+          requiresHumanApproval: false
+        }
+      })
+    ]);
     expect(specialtyRxPolicies).toEqual([
       expect.objectContaining({
         policyId: "specialty-rx-fulfillment-sla-v1",
@@ -153,7 +180,7 @@ describe("policy store", () => {
       ])
     );
     expect(policies.every((policy) => !("displayName" in policy))).toBe(true);
-    expect((await firestore.collection("incentivePolicies").get()).docs).toHaveLength(9);
+    expect((await firestore.collection("incentivePolicies").get()).docs).toHaveLength(10);
     expect(firestore.collectionNames()).toEqual(expect.arrayContaining(["incentivePolicies"]));
     expect(firestore.collectionNames()).not.toEqual(expect.arrayContaining(["policies", "policyYaml"]));
   });
@@ -229,6 +256,36 @@ describe("policy store", () => {
       requestType: "pharmacy_benefit",
       submittedAt: "2026-05-25T12:00:00.000Z"
     });
+    const appealsPharmacy = await store.findPolicies({
+      evaluationType: "appeals_packet_quality",
+      planId: "acme-health-ppo",
+      providerId: "lakeside-provider-admin",
+      requestType: "pharmacy_benefit"
+    });
+    const appealsOutpatient = await store.findPolicies({
+      evaluationType: "appeals_packet_quality",
+      planId: "acme-health-ppo",
+      providerId: "lakeside-provider-admin",
+      requestType: "outpatient_service"
+    });
+    const appealsUnsupportedPlan = await store.findPolicies({
+      evaluationType: "appeals_packet_quality",
+      planId: "summit-health-hmo",
+      providerId: "lakeside-provider-admin",
+      requestType: "pharmacy_benefit"
+    });
+    const appealsUnsupportedProvider = await store.findPolicies({
+      evaluationType: "appeals_packet_quality",
+      planId: "acme-health-ppo",
+      providerId: "northstar-um",
+      requestType: "pharmacy_benefit"
+    });
+    const appealsUnsupportedRequestType = await store.findPolicies({
+      evaluationType: "appeals_packet_quality",
+      planId: "acme-health-ppo",
+      providerId: "lakeside-provider-admin",
+      requestType: "inpatient_admission"
+    });
 
     expect(pairPolicies.map((policy) => policy.policyId).sort()).toEqual([
       "plcy_2N7P5R8T0V4X6Z1B3D9F",
@@ -241,6 +298,11 @@ describe("policy store", () => {
     expect(summitPharmacyDelegate?.policyId).toBe("delegate-um-summit-pharmacy-sla-bonus-v1");
     expect(summitOutpatientDelegate?.policyId).toBe("delegate-um-summit-outpatient-sla-bonus-v1");
     expect(specialtyRx?.policyId).toBe("specialty-rx-fulfillment-sla-v1");
+    expect(appealsPharmacy.map((policy) => policy.policyId)).toEqual(["appeals-packet-quality-v1"]);
+    expect(appealsOutpatient.map((policy) => policy.policyId)).toEqual(["appeals-packet-quality-v1"]);
+    expect(appealsUnsupportedPlan).toEqual([]);
+    expect(appealsUnsupportedProvider).toEqual([]);
+    expect(appealsUnsupportedRequestType).toEqual([]);
     expect(missing).toBeNull();
   });
 
@@ -455,7 +517,7 @@ describe("policy store", () => {
         }
       })
     ]));
-    expect(docs).toHaveLength(9);
+    expect(docs).toHaveLength(10);
   });
 
   it("stores either included or excluded scope lists, not both, for request types and service codes", async () => {
