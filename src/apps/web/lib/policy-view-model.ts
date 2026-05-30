@@ -34,9 +34,11 @@ export const policyBoundaryStatement =
 export const providerDocumentationBusinessPolicyType = "provider_documentation_completeness";
 export const delegateUmSlaBonusBusinessPolicyType = "delegate_um_sla_bonus";
 export const specialtyRxFulfillmentBusinessPolicyType = "specialty_rx_fulfillment_sla";
+export const appealsPacketQualityBusinessPolicyType = "appeals_packet_quality";
 const providerDocumentationBusinessPolicyTitle = "Provider Documentation Completeness";
 const delegateUmSlaBonusBusinessPolicyTitle = "Delegate UM SLA Bonus";
 const specialtyRxFulfillmentBusinessPolicyTitle = "Specialty Rx Fulfillment SLA";
+export const appealsPacketQualityBusinessPolicyTitle = "Appeals Packet Quality";
 const delegateUmSlaHours = 24;
 
 export function buildBusinessPolicyCards(policy: IncentivePolicy | null | undefined): PolicySummary[] {
@@ -54,6 +56,10 @@ export function buildBusinessPolicyCards(policy: IncentivePolicy | null | undefi
 
   if (policy.evaluationType === specialtyRxFulfillmentBusinessPolicyType) {
     return buildSpecialtyRxFulfillmentBusinessPolicyCards(policy);
+  }
+
+  if (policy.evaluationType === appealsPacketQualityBusinessPolicyType) {
+    return buildAppealsPacketQualityBusinessPolicyCards(policy);
   }
 
   return [];
@@ -149,6 +155,33 @@ function buildSpecialtyRxFulfillmentBusinessPolicyCards(policy: IncentivePolicy)
         }
       ],
       detailSections: buildSpecialtyRxFulfillmentDetailSections(policy, token)
+    }
+  ];
+}
+
+export function buildAppealsPacketQualityBusinessPolicyCards(policy: IncentivePolicy): PolicySummary[] {
+  const token = policy.payout.token;
+  const status = policy.status === "active" ? "Active" : "Disabled";
+
+  return [
+    {
+      id: policy.policyId,
+      title: appealsPacketQualityBusinessPolicyTitle,
+      category: "business",
+      source: "Plan/provider appeals contract policy",
+      appliesTo: appealsPacketQualityBusinessPolicyTitle,
+      payoutOrControl: `${policy.payout.amountPerEligibleRequest} ${token} per eligible appeal packet`,
+      status,
+      summary: "Appeals Packet Quality incentive for timely, audit-ready appeal packet preparation without outcome-based payment.",
+      previewItems: [
+        { label: "Policy ID", value: policy.policyId },
+        { label: "Plan", value: policy.contractPair.planName },
+        { label: "Submitter", value: policy.contractPair.providerName },
+        requestTypePreview(policy),
+        { label: "Payout", value: `${policy.payout.amountPerEligibleRequest} ${token}` },
+        { label: "Outcome guardrail", value: "No appeal outcome incentive" }
+      ],
+      detailSections: buildAppealsPacketQualityDetailSections(policy, token)
     }
   ];
 }
@@ -401,6 +434,53 @@ function buildSpecialtyRxFulfillmentDetailSections(policy: IncentivePolicy, toke
   ];
 }
 
+function buildAppealsPacketQualityDetailSections(policy: IncentivePolicy, token: string): PolicyDetailSection[] {
+  return [
+    {
+      title: "Policy identity",
+      items: [
+        `Policy ID: ${policy.policyId}`,
+        `Version: ${policy.version}`,
+        `Evaluation type: ${policy.evaluationType}`,
+        "Storage collection: incentivePolicies"
+      ]
+    },
+    {
+      title: "Contract pair",
+      items: [
+        `Plan: ${policy.contractPair.planName} (${policy.contractPair.planId})`,
+        `Submitter: ${policy.contractPair.providerName} (${policy.contractPair.providerId})`,
+        `Effective from: ${policy.effectivePeriod.startsOn}`,
+        `Effective through: ${policy.effectivePeriod.endsOn ?? "none"}`
+      ]
+    },
+    {
+      title: "Incentive scope",
+      items: requestTypeDetailItems(policy)
+    },
+    {
+      title: "Eligibility criteria",
+      items: appealsPacketQualityCriteriaDetailItems(policy)
+    },
+    {
+      title: "Payout",
+      items: [
+        `Amount per eligible request: ${policy.payout.amountPerEligibleRequest} ${token}`,
+        `Monthly cap: ${policy.payout.monthlyCap} ${token}`,
+        `Token: ${token}`
+      ]
+    },
+    {
+      title: "Settlement",
+      items: [
+        `Settlement mode: ${formatSettlementMode(policy.settlement.mode)}`,
+        `Recipient wallet ID: ${policy.settlement.recipientWalletId}`,
+        `Human approval required: ${formatBoolean(policy.settlement.requiresHumanApproval)}`
+      ]
+    }
+  ];
+}
+
 function requestTypeDetailItems(policy: IncentivePolicy): string[] {
   if (policy.incentiveScope.eligibleRequestTypes?.length) {
     return [`Eligible request types: ${policy.incentiveScope.eligibleRequestTypes.map(formatRequestTypeWithCode).join(", ")}`];
@@ -440,6 +520,16 @@ function specialtyRxCriteriaDetailItems(policy: IncentivePolicy): string[] {
     `${labels.requiresColdChainEvidenceWhenRequired}: ${formatBoolean(Boolean(policy.eligibilityCriteria.requiresColdChainEvidenceWhenRequired))}`,
     `${labels.requiresRemsAuthorizationWhenRequired}: ${formatBoolean(Boolean(policy.eligibilityCriteria.requiresRemsAuthorizationWhenRequired))}`,
     `${labels.prohibitsAvoidableFulfillmentException}: ${formatBoolean(Boolean(policy.eligibilityCriteria.prohibitsAvoidableFulfillmentException))}`
+  ];
+}
+
+function appealsPacketQualityCriteriaDetailItems(policy: IncentivePolicy): string[] {
+  return [
+    `Appeal receipt starts packet-readiness SLA: ${formatBoolean(Boolean(policy.eligibilityCriteria.requiresAppealPacketReadyWithinSla))}`,
+    `Acknowledgement is a sub-SLA: ${formatBoolean(Boolean(policy.eligibilityCriteria.requiresAppealAcknowledgementWithinSla))}`,
+    `Packet quality audit required: ${formatBoolean(Boolean(policy.eligibilityCriteria.requiresAppealPacketQualityAudit))}`,
+    `No appeal outcome incentive: ${formatBoolean(Boolean(policy.eligibilityCriteria.prohibitsAppealOutcomeIncentive))}`,
+    "No cost savings or denial reversal metric: Yes"
   ];
 }
 

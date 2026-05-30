@@ -122,13 +122,25 @@ Incentive trigger:
 
 Business purpose: reward appeals teams for complete, timely, well-rationalized appeal packets.
 
+Workflow:
+
+1. A provider starts one appeal from a denied prior authorization.
+2. The appeal is received/submitted and `appealReceivedAt` starts the main packet-readiness SLA.
+3. The appeals team acknowledges the appeal; `acknowledgedAt` must be within the 2-business-hour acknowledgement sub-SLA.
+4. The team assembles the required packet evidence, including prior decision summary, clinical rationale, policy citation, required documents, and evidence index.
+5. The packet is marked ready; `packetReadyAt` stops the main packet-readiness SLA.
+6. The health-plan audit console evaluates packet readiness, acknowledgement timing, packet quality, approved submitter, wallet controls, and prohibited outcome metrics.
+
 Submitter:
 
 - appeals delegate, provider ops team, or plan appeals operations partner
 
 Policy evaluates:
 
-- packet submitted within SLA
+- `appealReceivedAt` is present and is the main SLA start
+- `acknowledgedAt` is present and meets the 2-business-hour acknowledgement sub-SLA
+- `packetReadyAt` is present and is the main SLA stop
+- packet ready within the contract packet-readiness SLA
 - required documents present
 - clinical rationale included
 - policy citation included
@@ -138,11 +150,14 @@ Policy evaluates:
 - no rework required
 - payment not tied to appeal outcome
 - payment not tied to cost savings
+- payment not tied to denial reversal
 - no PHI on-chain or in payment metadata
 
 Incentive trigger:
 
 - appeal packet is complete, timely, and audit-ready
+
+CMS note: this demo SLA is a contract operations milestone for packet readiness. It is not a replacement for CMS or other regulatory appeal deadlines; the SLA starts at appeal receipt/submission, not acknowledgement.
 
 ### Demo App 3: Specialty Rx Fulfillment SLA
 

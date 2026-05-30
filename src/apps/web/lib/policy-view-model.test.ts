@@ -206,6 +206,19 @@ describe("policy view model", () => {
     );
   });
 
+  it("builds Appeals Packet Quality policy cards with outcome guardrails", () => {
+    const policy = defaultIncentivePolicies.appeals_acme_packet_quality;
+    const cards = buildBusinessPolicyCards(policy);
+
+    expect(cards[0]).toMatchObject({
+      title: "Appeals Packet Quality",
+      source: "Plan/provider appeals contract policy",
+      appliesTo: "Appeals Packet Quality"
+    });
+    expect(JSON.stringify(cards)).toContain("packet-readiness SLA");
+    expect(JSON.stringify(cards)).toContain("No appeal outcome incentive");
+  });
+
   it("lists plan-level payment policies separately from business eligibility", () => {
     expect(policyBoundaryStatement).toBe(
       "Business contract policies describe plan/provider incentive agreements. Payment policies are plan-level Hedera Agent Kit settlement guardrails before any approved payment leaves the treasury."

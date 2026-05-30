@@ -24,7 +24,9 @@ src/
 - `/delegate-um` - delegated utilization management SLA bonus
 - `/provider-documentation` - provider documentation completeness incentive
 - `/provider-documentation/incentives` - health-plan audit console for provider documentation incentives
-- `/appeals` - appeals packet quality incentive
+- `/appeals` - provider appeals console for starting one appeal per denied PA and preparing packet evidence
+- `/appeals/plan` - health-plan audit console for appeals packet readiness incentives
+- `/appeals/policies` - Appeals Packet Quality business and payment policy catalog
 - `/specialty-rx` - specialty pharmacy fulfillment SLA workflow
 - `/specialty-rx/plan` - health-plan audit console for specialty fulfillment incentives
 - `/specialty-rx/policies` - specialty fulfillment business and payment policy catalog

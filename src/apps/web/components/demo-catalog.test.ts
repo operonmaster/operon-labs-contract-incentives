@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { demoScenarios } from "./demo-catalog";
+import { demoScenarios, getScenario } from "./demo-catalog";
 
 describe("demo catalog", () => {
   it("puts the provider documentation use case first on the home page", () => {
@@ -27,9 +27,10 @@ describe("demo catalog", () => {
     expect(demoScenarios.some((scenario) => scenario.slug === "provider-directory")).toBe(false);
     expect(demoScenarios.find((scenario) => scenario.slug === "provider-documentation")?.status).toBe("active");
     expect(demoScenarios.find((scenario) => scenario.slug === "delegate-um")?.status).toBe("active");
-    expect(demoScenarios.filter((scenario) => scenario.status === "dormant").map((scenario) => scenario.slug)).toEqual([
-      "appeals"
-    ]);
+    const appeals = getScenario("appeals");
+    expect(appeals.status).toBe("active");
+    expect(appeals.title).toBe("Appeals Packet Quality");
+    expect(demoScenarios.filter((scenario) => scenario.status === "dormant").map((scenario) => scenario.slug)).toEqual([]);
     expect(homePage).toContain('{scenario.status === "dormant" ? <em>Dormant</em> : null}');
     expect(styles).toContain(".card > em");
     expect(styles).toMatch(/\.card > em \{[^}]*color: var\(--op-amber-2\);/);

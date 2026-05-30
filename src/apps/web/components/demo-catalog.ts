@@ -39,7 +39,7 @@ export const demoScenarios: DemoScenario[] = [
     submitter: "Appeals operations partner",
     purpose: "Reward complete, timely, well-rationalized appeal packets without outcome incentives.",
     evaluationType: "appeals_packet_quality",
-    status: "dormant"
+    status: "active"
   }
 ];
 

@@ -74,6 +74,8 @@ const INCENTIVE_POLICIES_COLLECTION = "incentivePolicies";
 const POLICY_SEED_ACTOR = "operon-labs-contract-incentives";
 const PROVIDER_ID = "lakeside-provider-admin";
 const PROVIDER_WALLET_ID = "0.0.9049549";
+const APPEALS_SUBMITTER_ID = "lakeside-provider-admin";
+const APPEALS_SUBMITTER_WALLET_ID = "0.0.9049549";
 const DELEGATE_VENDOR_ID = "northstar-um";
 const DELEGATE_VENDOR_WALLET_ID = "0.0.9049549";
 const SPECIALTY_PHARMACY_ID = "atlas-specialty-rx";
@@ -143,6 +145,10 @@ export const defaultIncentivePolicies: Record<string, IncentivePolicy> = {
   }),
   specialty_rx_acme_fulfillment_sla: specialtyRxFulfillmentSlaPolicy({
     policyId: "specialty-rx-fulfillment-sla-v1",
+    planId: "acme-health-ppo"
+  }),
+  appeals_acme_packet_quality: appealsPacketQualityPolicy({
+    policyId: "appeals-packet-quality-v1",
     planId: "acme-health-ppo"
   })
 };
@@ -692,6 +698,33 @@ function specialtyRxFulfillmentSlaPolicy({
       recipientWalletId: SPECIALTY_PHARMACY_WALLET_ID,
       requiresHumanApproval: false
     }
+  };
+}
+
+function appealsPacketQualityPolicy({ policyId, planId }: { policyId: string; planId: string }): IncentivePolicy {
+  return {
+    policyId,
+    version: "v1",
+    status: "active",
+    evaluationType: "appeals_packet_quality",
+    contractPair: {
+      planId,
+      planName: planNameForId(planId),
+      providerId: APPEALS_SUBMITTER_ID,
+      providerName: providerNameForId(APPEALS_SUBMITTER_ID)
+    },
+    effectivePeriod: { startsOn: "2026-05-01", endsOn: null },
+    incentiveScope: { eligibleRequestTypes: ["pharmacy_benefit", "outpatient_service"] },
+    eligibilityCriteria: {
+      appliesOnlyToCoveredBenefits: false,
+      requiresDtrCompletionWhenRequested: false,
+      requiresAppealPacketReadyWithinSla: true,
+      requiresAppealAcknowledgementWithinSla: true,
+      requiresAppealPacketQualityAudit: true,
+      prohibitsAppealOutcomeIncentive: true
+    },
+    payout: { token: "HBAR", amountPerEligibleRequest: 6, monthlyCap: 700 },
+    settlement: { mode: "auto", recipientWalletId: APPEALS_SUBMITTER_WALLET_ID, requiresHumanApproval: false }
   };
 }
 
