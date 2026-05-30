@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  buildBusinessEvaluationId,
   buildPaymentIntentId,
   executePolicyBoundPayment,
+  type PaymentIntent,
   type PaymentApprovalRequest
 } from "@operon-labs/hedera-executor";
 import type { IncentivePolicy } from "@operon-labs/policy-engine";
@@ -94,6 +96,31 @@ describe("appeals workflow", () => {
       expedited: false
     });
     expect(repeated).toEqual(appeal);
+  });
+
+  it("preserves the first appeal SLA clock when startAppeal is called concurrently", async () => {
+    const { workflow, denied } = await createDeniedAppealFixture("PA-260618-0902-RACE0001");
+
+    const [first, repeated] = await Promise.all([
+      workflow.startAppeal(denied.id, { expedited: false }, new Date("2026-06-18T16:00:00.000Z")),
+      workflow.startAppeal(denied.id, { expedited: true }, new Date("2026-06-18T17:00:00.000Z"))
+    ]);
+
+    expect(first).toMatchObject({
+      id: denied.id.replace(/^PA-/, "APL-"),
+      appealReceivedAt: "2026-06-18T16:00:00.000Z",
+      packetReadinessSlaHours: 24,
+      expedited: false
+    });
+    expect(repeated).toEqual(first);
+    await expect(workflow.listWorkqueue()).resolves.toEqual([
+      expect.objectContaining({
+        id: first.id,
+        appealReceivedAt: "2026-06-18T16:00:00.000Z",
+        packetReadinessSlaHours: 24,
+        expedited: false
+      })
+    ]);
   });
 
   it("advances through all appeal packet steps and settles a paid packet row", async () => {
@@ -192,6 +219,129 @@ describe("appeals workflow", () => {
     });
     expect(executePolicyBoundPaymentMock).not.toHaveBeenCalled();
   });
+
+  it("recovers a terminal packet-ready appeal with a missing plan row from a submitted payment intent", async () => {
+    const caseStore = createInMemoryAppealsCaseStore();
+    const { workflow, platform, denied } = await createDeniedAppealFixture(
+      "PA-260618-0902-RECOVER1",
+      caseStore
+    );
+    const appeal = await workflow.startAppeal(denied.id, { expedited: false }, new Date("2026-06-18T16:00:00.000Z"));
+    await completeAppealPacket(workflow, appeal.id, {
+      acknowledgedAt: new Date("2026-06-18T17:00:00.000Z"),
+      packetReadyAt: new Date("2026-06-19T15:00:00.000Z")
+    });
+
+    const terminalCase = await caseStore.getCase(appeal.id);
+    const recoveredCaseStore = createInMemoryAppealsCaseStore([terminalCase!]);
+    const businessPolicyId = "appeals-packet-quality-v1";
+    const incentiveEvaluationId = buildBusinessEvaluationId({
+      umRequestId: denied.id,
+      businessPolicyId
+    });
+    const paymentIntentId = buildPaymentIntentId({
+      umRequestId: denied.id,
+      caseId: denied.id,
+      incentiveEvaluationId,
+      businessPolicyId,
+      paymentPolicyId: "acme-health-ppo"
+    });
+    const submittedIntent: PaymentIntent = {
+      id: paymentIntentId,
+      auditId: "audit-appeals-recovery",
+      umRequestId: denied.id,
+      caseId: denied.id,
+      incentiveEvaluationId,
+      planId: "acme-health-ppo",
+      policyId: businessPolicyId,
+      businessPolicyId,
+      paymentPolicyId: "acme-health-ppo",
+      policyVersion: "v1",
+      triggerEvent: "APPEAL_PACKET_READY",
+      token: "HBAR",
+      amount: 6,
+      sourceAccountId: "0.0.6870566",
+      recipientAccountId: "0.0.9049549",
+      transactionMemo: denied.id,
+      status: "submitted",
+      transactionId: "0.0.6870566@1781978400.000000002",
+      createdAt: "2026-06-19T15:00:00.000Z",
+      updatedAt: "2026-06-19T15:00:01.000Z"
+    };
+    const paymentIntentStore = {
+      reserveIntent: vi.fn(async () => ({
+        allowed: false,
+        reasonCode: "DUPLICATE_PAYMENT_BLOCKED",
+        intent: submittedIntent
+      })),
+      markIntentSubmitted: vi.fn(async () => undefined),
+      markIntentFailed: vi.fn(async () => undefined),
+      getIntent: vi.fn(async (intentId: string) => intentId === paymentIntentId ? submittedIntent : null)
+    };
+    executePolicyBoundPaymentMock.mockClear();
+    executePolicyBoundPaymentMock.mockRejectedValueOnce(new Error("DUPLICATE_PAYMENT_BLOCKED"));
+
+    const restartedWorkflow = createAppealsWorkflow(
+      platform,
+      undefined,
+      recoveredCaseStore,
+      createInMemoryPolicyStore({ appeals_acme_packet_quality: appealsPolicy }),
+      paymentIntentStore,
+      createInMemoryPaymentPolicyStore(defaultPaymentPlanPolicies)
+    );
+
+    await expect(restartedWorkflow.routeReviewer(appeal.id, {
+      reviewerQueueSelected: true,
+      reviewerConflictCheckComplete: true
+    })).resolves.toEqual(expect.objectContaining({ state: "packet_ready" }));
+    await expect(restartedWorkflow.listPlanRows()).resolves.toEqual([
+      expect.objectContaining({
+        appealId: appeal.id,
+        paymentPolicyStatus: "paid",
+        paymentIntentId,
+        transactionId: submittedIntent.transactionId
+      })
+    ]);
+    expect(executePolicyBoundPaymentMock).toHaveBeenCalledTimes(1);
+    expect(paymentIntentStore.getIntent).toHaveBeenCalledWith(paymentIntentId);
+  });
+
+  it("retains the deterministic payment intent id on failed execution rows", async () => {
+    executePolicyBoundPaymentMock.mockRejectedValueOnce(new Error("HEDERA_PAYMENT_AMOUNT_EXCEEDS_PLAN_MAX"));
+    const { workflow, denied } = await createDeniedAppealFixture("PA-260618-0902-PAYFAIL1");
+    const appeal = await workflow.startAppeal(denied.id, { expedited: false }, new Date("2026-06-18T16:00:00.000Z"));
+
+    await completeAppealPacket(workflow, appeal.id, {
+      acknowledgedAt: new Date("2026-06-18T17:00:00.000Z"),
+      packetReadyAt: new Date("2026-06-19T15:00:00.000Z")
+    });
+
+    const [row] = await workflow.listPlanRows();
+    const businessPolicyId = "appeals-packet-quality-v1";
+    const incentiveEvaluationId = buildBusinessEvaluationId({
+      umRequestId: denied.id,
+      businessPolicyId
+    });
+    const paymentIntentId = buildPaymentIntentId({
+      umRequestId: denied.id,
+      caseId: denied.id,
+      incentiveEvaluationId,
+      businessPolicyId,
+      paymentPolicyId: "acme-health-ppo"
+    });
+
+    expect(row).toMatchObject({
+      id: incentiveEvaluationId,
+      appealId: appeal.id,
+      businessPolicyStatus: "approved",
+      paymentPolicyStatus: "blocked",
+      incentiveStatus: "payment_failed",
+      paymentStatus: "execution_failed",
+      paymentPolicyId: "acme-health-ppo",
+      paymentIntentId,
+      transactionId: null
+    });
+  });
 });
 
 async function createEligibilityFixture() {
@@ -221,7 +371,10 @@ async function createEligibilityFixture() {
   };
 }
 
-async function createDeniedAppealFixture(caseId: string) {
+async function createDeniedAppealFixture(
+  caseId: string,
+  caseStore = createInMemoryAppealsCaseStore()
+) {
   const platform = createInMemoryUmPlatform({ generateCaseId: () => caseId });
   const denied = determineRequest(
     platform,
@@ -235,7 +388,7 @@ async function createDeniedAppealFixture(caseId: string) {
     workflow: createAppealsWorkflow(
       platform,
       undefined,
-      createInMemoryAppealsCaseStore(),
+      caseStore,
       createInMemoryPolicyStore({ appeals_acme_packet_quality: appealsPolicy }),
       undefined,
       createInMemoryPaymentPolicyStore(defaultPaymentPlanPolicies)

@@ -70,6 +70,7 @@ export interface AppealCase {
 export interface AppealsCaseStore {
   backend: AppealsStoreBackend;
   saveCase(caseRecord: AppealCase): Promise<void>;
+  createCaseIfAbsent(caseRecord: AppealCase): Promise<AppealCase>;
   getCase(appealId: string): Promise<AppealCase | null>;
   listCases(): Promise<AppealCase[]>;
   savePlanRow(row: AppealsPlanAuditRow): Promise<void>;
@@ -146,6 +147,18 @@ class InMemoryAppealsCaseStore implements AppealsCaseStore {
     this.cases.set(caseRecord.id, copyCase(caseRecord));
   }
 
+  async createCaseIfAbsent(caseRecord: AppealCase): Promise<AppealCase> {
+    validateAppealCase(caseRecord);
+    const existing = this.cases.get(caseRecord.id);
+    if (existing) {
+      return copyCase(existing);
+    }
+
+    const created = copyCase(caseRecord);
+    this.cases.set(caseRecord.id, created);
+    return copyCase(created);
+  }
+
   async getCase(appealId: string): Promise<AppealCase | null> {
     const caseRecord = this.cases.get(appealId);
     return caseRecord ? copyCase(caseRecord) : null;
@@ -190,6 +203,38 @@ class FirestoreAppealsCaseStore implements AppealsCaseStore {
       .collection(APPEAL_CASES_COLLECTION)
       .doc(caseRecord.id)
       .set(copyCase(caseRecord));
+  }
+
+  async createCaseIfAbsent(caseRecord: AppealCase): Promise<AppealCase> {
+    validateAppealCase(caseRecord);
+    const ref = (await this.getFirestore()).collection(APPEAL_CASES_COLLECTION).doc(caseRecord.id);
+    const created = copyCase(caseRecord);
+
+    if (!ref.create) {
+      const existing = await this.getCase(caseRecord.id);
+      if (existing) {
+        return existing;
+      }
+
+      await ref.set(created);
+      return copyCase(created);
+    }
+
+    try {
+      await ref.create(created);
+      return copyCase(created);
+    } catch (error) {
+      if (!isAlreadyExistsError(error)) {
+        throw error;
+      }
+
+      const existing = await this.getCase(caseRecord.id);
+      if (!existing) {
+        throw error;
+      }
+
+      return existing;
+    }
   }
 
   async getCase(appealId: string): Promise<AppealCase | null> {
@@ -340,4 +385,19 @@ function removeUndefinedFields(value: unknown): unknown {
   }
 
   return cleaned;
+}
+
+function isAlreadyExistsError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) {
+    return false;
+  }
+
+  const candidate = error as { code?: unknown; message?: unknown; details?: unknown };
+  return (
+    candidate.code === 6 ||
+    candidate.code === "already-exists" ||
+    candidate.code === "ALREADY_EXISTS" ||
+    (typeof candidate.message === "string" && /already exists|ALREADY_EXISTS/i.test(candidate.message)) ||
+    (typeof candidate.details === "string" && /already exists|ALREADY_EXISTS/i.test(candidate.details))
+  );
 }

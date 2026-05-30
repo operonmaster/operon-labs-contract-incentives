@@ -213,8 +213,7 @@ export function createAppealsWorkflow(
       }
 
       const created = buildCaseFromDeniedRequest(request, Boolean(input.expedited), now);
-      await caseStore.saveCase(created);
-      return created;
+      return caseStore.createCaseIfAbsent(created);
     },
     async acknowledgeAppeal(appealId, input, now = new Date()) {
       const caseRecord = await getCase(appealId);
@@ -343,6 +342,18 @@ export function createAppealsWorkflow(
             rows.set(caseRecord.id, storedRow);
             return caseRecord;
           }
+
+          const recoveredRow = await settleAppealPacket(caseRecord, {
+            rows,
+            caseStore,
+            policyStore,
+            paymentIntentStore,
+            paymentPolicyStore,
+            paymentPolicyEvidenceStore
+          });
+          rows.set(caseRecord.id, recoveredRow);
+          await caseStore.savePlanRow(recoveredRow);
+          return caseRecord;
         }
 
         assertAppealState(caseRecord, "evidence_indexed");
@@ -718,8 +729,12 @@ async function settleAppealPacket(
         businessPolicyId,
         paymentPolicyId: paymentPolicy.planId
       });
+    const failedRowWithIntent: AppealsPlanAuditRow = {
+      ...failedRow,
+      paymentIntentId: failedPaymentIntentId
+    };
     const evidenceRecord = buildAppealsPaymentPolicyEvidence({
-      row: failedRow,
+      row: failedRowWithIntent,
       paymentPolicy,
       outcome: "blocked",
       failureCode: toPaymentPolicyFailureCode(error),
@@ -729,7 +744,7 @@ async function settleAppealPacket(
     await saveOptionalPaymentPolicyEvidence(dependencies.paymentPolicyEvidenceStore, evidenceRecord);
 
     return {
-      ...failedRow,
+      ...failedRowWithIntent,
       paymentPolicyControls: evidenceRecord.controls
     };
   }
@@ -1130,7 +1145,7 @@ function buildSlaStatus(startAt: string | null, completedAt: string | null, hour
     return "pending";
   }
   if (!completedAt) {
-    return "not_applicable";
+    return "pending";
   }
 
   return new Date(completedAt).getTime() <= new Date(startAt).getTime() + hours * 60 * 60 * 1000
