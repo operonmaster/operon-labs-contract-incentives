@@ -12,10 +12,12 @@ import {
   formatCurrency,
   formatNullableDateTime,
   formatPaymentPolicyStatus,
+  formatPaymentStatus,
   formatRequestType,
   formatSlaStatus,
   formatYesNo,
   paymentPolicyStatusBadgeVariant,
+  paymentStatusBadgeVariant,
   slaBadgeVariant
 } from "./appeals-formatters";
 
@@ -76,6 +78,14 @@ export function AppealsPlanDetailsModal({ row, onClose }: AppealsPlanDetailsModa
           <dd>
             <LabsBadge variant={paymentPolicyStatusBadgeVariant(row.paymentPolicyStatus)}>
               {formatPaymentPolicyStatus(row.paymentPolicyStatus)}
+            </LabsBadge>
+          </dd>
+        </div>
+        <div>
+          <dt>Settlement status</dt>
+          <dd>
+            <LabsBadge variant={paymentStatusBadgeVariant(row.paymentStatus)}>
+              {formatPaymentStatus(row.paymentStatus)}
             </LabsBadge>
           </dd>
         </div>

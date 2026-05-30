@@ -157,6 +157,33 @@ export function paymentPolicyStatusBadgeVariant(
   return "neutral";
 }
 
+export function formatPaymentStatus(status: AppealsPlanAuditRow["paymentStatus"]): string {
+  switch (status) {
+    case "auto_executed":
+      return "Auto-executed";
+    case "blocked_by_policy":
+      return "Blocked by policy";
+    case "execution_failed":
+      return "Execution failed";
+    default:
+      return "Pending";
+  }
+}
+
+export function paymentStatusBadgeVariant(
+  status: AppealsPlanAuditRow["paymentStatus"]
+): "success" | "warning" | "neutral" {
+  if (status === "auto_executed") {
+    return "success";
+  }
+
+  if (status === "blocked_by_policy" || status === "execution_failed") {
+    return "warning";
+  }
+
+  return "neutral";
+}
+
 export function formatCurrency(row: Pick<AppealsPlanAuditRow, "currency" | "incentiveValue" | "settlementToken">): string {
   return `${row.incentiveValue.toLocaleString("en-US", {
     maximumFractionDigits: 2,

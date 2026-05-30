@@ -13,8 +13,10 @@ import {
   formatAppealState,
   formatBusinessPolicyStatus,
   formatPaymentPolicyStatus,
+  formatPaymentStatus,
   formatSlaStatus,
   paymentPolicyStatusBadgeVariant,
+  paymentStatusBadgeVariant,
   slaBadgeVariant
 } from "./appeals-formatters";
 
@@ -79,13 +81,14 @@ export function AppealsPlanConsole({ initialAppealId = null }: { initialAppealId
                 <th className="badge-cell">Packet SLA</th>
                 <th className="badge-cell">Business Policy</th>
                 <th className="badge-cell">Payment Policy</th>
+                <th className="badge-cell">Settlement</th>
                 <th>Action</th>
               </tr>
             </thead>
             <tbody>
               {initialLoading ? (
                 <tr className="loading-row">
-                  <td colSpan={8}>
+                  <td colSpan={9}>
                     <div className="loading-indicator" role="status" aria-live="polite">
                       <span className="loading-dot" aria-hidden="true" />
                       <span>Loading appeals plan audit rows</span>
@@ -116,6 +119,11 @@ export function AppealsPlanConsole({ initialAppealId = null }: { initialAppealId
                       {formatPaymentPolicyStatus(row.paymentPolicyStatus)}
                     </LabsBadge>
                   </td>
+                  <td className="badge-cell">
+                    <LabsBadge variant={paymentStatusBadgeVariant(row.paymentStatus)}>
+                      {formatPaymentStatus(row.paymentStatus)}
+                    </LabsBadge>
+                  </td>
                   <td>
                     <LabsButton
                       variant="row"
@@ -131,7 +139,7 @@ export function AppealsPlanConsole({ initialAppealId = null }: { initialAppealId
               ))}
               {!initialLoading && rows.length === 0 ? (
                 <tr>
-                  <td className="empty-state" colSpan={8}>
+                  <td className="empty-state" colSpan={9}>
                     No appeal packet events have been submitted to the plan audit log.
                   </td>
                 </tr>

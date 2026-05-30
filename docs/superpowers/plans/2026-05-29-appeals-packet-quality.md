@@ -1257,4 +1257,4 @@ git commit -m "fix: polish appeals packet quality verification"
 
 - Spec coverage: This plan covers the separate `AppealCase`, one appeal per PA, provider PA selection/start, all inner workflow steps, `appealReceivedAt` main SLA, acknowledgement sub-SLA, packet-readiness stop, policy evidence, routes, provider UI, plan UI, policies page, docs, tests, and browser verification.
 - Type consistency: The plan uses `appeals_packet_quality`, `AppealCase`, `AppealsPlanAuditRow`, `APL-*`, `PA-*`, `appealReceivedAt`, `acknowledgedAt`, `packetReadyAt`, `packetReadinessSlaStatus`, and `acknowledgementSlaStatus` consistently.
-- Scope: Exact business-calendar SLA math, multiple appeal levels, and real document upload remain deferred by design.
+- Scope: Weekday business-hour SLA math is implemented for Appeals. Multiple appeal levels and real document upload remain deferred by design.

@@ -134,6 +134,9 @@ const APPEALS_POLICY_CONTROLS = [
   "Packet readiness evidence complete",
   "Final appeal outcome excluded from incentive"
 ];
+const BUSINESS_DAY_START_HOUR_UTC = 9;
+const BUSINESS_DAY_END_HOUR_UTC = 17;
+const MS_PER_HOUR = 60 * 60 * 1000;
 
 export function createAppealsWorkflow(
   platform: UmPlatform = createInMemoryUmPlatform(),
@@ -499,8 +502,8 @@ function buildBaseRow(caseRecord: AppealCase): AppealsPlanAuditRow {
     appealReceivedAt: caseRecord.appealReceivedAt,
     acknowledgedAt: caseRecord.acknowledgedAt,
     packetReadyAt: caseRecord.packetReadyAt,
-    acknowledgementSlaStatus: buildSlaStatus(caseRecord.appealReceivedAt, caseRecord.acknowledgedAt, caseRecord.acknowledgementSlaBusinessHours),
-    packetReadinessSlaStatus: buildSlaStatus(caseRecord.appealReceivedAt, caseRecord.packetReadyAt, caseRecord.packetReadinessSlaHours),
+    acknowledgementSlaStatus: buildBusinessHourSlaStatus(caseRecord.appealReceivedAt, caseRecord.acknowledgedAt, caseRecord.acknowledgementSlaBusinessHours),
+    packetReadinessSlaStatus: buildBusinessHourSlaStatus(caseRecord.appealReceivedAt, caseRecord.packetReadyAt, caseRecord.packetReadinessSlaHours),
     businessPolicyStatus: null,
     paymentPolicyStatus: null,
     incentiveStatus: "pending",
@@ -883,8 +886,8 @@ function buildAppealsPacketEvidence(caseRecord: AppealCase): AppealsPacketEviden
     appealReceivedAt: caseRecord.appealReceivedAt,
     acknowledgedAt: caseRecord.acknowledgedAt,
     packetReadyAt: caseRecord.packetReadyAt,
-    acknowledgedWithinSla: isWithinSla(caseRecord.appealReceivedAt, caseRecord.acknowledgedAt, caseRecord.acknowledgementSlaBusinessHours),
-    packetReadyWithinSla: isWithinSla(caseRecord.appealReceivedAt, caseRecord.packetReadyAt, caseRecord.packetReadinessSlaHours),
+    acknowledgedWithinSla: isWithinBusinessHourSla(caseRecord.appealReceivedAt, caseRecord.acknowledgedAt, caseRecord.acknowledgementSlaBusinessHours),
+    packetReadyWithinSla: isWithinBusinessHourSla(caseRecord.appealReceivedAt, caseRecord.packetReadyAt, caseRecord.packetReadinessSlaHours),
     requiredDocumentsPresent: caseRecord.packet.requiredDocumentsPresent,
     clinicalRationaleIncluded: caseRecord.packet.clinicalRationaleIncluded,
     policyCitationIncluded: caseRecord.packet.policyCitationIncluded,
@@ -1140,7 +1143,7 @@ async function saveOptionalPaymentPolicyEvidence(
   await paymentPolicyEvidenceStore?.saveEvidence(evidence).catch(() => undefined);
 }
 
-function buildSlaStatus(startAt: string | null, completedAt: string | null, hours: number): AppealsSlaStatus {
+function buildBusinessHourSlaStatus(startAt: string | null, completedAt: string | null, hours: number): AppealsSlaStatus {
   if (!startAt) {
     return "pending";
   }
@@ -1148,17 +1151,84 @@ function buildSlaStatus(startAt: string | null, completedAt: string | null, hour
     return "pending";
   }
 
-  return new Date(completedAt).getTime() <= new Date(startAt).getTime() + hours * 60 * 60 * 1000
-    ? "within_sla"
-    : "breached";
+  return isWithinBusinessHourSla(startAt, completedAt, hours) ? "within_sla" : "breached";
 }
 
-function isWithinSla(startAt: string | null, completedAt: string | null, hours: number): boolean {
+function isWithinBusinessHourSla(startAt: string | null, completedAt: string | null, hours: number): boolean {
   if (!startAt || !completedAt) {
     return false;
   }
 
-  return new Date(completedAt).getTime() <= new Date(startAt).getTime() + hours * 60 * 60 * 1000;
+  const start = new Date(startAt);
+  const completed = new Date(completedAt);
+  if (!isValidDate(start) || !isValidDate(completed) || completed.getTime() < start.getTime()) {
+    return false;
+  }
+
+  return calculateBusinessElapsedMs(start, completed) <= hours * MS_PER_HOUR;
+}
+
+function calculateBusinessElapsedMs(start: Date, completed: Date): number {
+  let cursor = moveToNextBusinessStart(start);
+  let elapsedMs = 0;
+
+  while (cursor.getTime() < completed.getTime()) {
+    const endOfBusinessDay = getBusinessDayBoundary(cursor, BUSINESS_DAY_END_HOUR_UTC);
+    const segmentEnd =
+      completed.getTime() < endOfBusinessDay.getTime()
+        ? completed
+        : endOfBusinessDay;
+
+    if (segmentEnd.getTime() > cursor.getTime()) {
+      elapsedMs += segmentEnd.getTime() - cursor.getTime();
+    }
+
+    cursor = moveToNextBusinessStart(segmentEnd);
+    if (cursor.getTime() === segmentEnd.getTime()) {
+      break;
+    }
+  }
+
+  return elapsedMs;
+}
+
+function moveToNextBusinessStart(date: Date): Date {
+  const candidate = new Date(date);
+  if (isBusinessDay(candidate)) {
+    const dayStart = getBusinessDayBoundary(candidate, BUSINESS_DAY_START_HOUR_UTC);
+    const dayEnd = getBusinessDayBoundary(candidate, BUSINESS_DAY_END_HOUR_UTC);
+
+    if (candidate.getTime() < dayStart.getTime()) {
+      return dayStart;
+    }
+
+    if (candidate.getTime() < dayEnd.getTime()) {
+      return candidate;
+    }
+  }
+
+  candidate.setUTCDate(candidate.getUTCDate() + 1);
+  candidate.setUTCHours(BUSINESS_DAY_START_HOUR_UTC, 0, 0, 0);
+  while (!isBusinessDay(candidate)) {
+    candidate.setUTCDate(candidate.getUTCDate() + 1);
+  }
+
+  return candidate;
+}
+
+function getBusinessDayBoundary(date: Date, hour: number): Date {
+  const boundary = new Date(date);
+  boundary.setUTCHours(hour, 0, 0, 0);
+  return boundary;
+}
+
+function isBusinessDay(date: Date): boolean {
+  const day = date.getUTCDay();
+  return day >= 1 && day <= 5;
+}
+
+function isValidDate(date: Date): boolean {
+  return !Number.isNaN(date.getTime());
 }
 
 function criterion(input: PolicyCriterionMatch): PolicyCriterionMatch {

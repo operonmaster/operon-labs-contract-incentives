@@ -12,6 +12,8 @@ describe("AppealsPlanConsole", () => {
 
     expect(source).toContain('endpoint: "/api/appeals/plan"');
     expect(source).toContain("getRowId: (row) => row.appealId");
+    expect(source).toContain("<th className=\"badge-cell\">Settlement</th>");
+    expect(source).toContain("formatPaymentStatus(row.paymentStatus)");
   });
 
   it("renders appeals packet audit details with separated policy sections", () => {
@@ -25,10 +27,31 @@ describe("AppealsPlanConsole", () => {
     expect(markup).toContain("Business Policy");
     expect(markup).toContain("Payment Policy");
   });
+
+  it("renders execution failures as settlement failures separate from policy blocks", () => {
+    const markup = renderToStaticMarkup(
+      createElement(AppealsPlanDetailsModal, {
+        row: buildRow({
+          businessPolicyStatus: "approved",
+          paymentPolicyStatus: "blocked",
+          incentiveStatus: "payment_failed",
+          paymentStatus: "execution_failed",
+          reason: "Policy approved, but Hedera transaction execution failed",
+          transactionId: null
+        }),
+        onClose: () => undefined
+      })
+    );
+
+    expect(markup).toContain("Payment policy status");
+    expect(markup).toContain("Blocked");
+    expect(markup).toContain("Settlement status");
+    expect(markup).toContain("Execution failed");
+  });
 });
 
-function buildRow(): AppealsPlanAuditRow {
-  return {
+function buildRow(overrides: Partial<AppealsPlanAuditRow> = {}): AppealsPlanAuditRow {
+  const row: AppealsPlanAuditRow = {
     evaluationType: "appeals_packet_quality",
     appealCase: {} as AppealsPlanAuditRow["appealCase"],
     appealId: "APL-260526-0900-DENIED01",
@@ -63,4 +86,6 @@ function buildRow(): AppealsPlanAuditRow {
     paymentIntentId: "pi_appeals",
     transactionId: "0.0.123@1"
   };
+
+  return { ...row, ...overrides };
 }

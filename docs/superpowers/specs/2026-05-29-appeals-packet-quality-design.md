@@ -119,7 +119,7 @@ The main packet-readiness SLA starts at `appealReceivedAt`, not `acknowledgedAt`
 
 The demo should label this as a contract operations SLA. It is not a regulatory replacement. CMS Part C reconsideration timelines are broader appeal-decision deadlines that run from when the plan receives the request, such as 72 hours for expedited pre-service or Part B drug requests and 30 calendar days for standard pre-service requests.
 
-For implementation simplicity, the first version can compute elapsed hours using wall-clock hours, as Specialty Rx does. The UI copy and policy controls should say "business hours" because that is the contract intent. If exact business-calendar calculation is needed later, add it as a focused enhancement.
+The implementation computes Appeals SLA clocks as weekday business hours so weekends and off-hours do not consume the contract operations SLA.
 
 ## Policy Evidence
 
@@ -270,6 +270,5 @@ Resolved:
 
 Deferred:
 
-- exact business-calendar SLA computation
 - multiple appeal levels or reopening cycles for a single PA
 - external document upload or real appeal packet content

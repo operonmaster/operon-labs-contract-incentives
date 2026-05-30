@@ -177,7 +177,7 @@ describe("appeals workflow", () => {
     const appeal = await workflow.startAppeal(denied.id, { expedited: false }, new Date("2026-06-18T16:00:00.000Z"));
 
     await completeAppealPacket(workflow, appeal.id, {
-      acknowledgedAt: new Date("2026-06-18T19:30:00.000Z"),
+      acknowledgedAt: new Date("2026-06-19T10:30:00.000Z"),
       packetReadyAt: new Date("2026-06-19T15:00:00.000Z")
     });
 
@@ -196,13 +196,48 @@ describe("appeals workflow", () => {
     expect(executePolicyBoundPaymentMock).not.toHaveBeenCalled();
   });
 
+  it("uses business-hour acknowledgement clock across weekends", async () => {
+    const { workflow, denied } = await createDeniedAppealFixture("PA-260619-1600-BUSACK1");
+    const appeal = await workflow.startAppeal(denied.id, { expedited: false }, new Date("2026-06-19T16:00:00.000Z"));
+
+    await completeAppealPacket(workflow, appeal.id, {
+      acknowledgedAt: new Date("2026-06-22T10:00:00.000Z"),
+      packetReadyAt: new Date("2026-06-22T15:00:00.000Z")
+    });
+
+    const [row] = await workflow.listPlanRows();
+    expect(row).toMatchObject({
+      appealId: appeal.id,
+      acknowledgementSlaStatus: "within_sla"
+    });
+    expect(row.reasonCodes).not.toContain("ACKNOWLEDGEMENT_SLA_EXCEEDED");
+  });
+
+  it("uses business-hour packet-readiness clock across weekends", async () => {
+    const { workflow, denied } = await createDeniedAppealFixture("PA-260619-1600-BUSPKT1");
+    const appeal = await workflow.startAppeal(denied.id, { expedited: false }, new Date("2026-06-19T16:00:00.000Z"));
+
+    await completeAppealPacket(workflow, appeal.id, {
+      acknowledgedAt: new Date("2026-06-19T16:30:00.000Z"),
+      packetReadyAt: new Date("2026-06-22T15:00:00.000Z")
+    });
+
+    const [row] = await workflow.listPlanRows();
+    expect(row).toMatchObject({
+      appealId: appeal.id,
+      packetReadinessSlaStatus: "within_sla",
+      businessPolicyStatus: "approved"
+    });
+    expect(row.reasonCodes).not.toContain("PACKET_READINESS_SLA_EXCEEDED");
+  });
+
   it("blocks settlement when packet readiness is beyond the appeal receipt clock", async () => {
     const { workflow, denied } = await createDeniedAppealFixture("PA-260618-0902-DENIED04");
     const appeal = await workflow.startAppeal(denied.id, { expedited: false }, new Date("2026-06-18T16:00:00.000Z"));
 
     await completeAppealPacket(workflow, appeal.id, {
       acknowledgedAt: new Date("2026-06-18T17:00:00.000Z"),
-      packetReadyAt: new Date("2026-06-19T17:30:00.000Z")
+      packetReadyAt: new Date("2026-06-23T16:30:00.000Z")
     });
 
     const [row] = await workflow.listPlanRows();
