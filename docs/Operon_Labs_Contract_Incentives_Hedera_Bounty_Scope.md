@@ -197,7 +197,7 @@ Policies should own:
 - settlement mode: pre-authorized auto-settlement or human approval
 - audit fields
 
-Example policy object. The demo stores four objects like this: two plans times two request-type scopes. UI labels are generated from the plan name, provider name, and request type instead of storing a free-text display name.
+Example Provider Documentation policy object. That first demo scenario stores four objects like this: two plans times two request-type scopes. The full demo catalog also includes Delegate UM, Specialty Rx, and Appeals policies. UI labels are generated from the plan name, provider name, request type, and use-case context instead of storing a free-text display name.
 
 ```yaml
 policyId: plcy_8K2M4Q6R9T1V3X5Z7B0C
