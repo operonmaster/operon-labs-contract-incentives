@@ -2429,6 +2429,12 @@ body {
   overflow-wrap: anywhere;
 }
 
+@media (max-width: 720px) {
+  .appeals-stepper {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  }
+}
+
 .error-text {
   color: #fca5a5;
 }

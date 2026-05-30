@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { LabsBadge, LabsButton, LabsModal } from "../labs-ui";
 import type { AppealCase } from "../../lib/appeals-store";
@@ -65,9 +66,6 @@ export function AppealsWorkflowModal({ appealCase, onClose, onUpdated }: Appeals
       }
 
       onUpdated(payload);
-      if (payload.state === "packet_ready") {
-        onClose();
-      }
     } catch {
       setError("Unable to update appeal case");
     } finally {
@@ -156,6 +154,11 @@ function renderActiveSection(appealCase: AppealCase, submitting: boolean, submit
             <dd>Excluded from incentive</dd>
           </div>
         </dl>
+        <div className="delegate-modal-actions">
+          <Link className="primary-button secondary-button" href={`/appeals/plan?appealId=${encodeURIComponent(appealCase.id)}`}>
+            Health Plan View
+          </Link>
+        </div>
       </section>
     );
   }
