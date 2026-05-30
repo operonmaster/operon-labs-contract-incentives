@@ -2403,6 +2403,32 @@ body {
   overflow-wrap: anywhere;
 }
 
+.appeals-modal {
+  max-width: 1040px;
+  overflow: visible;
+  width: min(100%, 1040px);
+}
+
+.appeals-stepper {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  margin-bottom: 20px;
+}
+
+.appeals-stepper li {
+  font-size: 12px;
+  min-width: 0;
+}
+
+.appeals-prior-auth-worklist,
+.appeals-plan-worklist {
+  min-width: 1160px;
+}
+
+.appeals-prior-auth-worklist td,
+.appeals-plan-worklist td {
+  overflow-wrap: anywhere;
+}
+
 .error-text {
   color: #fca5a5;
 }
