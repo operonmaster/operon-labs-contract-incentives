@@ -79,6 +79,37 @@ export interface SpecialtyRxFulfillmentEvaluationDependencies {
   monthToDateAmount?: number;
 }
 
+export interface AppealsPacketEvidence {
+  appealId: string;
+  umRequestId: string;
+  planId: string;
+  submitterId: string;
+  requestType: string;
+  originalOutcomeStatus: "denied" | "approved";
+  appealReceivedAt: string;
+  acknowledgedAt: string | null;
+  packetReadyAt: string | null;
+  acknowledgedWithinSla: boolean;
+  packetReadyWithinSla: boolean;
+  requiredDocumentsPresent: boolean;
+  clinicalRationaleIncluded: boolean;
+  policyCitationIncluded: boolean;
+  priorDecisionSummaryIncluded: boolean;
+  evidenceIndexComplete: boolean;
+  qualityAuditPassed: boolean;
+  noReworkRequired: boolean;
+  appealOutcomeUsed: boolean;
+  costSavingsMetricUsed: boolean;
+  denialReversalMetricUsed: boolean;
+  containsPhi: boolean;
+}
+
+export interface AppealsPacketEvaluationDependencies {
+  getEvidenceByAppealId: (appealId: string) => AppealsPacketEvidence | null;
+  policy: IncentivePolicy;
+  monthToDateAmount?: number;
+}
+
 export function evaluateDemoScenario(evaluationType: string, policy: IncentivePolicy): DemoEvaluation {
   const request = getDemoEvaluationRequest(evaluationType);
 
@@ -286,6 +317,64 @@ export function evaluateSpecialtyRxFulfillmentEvent(
   };
 }
 
+export function evaluateAppealsPacketEvent(
+  event: { eventType: string; appealId: string; umRequestId: string },
+  dependencies: AppealsPacketEvaluationDependencies
+): DemoEvaluation {
+  if (event.eventType !== "APPEAL_PACKET_READY") {
+    throw new Error("UNSUPPORTED_APPEALS_EVENT");
+  }
+  assertAppealsPacketEventIds(event);
+
+  const evidence = dependencies.getEvidenceByAppealId(event.appealId);
+  if (!evidence) {
+    throw new Error(`APPEALS_EVIDENCE_NOT_FOUND:${event.appealId}`);
+  }
+  assertAppealsPacketEvidenceMatchesEvent(evidence, event);
+
+  const request: EvaluationRequest = {
+    evaluationType: "appeals_packet_quality",
+    submitter: { id: evidence.submitterId },
+    requestObject: {
+      appealId: evidence.appealId,
+      umRequestId: evidence.umRequestId,
+      planId: evidence.planId,
+      submitterId: evidence.submitterId,
+      requestType: evidence.requestType,
+      originalOutcomeStatus: evidence.originalOutcomeStatus,
+      appealReceivedAt: evidence.appealReceivedAt,
+      acknowledgedAt: evidence.acknowledgedAt,
+      packetReadyAt: evidence.packetReadyAt,
+      acknowledgedWithinSla: evidence.acknowledgedWithinSla,
+      packetReadyWithinSla: evidence.packetReadyWithinSla,
+      requiredDocumentsPresent: evidence.requiredDocumentsPresent,
+      clinicalRationaleIncluded: evidence.clinicalRationaleIncluded,
+      policyCitationIncluded: evidence.policyCitationIncluded,
+      priorDecisionSummaryIncluded: evidence.priorDecisionSummaryIncluded,
+      evidenceIndexComplete: evidence.evidenceIndexComplete,
+      qualityAuditPassed: evidence.qualityAuditPassed,
+      noReworkRequired: evidence.noReworkRequired,
+      appealOutcomeUsed: evidence.appealOutcomeUsed,
+      costSavingsMetricUsed: evidence.costSavingsMetricUsed,
+      denialReversalMetricUsed: evidence.denialReversalMetricUsed,
+      containsPhi: evidence.containsPhi
+    }
+  };
+
+  const result = evaluatePolicy({
+    policy: dependencies.policy,
+    request,
+    monthToDateAmount: dependencies.monthToDateAmount ?? 0
+  });
+
+  return {
+    request,
+    policy: dependencies.policy,
+    result,
+    explanation: explainDecision(result)
+  };
+}
+
 function assertProviderDocumentationEventIdsMatch(event: { umRequestId: string; caseId?: string }): void {
   if (event.caseId !== undefined && event.caseId !== event.umRequestId) {
     throw new Error(`PROVIDER_DOCUMENTATION_EVENT_ID_MISMATCH:${event.umRequestId}`);
@@ -343,6 +432,24 @@ function assertSpecialtyRxEvidenceMatchesEvent(
   }
 }
 
+function assertAppealsPacketEventIds(event: { appealId: string; umRequestId: string }): void {
+  if (!event.appealId.startsWith("APL-")) {
+    throw new Error(`APPEALS_EVENT_ID_NOT_CANONICAL:${event.appealId}`);
+  }
+  if (!event.umRequestId.startsWith("PA-")) {
+    throw new Error(`APPEALS_UM_REQUEST_ID_NOT_CANONICAL:${event.umRequestId}`);
+  }
+}
+
+function assertAppealsPacketEvidenceMatchesEvent(
+  evidence: AppealsPacketEvidence,
+  event: { appealId: string; umRequestId: string }
+): void {
+  if (evidence.appealId !== event.appealId || evidence.umRequestId !== event.umRequestId) {
+    throw new Error(`APPEALS_EVIDENCE_ID_MISMATCH:${event.appealId}`);
+  }
+}
+
 const demoRequests: Record<string, EvaluationRequest> = {
   delegate_um_sla_bonus: {
     evaluationType: "delegate_um_sla_bonus",
@@ -382,17 +489,29 @@ const demoRequests: Record<string, EvaluationRequest> = {
   },
   appeals_packet_quality: {
     evaluationType: "appeals_packet_quality",
-    submitter: { id: "summit-appeals-ops" },
+    submitter: { id: "lakeside-provider-admin" },
     requestObject: {
-      appealId: "synthetic-appeal-8831",
-      packetSubmittedWithinSla: true,
+      appealId: "APL-260526-0900-DENIED01",
+      umRequestId: "PA-260526-0900-DENIED01",
+      planId: "acme-health-ppo",
+      submitterId: "lakeside-provider-admin",
+      requestType: "pharmacy_benefit",
+      originalOutcomeStatus: "denied",
+      appealReceivedAt: "2026-06-18T16:00:00.000Z",
+      acknowledgedAt: "2026-06-18T17:00:00.000Z",
+      packetReadyAt: "2026-06-19T15:00:00.000Z",
+      acknowledgedWithinSla: true,
+      packetReadyWithinSla: true,
       requiredDocumentsPresent: true,
       clinicalRationaleIncluded: true,
       policyCitationIncluded: true,
+      priorDecisionSummaryIncluded: true,
       evidenceIndexComplete: true,
       qualityAuditPassed: true,
+      noReworkRequired: true,
       appealOutcomeUsed: false,
       costSavingsMetricUsed: false,
+      denialReversalMetricUsed: false,
       containsPhi: false
     }
   },

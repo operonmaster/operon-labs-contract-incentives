@@ -49,6 +49,10 @@ export interface IncentivePolicy {
     requiresColdChainEvidenceWhenRequired?: boolean;
     requiresRemsAuthorizationWhenRequired?: boolean;
     prohibitsAvoidableFulfillmentException?: boolean;
+    requiresAppealPacketReadyWithinSla?: boolean;
+    requiresAppealAcknowledgementWithinSla?: boolean;
+    requiresAppealPacketQualityAudit?: boolean;
+    prohibitsAppealOutcomeIncentive?: boolean;
   };
   payout: {
     token: TokenSymbol;
@@ -102,6 +106,10 @@ export function evaluatePolicy(input: EvaluatePolicyInput): PolicyEvaluationResu
 
   if (policy.evaluationType === "specialty_rx_fulfillment_sla") {
     return evaluateSpecialtyRxFulfillmentPolicy(input);
+  }
+
+  if (policy.evaluationType === "appeals_packet_quality") {
+    return evaluateAppealsPacketQualityPolicy(input);
   }
 
   if (request.evaluationType !== policy.evaluationType) {
@@ -244,6 +252,105 @@ function evaluateDelegateUmSlaPolicy(input: EvaluatePolicyInput): PolicyEvaluati
 
   if (request.requestObject.auditReady !== true) {
     reasonCodes.push("PAS_AUDIT_RECORD_MISSING");
+  }
+
+  if (monthToDateAmount + policy.payout.amountPerEligibleRequest > policy.payout.monthlyCap) {
+    reasonCodes.push("MONTHLY_CAP_EXCEEDED");
+  }
+
+  const blocked = reasonCodes.length > 0;
+  if (!blocked && (policy.settlement.mode === "manual" || policy.settlement.requiresHumanApproval)) {
+    return result({
+      decision: "manual_review",
+      policy,
+      reasonCodes: ["MANUAL_REVIEW_REQUIRED"],
+      token
+    });
+  }
+
+  return result({
+    decision: blocked ? "blocked" : "approved",
+    policy,
+    reasonCodes,
+    token
+  });
+}
+
+function evaluateAppealsPacketQualityPolicy(input: EvaluatePolicyInput): PolicyEvaluationResult {
+  const { policy, request, monthToDateAmount } = input;
+  const reasonCodes: string[] = [];
+  const token = policy.payout.token;
+
+  if (request.evaluationType !== policy.evaluationType) {
+    reasonCodes.push("EVALUATION_TYPE_MISMATCH");
+  }
+
+  if (policy.status !== "active") {
+    reasonCodes.push("POLICY_INACTIVE");
+  }
+
+  if (request.requestObject.planId !== policy.contractPair.planId) {
+    reasonCodes.push("PLAN_NOT_IN_CONTRACT");
+  }
+
+  if (request.submitter.id !== policy.contractPair.providerId || request.requestObject.submitterId !== policy.contractPair.providerId) {
+    reasonCodes.push("APPEALS_SUBMITTER_NOT_IN_CONTRACT");
+  }
+
+  if (request.requestObject.originalOutcomeStatus !== "denied") {
+    reasonCodes.push("LINKED_PA_NOT_DENIED");
+  }
+
+  if (policy.eligibilityCriteria.requiresAppealAcknowledgementWithinSla && request.requestObject.acknowledgedWithinSla !== true) {
+    reasonCodes.push("ACKNOWLEDGEMENT_SLA_EXCEEDED");
+  }
+
+  if (policy.eligibilityCriteria.requiresAppealPacketReadyWithinSla && request.requestObject.packetReadyWithinSla !== true) {
+    reasonCodes.push("PACKET_READINESS_SLA_EXCEEDED");
+  }
+
+  if (request.requestObject.requiredDocumentsPresent !== true) {
+    reasonCodes.push("REQUIRED_DOCUMENTS_MISSING");
+  }
+
+  if (request.requestObject.clinicalRationaleIncluded !== true) {
+    reasonCodes.push("CLINICAL_RATIONALE_MISSING");
+  }
+
+  if (request.requestObject.policyCitationIncluded !== true) {
+    reasonCodes.push("POLICY_CITATION_MISSING");
+  }
+
+  if (request.requestObject.priorDecisionSummaryIncluded !== true) {
+    reasonCodes.push("PRIOR_DECISION_SUMMARY_MISSING");
+  }
+
+  if (request.requestObject.evidenceIndexComplete !== true) {
+    reasonCodes.push("EVIDENCE_INDEX_INCOMPLETE");
+  }
+
+  if (policy.eligibilityCriteria.requiresAppealPacketQualityAudit && request.requestObject.qualityAuditPassed !== true) {
+    reasonCodes.push("QUALITY_AUDIT_FAILED");
+  }
+
+  if (request.requestObject.noReworkRequired !== true) {
+    reasonCodes.push("REWORK_REQUIRED");
+  }
+
+  if (policy.eligibilityCriteria.prohibitsAppealOutcomeIncentive && request.requestObject.appealOutcomeUsed === true) {
+    reasonCodes.push("PROHIBITED_APPEAL_OUTCOME_METRIC");
+  }
+
+  if (request.requestObject.costSavingsMetricUsed === true) {
+    reasonCodes.push("PROHIBITED_COST_SAVINGS_METRIC");
+  }
+
+  if (request.requestObject.denialReversalMetricUsed === true) {
+    reasonCodes.push("PROHIBITED_DENIAL_REVERSAL_METRIC");
+  }
+
+  if (request.requestObject.containsPhi === true) {
+    reasonCodes.push("PHI_IN_PAYMENT_METADATA");
   }
 
   if (monthToDateAmount + policy.payout.amountPerEligibleRequest > policy.payout.monthlyCap) {

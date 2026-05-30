@@ -116,6 +116,60 @@ const approvedDelegateRequest: EvaluationRequest = {
   }
 };
 
+const appealsPolicy = {
+  policyId: "appeals-packet-quality-v1",
+  version: "v1",
+  status: "active",
+  evaluationType: "appeals_packet_quality",
+  contractPair: {
+    planId: "acme-health-ppo",
+    planName: "Acme Health PPO",
+    providerId: "lakeside-provider-admin",
+    providerName: "Lakeside Provider Admin"
+  },
+  effectivePeriod: { startsOn: "2026-05-01", endsOn: null },
+  incentiveScope: { eligibleRequestTypes: ["pharmacy_benefit", "outpatient_service"] },
+  eligibilityCriteria: {
+    appliesOnlyToCoveredBenefits: false,
+    requiresDtrCompletionWhenRequested: false,
+    requiresAppealPacketReadyWithinSla: true,
+    requiresAppealAcknowledgementWithinSla: true,
+    requiresAppealPacketQualityAudit: true,
+    prohibitsAppealOutcomeIncentive: true
+  },
+  payout: { token: "HBAR", amountPerEligibleRequest: 6, monthlyCap: 700 },
+  settlement: { mode: "auto", recipientWalletId: "0.0.9049549", requiresHumanApproval: false }
+} satisfies IncentivePolicy;
+
+const completeAppealRequest = {
+  evaluationType: "appeals_packet_quality",
+  submitter: { id: "lakeside-provider-admin" },
+  requestObject: {
+    appealId: "APL-260526-0900-DENIED01",
+    umRequestId: "PA-260526-0900-DENIED01",
+    planId: "acme-health-ppo",
+    submitterId: "lakeside-provider-admin",
+    requestType: "pharmacy_benefit",
+    originalOutcomeStatus: "denied",
+    appealReceivedAt: "2026-06-18T16:00:00.000Z",
+    acknowledgedAt: "2026-06-18T17:00:00.000Z",
+    packetReadyAt: "2026-06-19T15:00:00.000Z",
+    acknowledgedWithinSla: true,
+    packetReadyWithinSla: true,
+    requiredDocumentsPresent: true,
+    clinicalRationaleIncluded: true,
+    policyCitationIncluded: true,
+    priorDecisionSummaryIncluded: true,
+    evidenceIndexComplete: true,
+    qualityAuditPassed: true,
+    noReworkRequired: true,
+    appealOutcomeUsed: false,
+    costSavingsMetricUsed: false,
+    denialReversalMetricUsed: false,
+    containsPhi: false
+  }
+} satisfies EvaluationRequest;
+
 describe("evaluatePolicy", () => {
   it("approves a pair-scoped DTR completion incentive and computes the flat payout", () => {
     const result = evaluatePolicy({
@@ -470,6 +524,44 @@ describe("evaluatePolicy", () => {
       decision: "blocked",
       amount: 0,
       reasonCodes: expect.arrayContaining(["SLA_EXCEEDED"])
+    });
+  });
+
+  it("approves complete appeals packet readiness evidence without using outcome", () => {
+    const result = evaluatePolicy({ policy: appealsPolicy, request: completeAppealRequest, monthToDateAmount: 0 });
+
+    expect(result).toMatchObject({
+      decision: "approved",
+      amount: 6,
+      walletId: "0.0.9049549",
+      reasonCodes: []
+    });
+  });
+
+  it("blocks appeals incentives when outcome or cost metrics are used", () => {
+    const result = evaluatePolicy({
+      policy: appealsPolicy,
+      request: {
+        ...completeAppealRequest,
+        requestObject: {
+          ...completeAppealRequest.requestObject,
+          appealOutcomeUsed: true,
+          costSavingsMetricUsed: true,
+          denialReversalMetricUsed: true
+        }
+      },
+      monthToDateAmount: 0
+    });
+
+    expect(result).toMatchObject({
+      decision: "blocked",
+      amount: 0,
+      walletId: null,
+      reasonCodes: expect.arrayContaining([
+        "PROHIBITED_APPEAL_OUTCOME_METRIC",
+        "PROHIBITED_COST_SAVINGS_METRIC",
+        "PROHIBITED_DENIAL_REVERSAL_METRIC"
+      ])
     });
   });
 });
