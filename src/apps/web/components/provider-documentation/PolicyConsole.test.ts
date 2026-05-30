@@ -17,17 +17,17 @@ describe("provider documentation policy console", () => {
     const consoleSource = readRepoFile("src/apps/web/components/provider-documentation/PolicyConsole.tsx");
 
     expect(source).toContain('type UseCaseView = "provider" | "plan" | "policies"');
-    expect(source).toContain("policiesHref");
+    expect(source).toContain("LabsUseCaseNav");
     expect(source).toContain("/provider-documentation/policies");
     expect(source).toContain("umRequestId?: string | null");
-    expect(source).toContain("?umRequestId=");
+    expect(source).toContain('param: "umRequestId"');
     expect(source).not.toContain("?caseId=");
     expect(source).not.toContain("caseId?: string | null");
     expect(source).not.toContain("?? caseId");
     expect(consoleSource).toContain("<UseCaseNavigation activeView=\"policies\" umRequestId={initialUmRequestId} />");
     expect(consoleSource).not.toContain("caseId={initialCaseId}");
     expect(source).toContain("Policies View");
-    expect(source).toContain('activeView === "policies"');
+    expect(source).toContain('id: "policies"');
   });
 
   it("renders policy details through the established modal pattern", () => {
@@ -41,7 +41,8 @@ describe("provider documentation policy console", () => {
     expect(source).toContain("plan/provider/request-type incentive policy");
     expect(source).toContain("incentive structure only");
     expect(source).toContain("centrally maintained payment policy blocks");
-    expect(source).toContain('className="modal-backdrop audit-modal-backdrop"');
+    expect(source).toContain("LabsModal");
+    expect(source).toContain('backdropClassName="audit-modal-backdrop"');
     expect(source).toContain("business-policy-details-modal");
     expect(source).toContain("payment-policy-details-modal");
     expect(source).toContain("business-policy-modal-sections");
@@ -62,7 +63,7 @@ describe("provider documentation policy console", () => {
     expect(source).toContain('variant={policyDetailValueBadgeVariant(value)}');
     expect(source).toContain('value === "Enabled"');
     expect(source).toContain('value === "Disabled"');
-    expect(source).toContain('role="dialog"');
+    expect(source).toContain('labelledBy="policy-details-title"');
     expect(source).toContain("setSelectedPolicy(policy)");
     expect(source).toContain("Business policies");
     expect(source).toContain("Payment policies");

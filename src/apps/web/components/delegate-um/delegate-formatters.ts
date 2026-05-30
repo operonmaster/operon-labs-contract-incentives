@@ -9,6 +9,8 @@ export function formatRequestType(requestType: UMRequest["requestType"]) {
       return "Pharmacy Benefit";
     case "inpatient_admission":
       return "Inpatient Admission";
+    default:
+      return "Unknown request type";
   }
 }
 
@@ -76,7 +78,8 @@ export function formatPaymentStatus(status: DelegatePlanAuditRow["paymentPolicyS
 }
 
 export function formatCurrency(row: Pick<DelegatePlanAuditRow, "currency" | "incentiveValue" | "settlementToken">) {
-  return `${row.incentiveValue.toLocaleString("en-US", {
+  const amount = typeof row.incentiveValue === "number" ? row.incentiveValue : 0;
+  return `${amount.toLocaleString("en-US", {
     maximumFractionDigits: 2,
     minimumFractionDigits: 2
   })} ${row.settlementToken?.symbol ?? row.currency}`;

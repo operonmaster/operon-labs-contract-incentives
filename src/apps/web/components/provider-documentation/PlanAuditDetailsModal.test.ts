@@ -9,7 +9,9 @@ import {
 } from "../../lib/provider-documentation-workflow";
 import {
   businessPolicyBadgeVariant,
+  formatCurrency,
   formatPaymentStatus,
+  formatRequestType,
   formatStatus,
   PlanAuditDetailsModal
 } from "./PlanAuditDetailsModal";
@@ -165,9 +167,10 @@ describe("plan audit details modal", () => {
     const source = readRepoFile("src/apps/web/components/provider-documentation/PlanAuditDetailsModal.tsx");
 
     expect(source).toContain("LabsBadge");
-    expect(source).toContain('className="modal-backdrop audit-modal-backdrop"');
+    expect(source).toContain("LabsModal");
+    expect(source).toContain('backdropClassName="audit-modal-backdrop"');
     expect(source).toContain("policy-details-modal");
-    expect(source).toContain('role="dialog"');
+    expect(source).toContain('labelledBy="plan-audit-title"');
     expect(source).toContain("Policy Event Audit Details");
     expect(source).toContain("{row.umRequestId}");
     expect(source).not.toContain("{row.caseId}");
@@ -178,11 +181,12 @@ describe("plan audit details modal", () => {
     expect(source).toContain("policy-event-context-line");
     expect(source).toContain("policy-event-outcome-strip");
     expect(source).toContain("policy-anchor-list");
-    expect(source).toContain("Criterion/Control");
+    // The evidence table and HashScan link now come from the shared incentive-audit module.
+    expect(source).toContain("incentive-audit-evidence");
+    expect(source).toContain("EvidenceRows");
     expect(source).toContain("row.policyCriteria.map");
     expect(source).toContain("row.paymentPolicyControls.map");
     expect(source).toContain("formatTransaction(row.transactionId)");
-    expect(source).toContain("hashscan.io/testnet/transaction");
     expect(source).not.toContain("Show policy criteria");
     expect(source).not.toContain("row.policyControls.join");
   });
@@ -261,18 +265,17 @@ describe("plan audit details modal", () => {
     expect(source).not.toContain('className="panel detail-panel"');
   });
 
-  it("keeps an existing selected UM request ahead of the initial provider deep link on refresh", () => {
-    const source = readRepoFile("src/apps/web/components/provider-documentation/PlanIncentivesConsole.tsx");
-    const currentSelectionCheck = source.indexOf(
-      "currentUmRequestId && payload.rows.some((row) => row.umRequestId === currentUmRequestId)"
-    );
-    const requestedSelectionCheck = source.indexOf(
-      "requestedUmRequestId && payload.rows.some((row) => row.umRequestId === requestedUmRequestId)"
-    );
+  it("keeps an existing selection ahead of the initial deep link on refresh", () => {
+    // The selection reducer is shared by every worklist console via the hook: keep the
+    // current selection if it still exists, otherwise prefer the requested deep-link id.
+    const source = readRepoFile("src/apps/web/components/use-incentive-worklist.ts");
+    const currentSelectionCheck = source.indexOf("currentId && nextRows.some((row) => getId(row) === currentId)");
+    const requestedSelectionCheck = source.indexOf("requestedId && nextRows.some((row) => getId(row) === requestedId)");
 
     expect(currentSelectionCheck).toBeGreaterThan(-1);
     expect(requestedSelectionCheck).toBeGreaterThan(-1);
     expect(currentSelectionCheck).toBeLessThan(requestedSelectionCheck);
+    expect(source).toContain("export function useIncentiveWorklist");
   });
 
   it("keeps the incentives worklist concise without a reason column", () => {
@@ -343,7 +346,7 @@ describe("plan audit details modal", () => {
     const incentivesPageSource = readRepoFile("src/apps/web/app/provider-documentation/incentives/page.tsx");
 
     expect(navigationSource).toContain("umRequestId?: string | null");
-    expect(navigationSource).toContain("?umRequestId=");
+    expect(navigationSource).toContain('param: "umRequestId"');
     expect(navigationSource).not.toContain("?caseId=");
     expect(navigationSource).not.toContain("caseId?: string | null");
     expect(navigationSource).not.toContain("?? caseId");
@@ -398,3 +401,15 @@ function buildIncentiveWorklistRow(overrides: Partial<IncentiveWorklistRow> = {}
     ...overrides
   };
 }
+
+describe("provider documentation formatter guards", () => {
+  it("falls back instead of crashing on a missing incentive amount", () => {
+    const row = buildIncentiveWorklistRow({ incentiveValue: undefined as unknown as number });
+    expect(() => formatCurrency(row)).not.toThrow();
+    expect(formatCurrency(row)).toContain("0.00");
+  });
+
+  it("returns a fallback label for an unexpected request type", () => {
+    expect(formatRequestType("specialty_infusion" as IncentiveWorklistRow["requestType"])).toBe("Unknown request type");
+  });
+});

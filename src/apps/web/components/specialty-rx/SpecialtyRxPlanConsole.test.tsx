@@ -7,22 +7,16 @@ import type { SpecialtyRxPlanAuditRow } from "../../lib/specialty-rx-workflow";
 import { SpecialtyRxPlanDetailsModal } from "./SpecialtyRxPlanDetailsModal";
 
 describe("SpecialtyRxPlanConsole", () => {
-  it("keeps an existing selected fulfillment case ahead of the initial deep link on refresh", () => {
+  it("loads specialty fulfillment plan rows through the shared incentive worklist hook", () => {
     const source = readFileSync(
       path.join(process.cwd(), "src/apps/web/components/specialty-rx/SpecialtyRxPlanConsole.tsx"),
       "utf8"
     );
 
-    const currentSelectionCheck = source.indexOf(
-      "currentFulfillmentCaseId && payload.rows.some((row) => row.fulfillmentCaseId === currentFulfillmentCaseId)"
-    );
-    const requestedSelectionCheck = source.indexOf(
-      "requestedFulfillmentCaseId &&\n          payload.rows.some((row) => row.fulfillmentCaseId === requestedFulfillmentCaseId)"
-    );
-
-    expect(currentSelectionCheck).toBeGreaterThan(-1);
-    expect(requestedSelectionCheck).toBeGreaterThan(-1);
-    expect(currentSelectionCheck).toBeLessThan(requestedSelectionCheck);
+    expect(source).toContain("useIncentiveWorklist");
+    expect(source).toContain('endpoint: "/api/specialty-rx/plan"');
+    expect(source).toContain("getRowId: (row) => row.fulfillmentCaseId");
+    expect(source).toContain("requestedId: requestedFulfillmentCaseId");
   });
 
   it("renders specialty fulfillment plan audit details with separated policy sections", () => {
@@ -40,6 +34,13 @@ describe("SpecialtyRxPlanConsole", () => {
     expect(markup).not.toContain("Schedule SLA");
     expect(markup).not.toContain("Delivery SLA");
     expect(markup).toContain("Clear To Fill");
+    expect(markup).toContain("Delegate determination");
+    expect(markup).toContain("Checklist evidence");
+    expect(markup).toContain("Prescription present");
+    expect(markup).toContain("Shipment scheduled within SLA");
+    expect(markup).toContain("Exception classification");
+    expect(markup).toContain("External blocker");
+    expect(markup).toContain("Avoidable exception");
     expect(markup).toContain("Business policy");
     expect(markup).toContain("Payment policy");
   });
@@ -59,7 +60,63 @@ describe("SpecialtyRxPlanConsole", () => {
 function buildSpecialtyRxPlanAuditRow(): SpecialtyRxPlanAuditRow {
   return {
     evaluationType: "specialty_rx_fulfillment_sla",
-    fulfillmentCase: {} as SpecialtyRxPlanAuditRow["fulfillmentCase"],
+    fulfillmentCase: {
+      id: "RXF-260526-0900-DELEGATE",
+      umRequestId: "PA-260526-0900-DELEGATE",
+      source: "delegate_um_approved",
+      planId: "acme-health-ppo",
+      pharmacyId: "atlas-specialty-rx",
+      pharmacyDisplay: "Atlas Specialty Rx",
+      requestType: "pharmacy_benefit",
+      serviceCode: "wegovy_semaglutide",
+      serviceLabel: "Wegovy semaglutide",
+      codingSystem: "NDC",
+      billingCode: "0169-4525-14",
+      state: "fulfilled",
+      paApprovalReceivedAt: "2026-06-18T14:00:00.000Z",
+      intakeStartedAt: "2026-06-18T14:00:00.000Z",
+      fulfillmentSlaStartedAt: "2026-06-18T16:00:00.000Z",
+      clearToFillAt: "2026-06-18T16:00:00.000Z",
+      shipmentScheduledAt: "2026-06-19T09:30:00.000Z",
+      deliveryConfirmedAt: "2026-06-20T14:00:00.000Z",
+      exceptionRecordedAt: null,
+      scheduleSlaHours: 24,
+      intake: {
+        approvedPaLinked: true,
+        prescriptionPresent: true,
+        assignedPharmacyConfirmed: true,
+        therapyMetadataPresent: true,
+        handoffDataComplete: true
+      },
+      clearToFill: {
+        benefitsOrClaimCheckCompleted: true,
+        prescriptionValid: true,
+        prescriberClarificationRequired: false,
+        prescriberClarificationResolved: true,
+        remsRequired: false,
+        remsAuthorizationConfirmed: true,
+        inventoryAvailable: true,
+        copayOrPaymentReady: true
+      },
+      shipment: {
+        patientContactAttemptDocumented: true,
+        addressConfirmed: true,
+        deliveryWindowConfirmed: true,
+        coldChainRequired: true,
+        coldChainPackoutValidated: true,
+        courierScheduled: true
+      },
+      fulfillment: {
+        shipped: true,
+        deliveryConfirmed: true,
+        deliveryAttemptDocumented: true,
+        temperatureLogValid: true,
+        avoidableFulfillmentException: false,
+        externalBlockerDocumented: false,
+        exceptionReasonCode: null
+      },
+      updatedAt: "2026-06-20T14:00:00.000Z"
+    },
     fulfillmentCaseId: "RXF-260526-0900-DELEGATE",
     umRequestId: "PA-260526-0900-DELEGATE",
     id: "ie_specialty",
@@ -69,7 +126,7 @@ function buildSpecialtyRxPlanAuditRow(): SpecialtyRxPlanAuditRow {
     requestType: "pharmacy_benefit",
     serviceLabel: "Wegovy semaglutide",
     state: "fulfilled",
-    fulfillmentSlaStartedAt: "2026-06-18T15:00:00.000Z",
+    fulfillmentSlaStartedAt: "2026-06-18T16:00:00.000Z",
     clearToFillAt: "2026-06-18T16:00:00.000Z",
     shipmentScheduledAt: "2026-06-19T09:30:00.000Z",
     deliveryConfirmedAt: "2026-06-20T14:00:00.000Z",

@@ -106,6 +106,7 @@ export interface PaymentIntent {
   transactionMemo: string;
   status: PaymentIntentStatus;
   transactionId: string | null;
+  failureReasonCode?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -266,7 +267,7 @@ export async function executePolicyBoundPayment(
     throw error;
   }
 
-  await options.paymentIntentStore?.markIntentSubmitted(paymentIntent.id, transfer.transactionId).catch(() => undefined);
+  await reconcilePaymentIntentSubmission(options.paymentIntentStore, paymentIntent.id, transfer.transactionId);
 
   return {
     status: "submitted",
@@ -277,6 +278,33 @@ export async function executePolicyBoundPayment(
     rawResponse: transfer.rawResponse,
     explorerUrl: buildHashscanTestnetTransactionUrl(transfer.transactionId)
   };
+}
+
+// The on-chain transfer has already succeeded by the time this runs, so a failure
+// to mark the intent submitted must never fail the settlement. Retry once to absorb
+// transient store errors, then log loudly so the reserved->submitted desync can be
+// reconciled out of band instead of being silently swallowed.
+async function reconcilePaymentIntentSubmission(
+  store: PaymentIntentStore | undefined,
+  intentId: string,
+  transactionId: string
+): Promise<void> {
+  if (!store) {
+    return;
+  }
+
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      await store.markIntentSubmitted(intentId, transactionId);
+      return;
+    } catch (error) {
+      if (attempt === 2) {
+        console.error(
+          `PAYMENT_INTENT_MARK_SUBMITTED_FAILED intentId=${intentId} transactionId=${transactionId} reason=${toErrorCode(error)}`
+        );
+      }
+    }
+  }
 }
 
 export const executeApprovedPayment = executePolicyBoundPayment;
@@ -412,6 +440,12 @@ function requireCanonicalPaId(value: string | undefined, errorCode: string): str
     throw new Error("PAYMENT_ID_NOT_CANONICAL");
   }
 
+  // The id is hashed into settlement tuple ids with a "|" delimiter join, so reject
+  // any delimiter/unsafe characters that could let two distinct tuples collide.
+  if (sanitizeMemoPart(cleaned) !== cleaned) {
+    throw new Error("PAYMENT_ID_NOT_CANONICAL");
+  }
+
   return cleaned;
 }
 
@@ -468,7 +502,7 @@ export function createInMemoryPaymentIntentStore(): PaymentIntentStore {
         updatedAt: new Date().toISOString()
       });
     },
-    async markIntentFailed(intentId) {
+    async markIntentFailed(intentId, reasonCode) {
       const existing = intents.get(intentId);
       if (!existing || existing.status === "submitted") {
         return;
@@ -478,6 +512,7 @@ export function createInMemoryPaymentIntentStore(): PaymentIntentStore {
         ...existing,
         status: "failed",
         transactionId: null,
+        failureReasonCode: reasonCode,
         updatedAt: new Date().toISOString()
       });
     }

@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { LabsBadge, LabsHero, LabsPageShell } from "../labs-ui";
+import { useRef, useState } from "react";
+import { LabsBadge, LabsButton, LabsHero, LabsPageShell } from "../labs-ui";
 import type { SpecialtyFulfillmentCase } from "../../lib/specialty-rx-store";
 import { SpecialtyRxUseCaseNavigation } from "./SpecialtyRxUseCaseNavigation";
 import {
@@ -12,110 +12,56 @@ import {
   fulfillmentStateBadgeVariant
 } from "./specialty-rx-formatters";
 import { SpecialtyRxWorkflowModal } from "./SpecialtyRxWorkflowModal";
-
-interface SpecialtyRxWorkqueueResponse {
-  rows: SpecialtyFulfillmentCase[];
-}
-
-type RefreshSource = "initial" | "manual";
+import { useIntervalTick } from "../use-interval-tick";
+import { useIncentiveWorklist } from "../use-incentive-worklist";
 
 export function SpecialtyRxConsole() {
-  const [rows, setRows] = useState<SpecialtyFulfillmentCase[]>([]);
-  const [selectedFulfillmentCaseId, setSelectedFulfillmentCaseId] = useState<string | null>(null);
   const [workflowFulfillmentCaseId, setWorkflowFulfillmentCaseId] = useState<string | null>(null);
-  const [initialLoading, setInitialLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const mountedRef = useRef(false);
-  const refreshSequenceRef = useRef(0);
   const lastWorkflowButtonRef = useRef<HTMLButtonElement | null>(null);
+  const {
+    rows,
+    setRows,
+    selectedId: selectedFulfillmentCaseId,
+    setSelectedId: setSelectedFulfillmentCaseId,
+    initialLoading,
+    refreshing,
+    error,
+    refresh: refreshWorkqueue
+  } = useIncentiveWorklist<SpecialtyFulfillmentCase>({
+    endpoint: "/api/specialty-rx/workqueue",
+    getRowId: (row) => row.id,
+    errorMessage: "Unable to load specialty fulfillment workqueue"
+  });
+
+  // Keep the fulfillment SLA countdown badges live instead of frozen at first render.
+  useIntervalTick(30000);
 
   const workflowCase = rows.find((row) => row.id === workflowFulfillmentCaseId) ?? null;
-
-  const refreshWorkqueue = useCallback(async (source: RefreshSource = "manual") => {
-    const requestId = refreshSequenceRef.current + 1;
-    refreshSequenceRef.current = requestId;
-
-    if (source === "manual" && mountedRef.current) {
-      setRefreshing(true);
-    }
-
-    if (mountedRef.current) {
-      setError(null);
-    }
-
-    try {
-      const response = await fetch("/api/specialty-rx/workqueue", {
-        cache: "no-store"
-      });
-      const payload = (await response.json()) as SpecialtyRxWorkqueueResponse | { error?: string };
-
-      if (!mountedRef.current || requestId !== refreshSequenceRef.current) {
-        return;
-      }
-
-      if (!response.ok || !("rows" in payload)) {
-        setError("error" in payload && payload.error ? payload.error : "Unable to load specialty fulfillment workqueue");
-        return;
-      }
-
-      setRows(payload.rows);
-      setSelectedFulfillmentCaseId((currentFulfillmentCaseId) => {
-        if (currentFulfillmentCaseId && payload.rows.some((row) => row.id === currentFulfillmentCaseId)) {
-          return currentFulfillmentCaseId;
-        }
-
-        return payload.rows[0]?.id ?? null;
-      });
-    } catch {
-      if (mountedRef.current && requestId === refreshSequenceRef.current) {
-        setError("Unable to load specialty fulfillment workqueue");
-      }
-    } finally {
-      if (mountedRef.current && source === "initial") {
-        setInitialLoading(false);
-      }
-
-      if (mountedRef.current && source === "manual") {
-        setRefreshing(false);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    const initialRefreshId = window.setTimeout(() => {
-      void refreshWorkqueue("initial");
-    }, 0);
-
-    return () => {
-      mountedRef.current = false;
-      window.clearTimeout(initialRefreshId);
-    };
-  }, [refreshWorkqueue]);
 
   function handleUpdated(updatedCase: SpecialtyFulfillmentCase) {
     const terminal = updatedCase.state === "fulfilled" || updatedCase.state === "exception";
 
-    setRows((currentRows) => {
-      const nextRows = terminal
-        ? currentRows.filter((row) => row.id !== updatedCase.id)
-        : currentRows.map((row) => (row.id === updatedCase.id ? updatedCase : row));
-      const normalizedRows = terminal || nextRows.some((row) => row.id === updatedCase.id) ? nextRows : [updatedCase, ...nextRows];
+    // Derive the next state once (pure), then call each setter independently. Calling
+    // setSelectedFulfillmentCaseId from inside a setRows updater makes the updater
+    // impure and can double-fire under React StrictMode.
+    const nextRows = terminal
+      ? rows.filter((row) => row.id !== updatedCase.id)
+      : rows.map((row) => (row.id === updatedCase.id ? updatedCase : row));
+    const normalizedRows =
+      terminal || nextRows.some((row) => row.id === updatedCase.id) ? nextRows : [updatedCase, ...nextRows];
 
-      setSelectedFulfillmentCaseId((currentId) => {
-        if (!terminal) {
-          return updatedCase.id;
-        }
+    setRows(normalizedRows);
 
-        if (currentId && currentId !== updatedCase.id && normalizedRows.some((row) => row.id === currentId)) {
-          return currentId;
-        }
+    setSelectedFulfillmentCaseId((currentId) => {
+      if (!terminal) {
+        return updatedCase.id;
+      }
 
-        return normalizedRows[0]?.id ?? null;
-      });
+      if (currentId && currentId !== updatedCase.id && normalizedRows.some((row) => row.id === currentId)) {
+        return currentId;
+      }
 
-      return normalizedRows;
+      return normalizedRows[0]?.id ?? null;
     });
 
     if (terminal) {
@@ -149,14 +95,9 @@ export function SpecialtyRxConsole() {
             <h2>Specialty fulfillment workqueue</h2>
             <p>{rows.length === 1 ? "1 fulfillment case loaded" : `${rows.length} fulfillment cases loaded`}</p>
           </div>
-          <button
-            className="primary-button secondary-button"
-            disabled={refreshing}
-            type="button"
-            onClick={() => void refreshWorkqueue("manual")}
-          >
+          <LabsButton variant="secondary" disabled={refreshing} onClick={() => void refreshWorkqueue("manual")}>
             {refreshing ? "Refreshing..." : "Refresh workqueue"}
-          </button>
+          </LabsButton>
         </div>
 
         {error ? (
@@ -204,9 +145,8 @@ export function SpecialtyRxConsole() {
                     <LabsBadge variant={fulfillmentSlaBadgeVariant(row)}>{formatFulfillmentSlaClock(row)}</LabsBadge>
                   </td>
                   <td>
-                    <button
-                      className="row-action"
-                      type="button"
+                    <LabsButton
+                      variant="row"
                       onClick={(event) => {
                         setSelectedFulfillmentCaseId(row.id);
                         lastWorkflowButtonRef.current = event.currentTarget;
@@ -214,7 +154,7 @@ export function SpecialtyRxConsole() {
                       }}
                     >
                       Open workflow
-                    </button>
+                    </LabsButton>
                   </td>
                 </tr>
               ))}

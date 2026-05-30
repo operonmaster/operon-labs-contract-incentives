@@ -106,11 +106,14 @@ export function formatRequestType(requestType: SpecialtyRxPlanAuditRow["requestT
   switch (requestType) {
     case "pharmacy_benefit":
       return "Pharmacy Benefit";
+    default:
+      return "Unknown request type";
   }
 }
 
 export function formatCurrency(row: Pick<SpecialtyRxPlanAuditRow, "currency" | "incentiveValue" | "settlementToken">): string {
-  return `${row.incentiveValue.toLocaleString("en-US", {
+  const amount = typeof row.incentiveValue === "number" ? row.incentiveValue : 0;
+  return `${amount.toLocaleString("en-US", {
     maximumFractionDigits: 2,
     minimumFractionDigits: 2
   })} ${row.settlementToken?.symbol ?? row.currency}`;

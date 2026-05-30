@@ -70,6 +70,26 @@ describe("specialty rx workflow", () => {
     ]);
   });
 
+  it("lists pending fulfillment cases in the plan view before settlement", async () => {
+    const { workflow, umRequest } = await createApprovedSpecialtyRxCase("PA-260526-0900-RX121212");
+    const [created] = await workflow.listWorkqueue();
+
+    await expect(workflow.listPlanRows()).resolves.toEqual([
+      expect.objectContaining({
+        fulfillmentCaseId: created!.id,
+        umRequestId: umRequest.id,
+        state: "intake_triage",
+        fulfillmentSlaStatus: "pending",
+        businessPolicyStatus: null,
+        paymentPolicyStatus: null,
+        incentiveStatus: "pending",
+        paymentStatus: "pending",
+        reason: "Pending fulfillment"
+      })
+    ]);
+    expect(executePolicyBoundPaymentMock).not.toHaveBeenCalled();
+  });
+
   it("advances through all four workflow steps and settles a paid fulfillment row", async () => {
     const { workflow, umRequest } = await createApprovedSpecialtyRxCase("PA-260526-0900-RX222222");
     const [created] = await workflow.listWorkqueue();
@@ -124,14 +144,15 @@ describe("specialty rx workflow", () => {
     expect(row).toMatchObject({
       fulfillmentCaseId: created!.id,
       umRequestId: umRequest.id,
-      fulfillmentSlaStartedAt: "2026-06-18T15:00:00.000Z",
+      fulfillmentSlaStartedAt: "2026-06-18T16:00:00.000Z",
+      clearToFillAt: "2026-06-18T16:00:00.000Z",
       businessPolicyStatus: "approved",
       paymentPolicyStatus: "paid",
       incentiveValue: 7,
       reasonCodes: []
     });
-    expect(row!.policyControls).toContain("Intake completion starts Fulfillment SLA");
-    expect(row!.policyControls).not.toContain("Clear-to-fill timestamp starts Fulfillment SLA");
+    expect(row!.policyControls).toContain("Clear-to-fill timestamp starts Fulfillment SLA");
+    expect(row!.policyControls).not.toContain("Intake completion starts Fulfillment SLA");
     expect(executePolicyBoundPaymentMock).toHaveBeenCalledWith(
       expect.objectContaining({
         umRequestId: umRequest.id,
@@ -145,7 +166,7 @@ describe("specialty rx workflow", () => {
     );
   });
 
-  it("blocks settlement when shipment is outside the Fulfillment SLA started at intake completion", async () => {
+  it("pays when shipment is within 24 hours of clear-to-fill even if intake was earlier", async () => {
     const { workflow, umRequest } = await createApprovedSpecialtyRxCase("PA-260526-0900-RX242424");
     const [created] = await workflow.listWorkqueue();
 
@@ -199,9 +220,94 @@ describe("specialty rx workflow", () => {
     expect(row).toMatchObject({
       fulfillmentCaseId: created!.id,
       umRequestId: umRequest.id,
-      fulfillmentSlaStartedAt: "2026-06-18T08:00:00.000Z",
+      fulfillmentSlaStartedAt: "2026-06-19T09:00:00.000Z",
       clearToFillAt: "2026-06-19T09:00:00.000Z",
       shipmentScheduledAt: "2026-06-19T10:00:00.000Z",
+      fulfillmentSlaStatus: "within_sla",
+      businessPolicyStatus: "approved",
+      paymentPolicyStatus: "paid",
+      incentiveStatus: "paid",
+      paymentStatus: "auto_executed",
+      incentiveValue: 7,
+      reasonCodes: []
+    });
+    expect(row!.policyCriteria).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "shipmentScheduledWithinSla",
+          actual: "Yes",
+          passed: true
+        })
+      ])
+    );
+    expect(executePolicyBoundPaymentMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        umRequestId: umRequest.id,
+        triggerEvent: "SPECIALTY_FULFILLMENT_COMPLETED",
+        amount: 7,
+        walletId: "0.0.9049549"
+      }),
+      expect.any(Object)
+    );
+  });
+
+  it("blocks settlement when shipment is outside 24 hours from clear-to-fill", async () => {
+    const { workflow, umRequest } = await createApprovedSpecialtyRxCase("PA-260526-0900-RX242425");
+    const [created] = await workflow.listWorkqueue();
+
+    await workflow.completeIntake(created!.id, {
+      prescriptionPresent: true,
+      assignedPharmacyConfirmed: true,
+      therapyMetadataPresent: true,
+      handoffDataComplete: true
+    }, new Date("2026-06-18T08:00:00.000Z"));
+    await workflow.clearToFill(
+      created!.id,
+      {
+        benefitsOrClaimCheckCompleted: true,
+        prescriptionValid: true,
+        prescriberClarificationRequired: false,
+        prescriberClarificationResolved: true,
+        remsRequired: false,
+        remsAuthorizationConfirmed: true,
+        inventoryAvailable: true,
+        copayOrPaymentReady: true
+      },
+      new Date("2026-06-19T09:00:00.000Z")
+    );
+    await workflow.scheduleShipment(
+      created!.id,
+      {
+        patientContactAttemptDocumented: true,
+        addressConfirmed: true,
+        deliveryWindowConfirmed: true,
+        coldChainPackoutValidated: true,
+        courierScheduled: true
+      },
+      new Date("2026-06-20T10:00:00.000Z")
+    );
+    await workflow.confirmFulfillment(
+      created!.id,
+      {
+        shipped: true,
+        deliveryConfirmed: true,
+        deliveryAttemptDocumented: true,
+        temperatureLogValid: true,
+        avoidableFulfillmentException: false,
+        externalBlockerDocumented: false,
+        exceptionReasonCode: null
+      },
+      new Date("2026-06-20T11:00:00.000Z")
+    );
+
+    const [row] = await workflow.listPlanRows();
+
+    expect(row).toMatchObject({
+      fulfillmentCaseId: created!.id,
+      umRequestId: umRequest.id,
+      fulfillmentSlaStartedAt: "2026-06-19T09:00:00.000Z",
+      clearToFillAt: "2026-06-19T09:00:00.000Z",
+      shipmentScheduledAt: "2026-06-20T10:00:00.000Z",
       fulfillmentSlaStatus: "breached",
       businessPolicyStatus: "rejected",
       paymentPolicyStatus: "blocked",
@@ -210,16 +316,6 @@ describe("specialty rx workflow", () => {
       incentiveValue: 0,
       reasonCodes: ["SHIPMENT_SLA_EXCEEDED"]
     });
-    expect(row!.policyCriteria).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          id: "shipmentScheduledWithinSla",
-          actual: "No",
-          passed: false,
-          reasonCode: "SHIPMENT_SLA_EXCEEDED"
-        })
-      ])
-    );
     expect(executePolicyBoundPaymentMock).not.toHaveBeenCalled();
   });
 
@@ -681,8 +777,63 @@ describe("specialty rx workflow", () => {
         state: "shipment_scheduled"
       })
     ]);
-    await expect(workflow.listPlanRows()).resolves.toEqual([]);
+    await expect(workflow.listPlanRows()).resolves.toEqual([
+      expect.objectContaining({
+        fulfillmentCaseId: created!.id,
+        state: "shipment_scheduled",
+        businessPolicyStatus: null,
+        paymentPolicyStatus: null,
+        incentiveStatus: "pending",
+        paymentStatus: "pending"
+      })
+    ]);
     expect(executePolicyBoundPaymentMock).not.toHaveBeenCalled();
+  });
+
+  it("ignores non-input shipment fields so a request body cannot flip cold-chain eligibility", async () => {
+    const { workflow } = await createApprovedSpecialtyRxCase("PA-260526-0900-RX555555");
+    const [created] = await workflow.listWorkqueue();
+
+    await workflow.completeIntake(created!.id, {
+      prescriptionPresent: true,
+      assignedPharmacyConfirmed: true,
+      therapyMetadataPresent: true,
+      handoffDataComplete: true
+    });
+    await workflow.clearToFill(created!.id, {
+      benefitsOrClaimCheckCompleted: true,
+      prescriptionValid: true,
+      prescriberClarificationRequired: false,
+      prescriberClarificationResolved: true,
+      remsRequired: false,
+      remsAuthorizationConfirmed: true,
+      inventoryAvailable: true,
+      copayOrPaymentReady: true
+    });
+
+    const updated = await workflow.scheduleShipment(created!.id, {
+      patientContactAttemptDocumented: true,
+      addressConfirmed: true,
+      deliveryWindowConfirmed: true,
+      coldChainPackoutValidated: true,
+      courierScheduled: true,
+      // Attacker-supplied fields outside ScheduleShipmentInput must not persist.
+      coldChainRequired: false,
+      maliciousKey: "x"
+    } as never);
+
+    expect(updated.shipment.coldChainRequired).toBe(true);
+    expect(updated.shipment).not.toHaveProperty("maliciousKey");
+    expect(Object.keys(updated.shipment).sort()).toEqual(
+      [
+        "addressConfirmed",
+        "coldChainPackoutValidated",
+        "coldChainRequired",
+        "courierScheduled",
+        "deliveryWindowConfirmed",
+        "patientContactAttemptDocumented"
+      ].sort()
+    );
   });
 });
 

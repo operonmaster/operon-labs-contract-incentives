@@ -11,10 +11,22 @@ function readRepoFile(path: string) {
 }
 
 describe("Operon Labs design system", () => {
+  it("self-hosts the Geist font through next/font instead of a render-blocking remote import", () => {
+    const css = readRepoFile("src/apps/web/app/styles.css");
+    const layout = readRepoFile("src/apps/web/app/layout.tsx");
+
+    expect(css).not.toContain("@import");
+    expect(css).not.toContain("fonts.googleapis.com");
+    expect(css).toContain("var(--op-font-sans)");
+    expect(css).toContain("var(--op-font-mono)");
+    expect(layout).toContain('from "next/font/google"');
+    expect(layout).toContain("Geist");
+    expect(layout).toContain("variable: \"--op-font-sans\"");
+  });
+
   it("ports the Operon presentation design tokens into the app stylesheet", () => {
     const css = readRepoFile("src/apps/web/app/styles.css");
 
-    expect(css).toContain("family=Geist");
     expect(css).toContain("--op-bg: #050816");
     expect(css).toContain("--op-bg-2: #0a0f1f");
     expect(css).toContain("--op-blue: #3b82f6");
@@ -39,7 +51,10 @@ describe("Operon Labs design system", () => {
     expect(source).toContain("export function LabsProductFrame");
     expect(source).toContain("export function LabsDeckRail");
     expect(source).toContain("export function LabsBadge");
+    expect(source).toContain("export function LabsButton");
+    expect(source).toContain("export function LabsUseCaseNav");
     expect(source).toContain('export { LabsSelect } from "./LabsSelect"');
+    expect(source).toContain('export { LabsModal } from "./LabsModal"');
   });
 
   it("exposes a custom Labs select primitive inspired by the platform dropdown", () => {
@@ -85,15 +100,15 @@ describe("Operon Labs design system", () => {
   it("centers shared badges when they are rendered in table columns", () => {
     const css = readRepoFile("src/apps/web/app/styles.css");
     const planConsole = readRepoFile("src/apps/web/components/provider-documentation/PlanIncentivesConsole.tsx");
-    const auditModal = readRepoFile("src/apps/web/components/provider-documentation/PlanAuditDetailsModal.tsx");
+    const evidence = readRepoFile("src/apps/web/components/incentive-audit-evidence.tsx");
 
     expect(css).toContain(".badge-cell");
     expect(css).toMatch(/\.badge-cell \{[^}]*text-align: center;/);
     expect(css).toMatch(/\.badge-cell \.op-badge \{[^}]*margin-inline: auto;/);
     expect(planConsole).toContain('<th className="badge-cell">Business Policy</th>');
     expect(planConsole).toContain('<td className="badge-cell">');
-    expect(auditModal).toContain('<th className="badge-cell">Actual</th>');
-    expect(auditModal).toContain('<td className="badge-cell">');
+    expect(evidence).toContain('<th className="badge-cell">Actual</th>');
+    expect(evidence).toContain('<td className="badge-cell">');
   });
 
   it("uses the shared badge primitive for visible status labels across pages", () => {

@@ -1,4 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');
+/* Geist and Geist Mono are self-hosted via next/font/google in app/layout.tsx,
+   exposed as the --op-font-sans / --op-font-mono CSS variables. */
 
 :root {
   color-scheme: dark;
@@ -19,7 +20,9 @@
   --op-amber: #f59e0b;
   --op-amber-2: #fbbf24;
   --op-orange: #f97316;
+  --op-orange-2: #fb923c;
   --op-red: #ef4444;
+  --op-focus-ring: rgba(36, 87, 214, 0.12);
   --op-slide-w: 1920px;
   --op-slide-h: 1080px;
   --op-page-w: 1240px;
@@ -43,7 +46,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
-  font-family: "Geist", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--op-font-sans), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 a {
@@ -121,7 +124,7 @@ main {
 
 .card > em {
   color: var(--op-amber-2);
-  font-family: "Geist Mono", ui-monospace, monospace;
+  font-family: var(--op-font-mono), ui-monospace, monospace;
   font-size: 11px;
   font-style: normal;
   font-weight: 500;
@@ -206,7 +209,7 @@ main {
 
 .choice.selected {
   border-color: var(--blue);
-  box-shadow: 0 0 0 3px rgba(36, 87, 214, 0.12);
+  box-shadow: 0 0 0 3px var(--op-focus-ring);
 }
 
 .choice:disabled {
@@ -317,7 +320,7 @@ main {
 .use-case-nav a {
   border-radius: 999px;
   color: var(--op-muted);
-  font-family: "Geist Mono", ui-monospace, monospace;
+  font-family: var(--op-font-mono), ui-monospace, monospace;
   font-size: 12px;
   font-weight: 500;
   letter-spacing: 0;
@@ -389,7 +392,7 @@ main {
 }
 
 .stepper li.active {
-  box-shadow: 0 0 0 3px rgba(36, 87, 214, 0.12);
+  box-shadow: 0 0 0 3px var(--op-focus-ring);
 }
 
 .compact-stepper {
@@ -513,7 +516,7 @@ main {
 
 .request-type-card em {
   color: var(--amber);
-  font-family: "Geist Mono", ui-monospace, monospace;
+  font-family: var(--op-font-mono), ui-monospace, monospace;
   font-size: 11px;
   font-style: normal;
   font-weight: 800;
@@ -522,7 +525,7 @@ main {
 
 .request-type-card.selected {
   border-color: var(--blue);
-  box-shadow: 0 0 0 3px rgba(36, 87, 214, 0.12);
+  box-shadow: 0 0 0 3px var(--op-focus-ring);
 }
 
 .request-type-card:disabled {
@@ -562,7 +565,7 @@ main {
 .labs-select-trigger:hover:not(:disabled),
 .labs-select-trigger[aria-expanded="true"] {
   border-color: var(--blue);
-  box-shadow: 0 0 0 3px rgba(36, 87, 214, 0.12);
+  box-shadow: 0 0 0 3px var(--op-focus-ring);
 }
 
 .labs-select-trigger:disabled {
@@ -664,7 +667,7 @@ main {
 
 .labs-select-option-eyebrow {
   color: var(--blue);
-  font-family: "Geist Mono", ui-monospace, monospace;
+  font-family: var(--op-font-mono), ui-monospace, monospace;
   text-transform: uppercase;
 }
 
@@ -943,7 +946,7 @@ main {
 
 .radio-card.selected {
   border-color: var(--blue);
-  box-shadow: 0 0 0 3px rgba(36, 87, 214, 0.12);
+  box-shadow: 0 0 0 3px var(--op-focus-ring);
   color: var(--blue);
 }
 
@@ -1119,7 +1122,7 @@ main {
   border: 1px solid rgba(148, 163, 184, 0.24);
   border-radius: 6px;
   display: inline-flex;
-  font-family: "Geist Mono", ui-monospace, monospace;
+  font-family: var(--op-font-mono), ui-monospace, monospace;
   font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.08em;
@@ -1286,7 +1289,7 @@ main {
 
 .policy-card dt {
   color: var(--op-muted);
-  font-family: "Geist Mono", ui-monospace, monospace;
+  font-family: var(--op-font-mono), ui-monospace, monospace;
   font-size: 11px;
   font-weight: 500;
   text-transform: uppercase;
@@ -1310,7 +1313,7 @@ main {
   border: 0;
   color: var(--op-blue-2);
   cursor: pointer;
-  font-family: "Geist Mono", ui-monospace, monospace;
+  font-family: var(--op-font-mono), ui-monospace, monospace;
   font-size: 12px;
   font-weight: 500;
   padding: 0;
@@ -1388,7 +1391,7 @@ main {
 
 .policy-event-context-line dt {
   color: var(--op-muted);
-  font-family: "Geist Mono", ui-monospace, monospace;
+  font-family: var(--op-font-mono), ui-monospace, monospace;
   font-size: 11px;
   text-transform: uppercase;
 }
@@ -1461,7 +1464,7 @@ main {
 
 .policy-anchor-list dt {
   color: var(--op-ink-2);
-  font-family: "Geist", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--op-font-sans), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 13px;
   line-height: 1.45;
 }
@@ -1472,7 +1475,7 @@ main {
 
 .policy-anchor-list dd {
   color: var(--op-ink-2);
-  font-family: "Geist", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--op-font-sans), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 13px;
   line-height: 1.45;
   margin: 0;
@@ -1587,7 +1590,7 @@ main {
 .policy-criteria-toggle summary {
   color: var(--op-blue-2);
   cursor: pointer;
-  font-family: "Geist Mono", ui-monospace, monospace;
+  font-family: var(--op-font-mono), ui-monospace, monospace;
   font-size: 12px;
   font-weight: 500;
   text-transform: uppercase;
@@ -1641,7 +1644,7 @@ main {
 
 .policy-criteria-table th {
   color: var(--muted);
-  font-family: "Geist Mono", ui-monospace, monospace;
+  font-family: var(--op-font-mono), ui-monospace, monospace;
   font-size: 11px;
   font-weight: 500;
   text-transform: uppercase;
@@ -1654,7 +1657,7 @@ main {
 
 .policy-criteria-table .criterion-reason-code {
   color: var(--muted);
-  font-family: "Geist Mono", ui-monospace, monospace;
+  font-family: var(--op-font-mono), ui-monospace, monospace;
   font-size: 11px;
   margin-top: 4px;
 }
@@ -1797,7 +1800,7 @@ body {
   border-radius: 999px;
   color: var(--op-blue-2);
   display: inline-flex;
-  font-family: "Geist Mono", ui-monospace, monospace;
+  font-family: var(--op-font-mono), ui-monospace, monospace;
   font-size: 12px;
   font-weight: 500;
   gap: 8px;
@@ -1811,7 +1814,7 @@ body {
 .eyebrow,
 .label {
   color: var(--op-blue-2);
-  font-family: "Geist Mono", ui-monospace, monospace;
+  font-family: var(--op-font-mono), ui-monospace, monospace;
   font-size: 12px;
   font-weight: 500;
   letter-spacing: 0;
@@ -1957,7 +1960,7 @@ body {
 .op-product-toolbar strong,
 .op-product-toolbar em {
   color: var(--op-muted);
-  font-family: "Geist Mono", ui-monospace, monospace;
+  font-family: var(--op-font-mono), ui-monospace, monospace;
   font-size: 11px;
   font-style: normal;
   font-weight: 500;
@@ -2011,7 +2014,7 @@ body {
 
 .op-deck-rail span {
   color: var(--op-muted-2);
-  font-family: "Geist Mono", ui-monospace, monospace;
+  font-family: var(--op-font-mono), ui-monospace, monospace;
   font-size: 11px;
 }
 
@@ -2059,7 +2062,7 @@ body {
 .mono,
 .mono-cell {
   color: var(--op-ink-2);
-  font-family: "Geist Mono", ui-monospace, monospace;
+  font-family: var(--op-font-mono), ui-monospace, monospace;
 }
 
 .mono {
@@ -2107,7 +2110,7 @@ body {
 .review-list dt,
 .detail-grid dt {
   color: var(--op-muted);
-  font-family: "Geist Mono", ui-monospace, monospace;
+  font-family: var(--op-font-mono), ui-monospace, monospace;
   font-weight: 500;
   letter-spacing: 0;
 }
@@ -2343,7 +2346,7 @@ body {
 
 .delegate-field > span {
   color: var(--op-muted);
-  font-family: "Geist Mono", ui-monospace, monospace;
+  font-family: var(--op-font-mono), ui-monospace, monospace;
   font-size: 11px;
   font-weight: 500;
   text-transform: uppercase;

@@ -1,14 +1,19 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { specialtyRxWorkflow, type ScheduleShipmentInput } from "../../../../../../lib/specialty-rx-workflow";
+import { specialtyRxWorkflow } from "../../../../../../lib/specialty-rx-workflow";
+import { parseScheduleShipmentInput } from "../../../../../../lib/specialty-rx-input";
 
 interface RouteContext {
   params: Promise<{ fulfillmentCaseId: string }>;
 }
 
 export async function POST(request: NextRequest, context: RouteContext) {
+  const input = parseScheduleShipmentInput(await request.json().catch(() => null));
+  if (!input) {
+    return NextResponse.json({ error: "INVALID_SHIPMENT" }, { status: 400 });
+  }
+
   try {
     const { fulfillmentCaseId } = await context.params;
-    const input = (await request.json()) as ScheduleShipmentInput;
     return NextResponse.json(await specialtyRxWorkflow.scheduleShipment(fulfillmentCaseId, input));
   } catch (error) {
     return NextResponse.json(

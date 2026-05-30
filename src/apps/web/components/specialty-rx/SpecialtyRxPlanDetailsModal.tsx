@@ -1,8 +1,8 @@
 "use client";
 
-import type { PaymentPolicyControlEvidence } from "../../lib/payment-policy-evidence-store";
 import type { SpecialtyRxPlanAuditRow } from "../../lib/specialty-rx-workflow";
-import { LabsBadge } from "../labs-ui";
+import { LabsBadge, LabsButton, LabsModal } from "../labs-ui";
+import { EvidenceRows, controlStatusBadgeVariant, formatTransaction } from "../incentive-audit-evidence";
 import {
   businessPolicyStatusBadgeVariant,
   formatBusinessPolicyStatus,
@@ -26,15 +26,13 @@ export function SpecialtyRxPlanDetailsModal({ row, onClose }: SpecialtyRxPlanDet
   const fulfillmentCase = row.fulfillmentCase as Partial<SpecialtyRxPlanAuditRow["fulfillmentCase"]>;
 
   return (
-    <div className="modal-backdrop audit-modal-backdrop" role="presentation" onClick={onClose}>
-      <section
-        aria-modal="true"
-        aria-labelledby="specialty-rx-plan-audit-title"
-        className="modal plan-audit-modal policy-details-modal payment-policy-details-modal specialty-rx-policy-event-modal"
-        role="dialog"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="modal-toolbar">
+    <LabsModal
+      onClose={onClose}
+      labelledBy="specialty-rx-plan-audit-title"
+      className="plan-audit-modal policy-details-modal payment-policy-details-modal specialty-rx-policy-event-modal"
+      backdropClassName="audit-modal-backdrop"
+    >
+      <div className="modal-toolbar">
           <div>
             <span className="eyebrow">Policy event</span>
             <h2 id="specialty-rx-plan-audit-title">Specialty Fulfillment Audit Details</h2>
@@ -57,9 +55,9 @@ export function SpecialtyRxPlanDetailsModal({ row, onClose }: SpecialtyRxPlanDet
               </div>
             </dl>
           </div>
-          <button className="row-action" type="button" onClick={onClose}>
+          <LabsButton variant="row" onClick={onClose}>
             Close details
-          </button>
+          </LabsButton>
         </div>
 
         <dl className="detail-grid policy-event-outcome-strip">
@@ -152,6 +150,24 @@ export function SpecialtyRxPlanDetailsModal({ row, onClose }: SpecialtyRxPlanDet
             </dl>
           </section>
 
+          <section className="policy-modal-section" aria-labelledby="specialty-delegate-context-title">
+            <h3 id="specialty-delegate-context-title">Delegate determination</h3>
+            <dl className="policy-anchor-list">
+              <div>
+                <dt>Source</dt>
+                <dd>{formatFulfillmentSource(fulfillmentCase.source)}</dd>
+              </div>
+              <div>
+                <dt>PA approved</dt>
+                <dd>{formatNullableDateTime(fulfillmentCase.paApprovalReceivedAt ?? null)}</dd>
+              </div>
+              <div>
+                <dt>Linked PA outcome</dt>
+                <dd>Approved pharmacy prior authorization</dd>
+              </div>
+            </dl>
+          </section>
+
           <section className="policy-modal-section" aria-labelledby="specialty-fulfillment-timestamps-title">
             <h3 id="specialty-fulfillment-timestamps-title">Fulfillment timestamps</h3>
             <dl className="policy-anchor-list">
@@ -174,6 +190,29 @@ export function SpecialtyRxPlanDetailsModal({ row, onClose }: SpecialtyRxPlanDet
               <div>
                 <dt>Delivery confirmed</dt>
                 <dd>{formatNullableDateTime(row.deliveryConfirmedAt)}</dd>
+              </div>
+            </dl>
+          </section>
+
+          <section className="policy-modal-section" aria-labelledby="specialty-checklist-evidence-title">
+            <h3 id="specialty-checklist-evidence-title">Checklist evidence</h3>
+            <EvidenceRows emptyLabel="No fulfillment checklist evidence recorded" rows={buildChecklistEvidenceRows(row)} />
+          </section>
+
+          <section className="policy-modal-section" aria-labelledby="specialty-exception-classification-title">
+            <h3 id="specialty-exception-classification-title">Exception classification</h3>
+            <dl className="policy-anchor-list">
+              <div>
+                <dt>External blocker</dt>
+                <dd>{formatYesNo(fulfillmentCase.fulfillment?.externalBlockerDocumented)}</dd>
+              </div>
+              <div>
+                <dt>Avoidable exception</dt>
+                <dd>{formatYesNo(fulfillmentCase.fulfillment?.avoidableFulfillmentException)}</dd>
+              </div>
+              <div>
+                <dt>Exception reason</dt>
+                <dd>{fulfillmentCase.fulfillment?.exceptionReasonCode ?? "None"}</dd>
               </div>
             </dl>
           </section>
@@ -254,102 +293,65 @@ export function SpecialtyRxPlanDetailsModal({ row, onClose }: SpecialtyRxPlanDet
             />
           </section>
         </div>
-      </section>
-    </div>
+    </LabsModal>
   );
 }
 
-interface EvidenceDisplayRow {
-  id: string;
-  label: string;
-  expected?: string;
-  actual?: string;
-  actualVariant: "success" | "warning";
+function buildChecklistEvidenceRows(row: SpecialtyRxPlanAuditRow) {
+  const caseRecord = row.fulfillmentCase as Partial<SpecialtyRxPlanAuditRow["fulfillmentCase"]>;
+  const intake = caseRecord.intake;
+  const clearToFill = caseRecord.clearToFill;
+  const shipment = caseRecord.shipment;
+  const fulfillment = caseRecord.fulfillment;
+
+  return [
+    checklistRow("approvedPaLinked", "Approved PA linked", intake?.approvedPaLinked),
+    checklistRow("prescriptionPresent", "Prescription present", intake?.prescriptionPresent),
+    checklistRow("assignedPharmacyConfirmed", "Assigned pharmacy confirmed", intake?.assignedPharmacyConfirmed),
+    checklistRow("therapyMetadataPresent", "Therapy metadata present", intake?.therapyMetadataPresent),
+    checklistRow("handoffDataComplete", "Handoff data complete", intake?.handoffDataComplete),
+    checklistRow(
+      "benefitsOrClaimCheckCompleted",
+      "Benefits or claim readiness checked",
+      clearToFill?.benefitsOrClaimCheckCompleted
+    ),
+    checklistRow("prescriptionValid", "Prescription valid", clearToFill?.prescriptionValid),
+    checklistRow("prescriberClarificationResolved", "Prescriber clarification resolved", clearToFill?.prescriberClarificationResolved),
+    checklistRow("remsAuthorizationConfirmed", "REMS authorization confirmed", clearToFill?.remsAuthorizationConfirmed),
+    checklistRow("inventoryAvailable", "Inventory available", clearToFill?.inventoryAvailable),
+    checklistRow("copayOrPaymentReady", "Copay or payment ready", clearToFill?.copayOrPaymentReady),
+    checklistRow("patientContactAttemptDocumented", "Patient contact attempt documented", shipment?.patientContactAttemptDocumented),
+    checklistRow("addressConfirmed", "Address confirmed", shipment?.addressConfirmed),
+    checklistRow("deliveryWindowConfirmed", "Delivery window confirmed", shipment?.deliveryWindowConfirmed),
+    checklistRow("coldChainPackoutValidated", "Cold-chain packout validated", shipment?.coldChainPackoutValidated),
+    checklistRow("courierScheduled", "Courier scheduled", shipment?.courierScheduled),
+    checklistRow("shipmentScheduledWithinSla", "Shipment scheduled within SLA", row.fulfillmentSlaStatus === "within_sla"),
+    checklistRow("shipped", "Shipment recorded", fulfillment?.shipped),
+    checklistRow("deliveryConfirmed", "Delivery confirmed", fulfillment?.deliveryConfirmed),
+    checklistRow("deliveryAttemptDocumented", "Delivery attempt documented", fulfillment?.deliveryAttemptDocumented),
+    checklistRow("temperatureLogValid", "Temperature log valid", fulfillment?.temperatureLogValid)
+  ];
 }
 
-function EvidenceRows({
-  rows,
-  emptyLabel
-}: {
-  rows: EvidenceDisplayRow[];
-  emptyLabel: string;
-}) {
-  if (rows.length === 0) {
-    return <p className="empty-state">{emptyLabel}</p>;
-  }
-
-  return (
-    <div className="policy-criteria-table-wrap">
-      <table className="policy-criteria-table policy-audit-evidence-table">
-        <colgroup>
-          <col />
-          <col className="policy-audit-evidence-actual-column" />
-        </colgroup>
-        <thead>
-          <tr>
-            <th>Criterion/Control</th>
-            <th className="badge-cell">Actual</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.id}>
-              <td>
-                <strong>{row.label}</strong>
-                {hasEvidenceValue(row.expected) ? (
-                  <span className="criterion-reason-code">Expected: {row.expected?.trim()}</span>
-                ) : null}
-              </td>
-              <td className="badge-cell">
-                <LabsBadge variant={row.actualVariant}>{formatActualValue(row)}</LabsBadge>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
+function checklistRow(id: string, label: string, value: boolean | undefined) {
+  const verified = value === true;
+  return {
+    id,
+    label,
+    expected: "Yes",
+    actual: formatYesNo(value),
+    actualVariant: verified ? "success" as const : "warning" as const
+  };
 }
 
-function hasEvidenceValue(value: string | undefined) {
-  return Boolean(value?.trim());
-}
-
-function formatActualValue(row: EvidenceDisplayRow) {
-  if (row.actual?.trim()) {
-    return row.actual;
-  }
-
-  return row.actualVariant === "success" ? "Verified" : "Not verified";
-}
-
-function controlStatusBadgeVariant(status: PaymentPolicyControlEvidence["status"]): "success" | "warning" {
-  switch (status) {
-    case "passed":
-      return "success";
-    case "failed":
-    case "not_run":
-      return "warning";
-  }
-}
-
-export function formatTransaction(transactionId: string | null) {
-  if (!transactionId) {
+function formatYesNo(value: boolean | undefined): string {
+  if (value === undefined) {
     return "Not recorded";
   }
 
-  if (transactionId.startsWith("testnet-")) {
-    return transactionId;
-  }
+  return value ? "Yes" : "No";
+}
 
-  return (
-    <a
-      className="transaction-link"
-      href={`https://hashscan.io/testnet/transaction/${encodeURIComponent(transactionId)}`}
-      target="_blank"
-      rel="noreferrer"
-    >
-      {transactionId}
-    </a>
-  );
+function formatFulfillmentSource(value: unknown): string {
+  return value === "delegate_um_approved" ? "Approved delegate UM request" : "Not recorded";
 }

@@ -388,8 +388,12 @@ export function createProviderDocumentationWorkflow(
       if (event.eventType === "UM_REQUEST_CREATED" && (!umRequestId || event.umRequestId === umRequestId)) {
         try {
           await processEvent(event);
-        } catch {
-          // Provider submission must not fail because the async incentive layer is unavailable.
+        } catch (error) {
+          // Provider submission must not fail because the async incentive layer is
+          // unavailable, but a persistent settlement error must still be observable.
+          console.error(
+            `PROVIDER_DOCUMENTATION_INCENTIVE_PROCESSING_FAILED umRequestId=${event.umRequestId} reason=${error instanceof Error ? error.message : "UNKNOWN"}`
+          );
         }
       }
     }

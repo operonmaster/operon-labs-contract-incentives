@@ -13,7 +13,7 @@ import type {
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PatientCoverageContext } from "../../lib/um-reference-data";
-import { LabsBadge, LabsHero, LabsPageShell, LabsSelect } from "../labs-ui";
+import { LabsBadge, LabsButton, LabsHero, LabsModal, LabsPageShell, LabsSelect } from "../labs-ui";
 import { UseCaseNavigation } from "./UseCaseNavigation";
 import {
   canContinueFromSetup,
@@ -577,22 +577,15 @@ function AssessmentModal({
     : `Answer ${unansweredCount} more ${unansweredCount === 1 ? "question" : "questions"} to save the assessment.`;
 
   return (
-    <div className="modal-backdrop" role="presentation" onClick={onClose}>
-      <section
-        aria-modal="true"
-        className="modal assessment-modal"
-        role="dialog"
-        aria-labelledby="assessment-title"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="modal-toolbar">
+    <LabsModal onClose={onClose} labelledBy="assessment-title" className="assessment-modal">
+      <div className="modal-toolbar">
           <div>
             <h2 id="assessment-title">{service?.assessmentTitle ?? "Documentation assessment"}</h2>
             <p>{service?.assessmentIntro ?? "Answer each payer-requested documentation question before submitting the prior authorization."}</p>
           </div>
-          <button className="row-action" type="button" onClick={onClose}>
+          <LabsButton variant="row" onClick={onClose}>
             Close assessment
-          </button>
+          </LabsButton>
         </div>
         <ol className="assessment-list">
           {questions.map((question, index) => (
@@ -628,15 +621,14 @@ function AssessmentModal({
           {summary.answeredCount} of {summary.totalCount} answered. {progressText}
         </p>
         <div className="button-row">
-          <button className="primary-button" disabled={!summary.isComplete} type="button" onClick={onSave}>
+          <LabsButton disabled={!summary.isComplete} onClick={onSave}>
             Save assessment
-          </button>
-          <button className="primary-button secondary-button" type="button" onClick={onSkip}>
+          </LabsButton>
+          <LabsButton variant="secondary" onClick={onSkip}>
             Skip assessment
-          </button>
+          </LabsButton>
         </div>
-      </section>
-    </div>
+    </LabsModal>
   );
 }
 
@@ -678,12 +670,13 @@ function SetupStep({
       <div className="stage-form two-field-grid">
         <div className="form-row">
           <span>Patient</span>
-          <LabsSelect disabled={submitting} options={patientOptions} placeholder="Select patient" value={patientId ?? ""} onChange={onPatientChange} />
+          <LabsSelect ariaLabel="Patient" disabled={submitting} options={patientOptions} placeholder="Select patient" value={patientId ?? ""} onChange={onPatientChange} />
         </div>
 
         <div className="form-row">
           <span>Health plan</span>
           <LabsSelect
+            ariaLabel="Health plan"
             disabled={!canEditHealthPlan({ patientId, submitting })}
             options={planOptions}
             placeholder="Select health plan"
@@ -697,9 +690,9 @@ function SetupStep({
           {patientLoadError}
         </p>
       ) : null}
-      <button className="primary-button" disabled={!canContinueFromSetup({ patientId, planId, submitting })} type="button" onClick={onContinue}>
+      <LabsButton disabled={!canContinueFromSetup({ patientId, planId, submitting })} onClick={onContinue}>
         Next: service
-      </button>
+      </LabsButton>
     </>
   );
 }
@@ -770,6 +763,7 @@ function ServiceStep({
       <div className="form-row">
         <span>{requestType === "pharmacy_benefit" ? "Search medication" : "Search service"}</span>
         <LabsSelect
+          ariaLabel={requestType === "pharmacy_benefit" ? "Search medication" : "Search service"}
           disabled={checkingRequirements || !requestType || requestType === "inpatient_admission" || Boolean(crdLoadError)}
           options={serviceOptions}
           placeholder={servicePlaceholder}
@@ -788,9 +782,9 @@ function ServiceStep({
           {error}
         </p>
       ) : null}
-      <button className="primary-button" disabled={!requestType || !serviceCode || checkingRequirements} type="button" onClick={onCheck}>
+      <LabsButton disabled={!requestType || !serviceCode || checkingRequirements} onClick={onCheck}>
         {checkingRequirements ? "Checking..." : "Check coverage and requirements"}
-      </button>
+      </LabsButton>
     </>
   );
 }
@@ -839,9 +833,9 @@ function CoverageStep({
           <h3>Prior authorization required</h3>
           <p>{requestType === "pharmacy_benefit" ? "Medication documentation is required before this request is submitted." : "Medical necessity documentation is required before this request is submitted."}</p>
           <div className="button-row">
-            <button className="primary-button" type="button" onClick={onOpenAssessment}>
+            <LabsButton onClick={onOpenAssessment}>
               Open documentation assessment
-            </button>
+            </LabsButton>
             <LabsBadge variant={assessmentBadgeVariant(assessmentStatus)}>Assessment: {formatAssessmentStatus(assessmentStatus)}</LabsBadge>
           </div>
         </div>
@@ -862,9 +856,9 @@ function CoverageStep({
           <p>The request can move to review with the coverage response returned by the plan.</p>
         </div>
       )}
-      <button className="primary-button" disabled={!canReview} type="button" onClick={onReview}>
+      <LabsButton disabled={!canReview} onClick={onReview}>
         Review
-      </button>
+      </LabsButton>
     </>
   );
 }
@@ -935,9 +929,9 @@ function ReviewStep({
       {isNotCovered && acknowledgedNotCovered ? (
         <p className="action-status warning-copy">The request will be submitted with a not-covered benefit reason.</p>
       ) : null}
-      <button className="primary-button" disabled={submitting} type="button" onClick={onSubmit}>
+      <LabsButton disabled={submitting} onClick={onSubmit}>
         {submitting ? "Submitting..." : "Submit prior authorization"}
-      </button>
+      </LabsButton>
       {error ? (
         <p className="error-text" role="alert">
           {error}
@@ -979,9 +973,9 @@ function SubmissionConfirmation({ submitted, onSubmitAnother }: { submitted: UMR
         <Link className="primary-button" href={`/provider-documentation/incentives?umRequestId=${encodeURIComponent(submitted.id)}`}>
           View health plan audit
         </Link>
-        <button className="primary-button secondary-button" type="button" onClick={onSubmitAnother}>
+        <LabsButton variant="secondary" onClick={onSubmitAnother}>
           Submit another request
-        </button>
+        </LabsButton>
       </div>
     </div>
   );

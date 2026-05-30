@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { getDtrQuestionnaire, type DtrAnswerValue, type UMRequest } from "@operon-labs/um-platform";
-import { LabsBadge, LabsSelect, type LabsSelectOption } from "../labs-ui";
+import { LabsBadge, LabsButton, LabsModal, LabsSelect, type LabsSelectOption } from "../labs-ui";
 import { formatRequestType, formatUmRequestSlaStatus, formatUmState } from "./delegate-formatters";
 
 interface DelegateReviewModalProps {
@@ -50,7 +50,6 @@ const denialReasonOptions: LabsSelectOption[] = [
 ];
 
 export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, request }: DelegateReviewModalProps) {
-  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const [reviewStarted, setReviewStarted] = useState(request.state === "in_clinical_review");
   const [outcomeStatus, setOutcomeStatus] = useState<"approved" | "denied" | null>(request.outcomeStatus ?? null);
   const [clinicalDocumentationReviewed, setClinicalDocumentationReviewed] = useState(false);
@@ -76,21 +75,6 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, requ
   const outcomeGuidanceId = "delegate-outcome-guidance";
   const assessment = buildAssessmentView(request);
   const currentState = reviewStarted ? "in_clinical_review" : request.state;
-
-  useEffect(() => {
-    closeButtonRef.current?.focus();
-  }, []);
-
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    }
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
 
   async function ensureReviewStarted(): Promise<boolean> {
     if (reviewStarted) {
@@ -173,15 +157,13 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, requ
   }
 
   return (
-    <div className="modal-backdrop audit-modal-backdrop" role="presentation" onClick={onClose}>
-      <section
-        aria-modal="true"
-        aria-labelledby="delegate-review-title"
-        className="modal plan-audit-modal delegate-review-modal"
-        role="dialog"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="modal-toolbar">
+    <LabsModal
+      onClose={onClose}
+      labelledBy="delegate-review-title"
+      className="plan-audit-modal delegate-review-modal"
+      backdropClassName="audit-modal-backdrop"
+    >
+      <div className="modal-toolbar">
           <div>
             <span className="eyebrow">Delegate review</span>
             <h2 id="delegate-review-title">Pharmacy prior authorization</h2>
@@ -190,9 +172,9 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, requ
               <LabsBadge variant={isSlaBreached(request) ? "warning" : "info"}>{formatUmState(currentState)}</LabsBadge>
             </p>
           </div>
-          <button ref={closeButtonRef} className="row-action" type="button" onClick={onClose}>
+          <LabsButton variant="row" onClick={onClose}>
             Close
-          </button>
+          </LabsButton>
         </div>
 
         <dl className="detail-grid delegate-review-meta-grid">
@@ -266,9 +248,9 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, requ
         ) : null}
 
         {!reviewStarted ? (
-          <button className="primary-button" disabled={submitting} type="button" onClick={() => void startReview()}>
+          <LabsButton disabled={submitting} onClick={() => void startReview()}>
             {submitting ? "Starting..." : "Start review"}
-          </button>
+          </LabsButton>
         ) : null}
 
         <div className="delegate-review-grid">
@@ -343,6 +325,7 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, requ
                 <span>{activeReasonLabel}</span>
                 <LabsSelect
                   id={`delegate-${outcomeStatus}-reason`}
+                  ariaLabel={activeReasonLabel}
                   disabled={!canChooseOutcome}
                   options={activeReasonOptions}
                   placeholder={`Select ${outcomeStatus} reason`}
@@ -355,12 +338,11 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, requ
         </div>
 
         <div className="delegate-modal-actions">
-          <button className="primary-button" disabled={!canSubmit} type="button" onClick={() => void submitDetermination()}>
+          <LabsButton disabled={!canSubmit} onClick={() => void submitDetermination()}>
             {submitting ? "Submitting..." : "Submit determination"}
-          </button>
+          </LabsButton>
         </div>
-      </section>
-    </div>
+    </LabsModal>
   );
 }
 

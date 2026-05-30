@@ -20,10 +20,8 @@ describe("DelegateVendorConsole source", () => {
     expect(source).toContain("lastReviewButtonRef");
     expect(source).toContain("event.currentTarget");
     expect(source).toContain("window.setTimeout(() => lastReviewButtonRef.current?.focus(), 0)");
-    expect(modalSource).toContain("closeButtonRef.current?.focus()");
-    expect(modalSource).toContain('event.key === "Escape"');
-    expect(modalSource).toContain('document.addEventListener("keydown", handleKeyDown)');
-    expect(modalSource).toContain('document.removeEventListener("keydown", handleKeyDown)');
+    // Focus management and Escape-to-close now come from the shared LabsModal shell.
+    expect(modalSource).toContain("LabsModal");
     expect(modalSource).toContain("useState(false)");
     expect(modalSource).toContain("request.outcomeStatus ?? null");
     expect(modalSource).toContain("const canChooseOutcome = checklistComplete");
@@ -68,7 +66,9 @@ describe("DelegateVendorConsole source", () => {
     expect(markup).not.toContain("Denial reason");
     expect(markup).not.toContain("Not medically necessary");
     expect(markup).toContain("Submit determination");
-    expect(markup).toMatch(/<button class="primary-button" disabled="" type="button">Submit determination<\/button>/);
+    // Rendered through the shared LabsButton primitive (attribute order is incidental).
+    expect(markup).toMatch(/<button[^>]*class="primary-button"[^>]*>Submit determination<\/button>/);
+    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>Submit determination<\/button>/);
     expect(markup).not.toContain("<select");
   });
 

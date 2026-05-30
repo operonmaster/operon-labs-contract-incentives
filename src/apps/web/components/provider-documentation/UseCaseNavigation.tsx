@@ -1,6 +1,12 @@
-import Link from "next/link";
+import { LabsUseCaseNav, type LabsUseCaseNavItem } from "../labs-ui";
 
 type UseCaseView = "provider" | "plan" | "policies";
+
+const items: LabsUseCaseNavItem[] = [
+  { id: "provider", label: "Provider View", href: "/provider-documentation" },
+  { id: "plan", label: "Health Plan View", href: "/provider-documentation/incentives", param: "umRequestId" },
+  { id: "policies", label: "Policies View", href: "/provider-documentation/policies", param: "umRequestId" }
+];
 
 export function UseCaseNavigation({
   activeView,
@@ -9,24 +15,12 @@ export function UseCaseNavigation({
   activeView: UseCaseView;
   umRequestId?: string | null;
 }) {
-  const planHref = umRequestId
-    ? `/provider-documentation/incentives?umRequestId=${encodeURIComponent(umRequestId)}`
-    : "/provider-documentation/incentives";
-  const policiesHref = umRequestId
-    ? `/provider-documentation/policies?umRequestId=${encodeURIComponent(umRequestId)}`
-    : "/provider-documentation/policies";
-
   return (
-    <nav className="use-case-nav" aria-label="Provider documentation use case views">
-      <Link aria-current={activeView === "provider" ? "page" : undefined} href="/provider-documentation">
-        Provider View
-      </Link>
-      <Link aria-current={activeView === "plan" ? "page" : undefined} href={planHref}>
-        Health Plan View
-      </Link>
-      <Link aria-current={activeView === "policies" ? "page" : undefined} href={policiesHref}>
-        Policies View
-      </Link>
-    </nav>
+    <LabsUseCaseNav
+      ariaLabel="Provider documentation use case views"
+      activeId={activeView}
+      contextId={umRequestId}
+      items={items}
+    />
   );
 }

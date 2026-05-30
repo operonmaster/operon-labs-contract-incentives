@@ -1,95 +1,39 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import type { UMRequest } from "@operon-labs/um-platform";
-import { LabsBadge, LabsHero, LabsPageShell } from "../labs-ui";
+import { LabsBadge, LabsButton, LabsHero, LabsPageShell } from "../labs-ui";
 import { DelegateReviewModal } from "./DelegateReviewModal";
 import { DelegateUseCaseNavigation } from "./DelegateUseCaseNavigation";
 import { formatOutcomeStatus, formatRequestType, formatUmRequestSlaStatus, formatUmState } from "./delegate-formatters";
-
-interface DelegateWorkqueueResponse {
-  rows: UMRequest[];
-}
-
-type RefreshSource = "initial" | "manual";
+import { useIntervalTick } from "../use-interval-tick";
+import { useIncentiveWorklist } from "../use-incentive-worklist";
 
 const delegateRequestApiBase = "/api/delegate-um/requests/";
 
 export function DelegateVendorConsole() {
-  const [requests, setRequests] = useState<UMRequest[]>([]);
-  const [selectedUmRequestId, setSelectedUmRequestId] = useState<string | null>(null);
   const [reviewUmRequestId, setReviewUmRequestId] = useState<string | null>(null);
-  const [initialLoading, setInitialLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const mountedRef = useRef(false);
-  const refreshSequenceRef = useRef(0);
   const lastReviewButtonRef = useRef<HTMLButtonElement | null>(null);
+  const {
+    rows: requests,
+    setRows: setRequests,
+    selectedId: selectedUmRequestId,
+    setSelectedId: setSelectedUmRequestId,
+    initialLoading,
+    refreshing,
+    error,
+    refresh: refreshWorkqueue
+  } = useIncentiveWorklist<UMRequest>({
+    endpoint: "/api/delegate-um/workqueue",
+    getRowId: (request) => request.id,
+    errorMessage: "Unable to load delegate workqueue"
+  });
+
+  // Keep the SLA countdown badges live instead of frozen at first render.
+  useIntervalTick(30000);
 
   const reviewRequest = requests.find((request) => request.id === reviewUmRequestId) ?? null;
-
-  const refreshWorkqueue = useCallback(async (source: RefreshSource = "manual") => {
-    const requestId = refreshSequenceRef.current + 1;
-    refreshSequenceRef.current = requestId;
-
-    if (source === "manual" && mountedRef.current) {
-      setRefreshing(true);
-    }
-
-    if (mountedRef.current) {
-      setError(null);
-    }
-
-    try {
-      const response = await fetch("/api/delegate-um/workqueue", {
-        cache: "no-store"
-      });
-      const payload = (await response.json()) as DelegateWorkqueueResponse | { error?: string };
-
-      if (!mountedRef.current || requestId !== refreshSequenceRef.current) {
-        return;
-      }
-
-      if (!response.ok || !("rows" in payload)) {
-        setError("error" in payload && payload.error ? payload.error : "Unable to load delegate workqueue");
-        return;
-      }
-
-      setRequests(payload.rows);
-      setSelectedUmRequestId((currentUmRequestId) => {
-        if (currentUmRequestId && payload.rows.some((request) => request.id === currentUmRequestId)) {
-          return currentUmRequestId;
-        }
-
-        return payload.rows[0]?.id ?? null;
-      });
-    } catch {
-      if (mountedRef.current && requestId === refreshSequenceRef.current) {
-        setError("Unable to load delegate workqueue");
-      }
-    } finally {
-      if (mountedRef.current && source === "initial") {
-        setInitialLoading(false);
-      }
-
-      if (mountedRef.current && source === "manual") {
-        setRefreshing(false);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    const initialRefreshId = window.setTimeout(() => {
-      void refreshWorkqueue("initial");
-    }, 0);
-
-    return () => {
-      mountedRef.current = false;
-      window.clearTimeout(initialRefreshId);
-    };
-  }, [refreshWorkqueue]);
 
   function handleCompleted(request: UMRequest) {
     setRequests((currentRequests) => currentRequests.filter((candidate) => candidate.id !== request.id));
@@ -121,14 +65,9 @@ export function DelegateVendorConsole() {
             <h2>Open delegated requests</h2>
             <p>{requests.length === 1 ? "1 pharmacy request loaded" : `${requests.length} pharmacy requests loaded`}</p>
           </div>
-          <button
-            className="primary-button secondary-button"
-            disabled={refreshing}
-            type="button"
-            onClick={() => void refreshWorkqueue("manual")}
-          >
+          <LabsButton variant="secondary" disabled={refreshing} onClick={() => void refreshWorkqueue("manual")}>
             {refreshing ? "Refreshing..." : "Refresh workqueue"}
-          </button>
+          </LabsButton>
         </div>
 
         {error ? (
@@ -184,9 +123,8 @@ export function DelegateVendorConsole() {
                   </td>
                   <td>{formatOutcomeStatus(request.outcomeStatus)}</td>
                   <td>
-                    <button
-                      className="row-action"
-                      type="button"
+                    <LabsButton
+                      variant="row"
                       onClick={(event) => {
                         setSelectedUmRequestId(request.id);
                         lastReviewButtonRef.current = event.currentTarget;
@@ -194,7 +132,7 @@ export function DelegateVendorConsole() {
                       }}
                     >
                       Review
-                    </button>
+                    </LabsButton>
                   </td>
                 </tr>
               ))}

@@ -307,6 +307,7 @@ describe("Hedera policy-bound payment executor", () => {
       }),
       markIntentFailed: vi.fn()
     };
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
     const result = await executePolicyBoundPayment(
       {
@@ -345,6 +346,11 @@ describe("Hedera policy-bound payment executor", () => {
       transactionId: "0.0.1001@1716500000.000000001"
     });
     expect(store.markIntentFailed).not.toHaveBeenCalled();
+    // The completed transfer must never be reported as failed, but the desync is
+    // retried once and then logged loudly instead of silently swallowed.
+    expect(store.markIntentSubmitted).toHaveBeenCalledTimes(2);
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("PAYMENT_INTENT_MARK_SUBMITTED_FAILED"));
+    errorSpy.mockRestore();
   });
 
   it("blocks unsupported settlement tokens, invalid amounts, and non-allowlisted wallets before runner execution", async () => {
@@ -507,6 +513,21 @@ describe("Hedera policy-bound payment executor", () => {
       }, {
         sourceAccountId: "0.0.1001",
         transactionMemo: caseId
+      })
+    ).toThrow("PAYMENT_ID_NOT_CANONICAL");
+  });
+
+  it("rejects canonical-looking UM ids containing hash-delimiter or unsafe characters", () => {
+    expect(() =>
+      buildBusinessEvaluationId({ umRequestId: "PA-260524-2102-AAAA1111|spoof", businessPolicyId: providerBusinessPolicyId })
+    ).toThrow("PAYMENT_ID_NOT_CANONICAL");
+    expect(() =>
+      buildPaymentIntentId({
+        umRequestId: "PA-260524-2102-AAAA1111|spoof",
+        caseId: "PA-260524-2102-AAAA1111|spoof",
+        incentiveEvaluationId: buildBusinessEvaluationId({ umRequestId: caseId, businessPolicyId: providerBusinessPolicyId }),
+        businessPolicyId: providerBusinessPolicyId,
+        paymentPolicyId
       })
     ).toThrow("PAYMENT_ID_NOT_CANONICAL");
   });

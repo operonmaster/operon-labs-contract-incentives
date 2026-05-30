@@ -2,99 +2,31 @@
 
 import type { IncentiveWorklistRow } from "../../lib/provider-documentation-workflow";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { LabsBadge, LabsHero, LabsPageShell } from "../labs-ui";
+import { useState } from "react";
+import { LabsBadge, LabsButton, LabsHero, LabsPageShell } from "../labs-ui";
 import { formatCurrency, formatRequestType, PlanAuditDetailsModal } from "./PlanAuditDetailsModal";
 import { UseCaseNavigation } from "./UseCaseNavigation";
-
-interface IncentiveRowsResponse {
-  rows: IncentiveWorklistRow[];
-}
-
-type RefreshSource = "initial" | "manual";
+import { useIncentiveWorklist } from "../use-incentive-worklist";
 
 export function PlanIncentivesConsole({ initialUmRequestId = null }: { initialUmRequestId?: string | null }) {
   const requestedUmRequestId = initialUmRequestId;
-  const [rows, setRows] = useState<IncentiveWorklistRow[]>([]);
-  const [selectedUmRequestId, setSelectedUmRequestId] = useState<string | null>(null);
   const [detailsUmRequestId, setDetailsUmRequestId] = useState<string | null>(null);
-  const [initialLoading, setInitialLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const mountedRef = useRef(false);
-  const refreshSequenceRef = useRef(0);
+  const {
+    rows,
+    selectedId: selectedUmRequestId,
+    setSelectedId: setSelectedUmRequestId,
+    initialLoading,
+    refreshing,
+    error,
+    refresh: refreshRows
+  } = useIncentiveWorklist<IncentiveWorklistRow>({
+    endpoint: "/api/provider-documentation/incentives",
+    getRowId: (row) => row.umRequestId,
+    errorMessage: "Unable to load incentive events",
+    requestedId: requestedUmRequestId
+  });
 
   const detailsRow = rows.find((row) => row.umRequestId === detailsUmRequestId) ?? null;
-
-  const refreshRows = useCallback(async (source: RefreshSource = "manual") => {
-    const requestId = refreshSequenceRef.current + 1;
-    refreshSequenceRef.current = requestId;
-
-    if (source === "manual" && mountedRef.current) {
-      setRefreshing(true);
-    }
-
-    if (mountedRef.current) {
-      setError(null);
-    }
-
-    try {
-      const response = await fetch("/api/provider-documentation/incentives", {
-        cache: "no-store"
-      });
-      const payload = (await response.json()) as IncentiveRowsResponse | { error?: string };
-
-      if (!mountedRef.current || requestId !== refreshSequenceRef.current) {
-        return false;
-      }
-
-      if (!response.ok || !("rows" in payload)) {
-        setError("error" in payload && payload.error ? payload.error : "Unable to load incentive events");
-        return false;
-      }
-
-      setRows(payload.rows);
-      setSelectedUmRequestId((currentUmRequestId) => {
-        if (currentUmRequestId && payload.rows.some((row) => row.umRequestId === currentUmRequestId)) {
-          return currentUmRequestId;
-        }
-
-        if (requestedUmRequestId && payload.rows.some((row) => row.umRequestId === requestedUmRequestId)) {
-          return requestedUmRequestId;
-        }
-
-        return payload.rows[0]?.umRequestId ?? null;
-      });
-      return true;
-    } catch {
-      if (!mountedRef.current || requestId !== refreshSequenceRef.current) {
-        return false;
-      }
-
-      setError("Unable to load incentive events");
-      return false;
-    } finally {
-      if (mountedRef.current && source === "initial") {
-        setInitialLoading(false);
-      }
-
-      if (mountedRef.current && source === "manual") {
-        setRefreshing(false);
-      }
-    }
-  }, [requestedUmRequestId]);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    const initialRefreshId = window.setTimeout(() => {
-      void refreshRows("initial");
-    }, 0);
-
-    return () => {
-      mountedRef.current = false;
-      window.clearTimeout(initialRefreshId);
-    };
-  }, [refreshRows]);
 
   return (
     <LabsPageShell className="workspace plan-console">
@@ -117,14 +49,9 @@ export function PlanIncentivesConsole({ initialUmRequestId = null }: { initialUm
             <h2>UM request worklist</h2>
             <p>{rows.length === 1 ? "1 event loaded" : `${rows.length} events loaded`}</p>
           </div>
-          <button
-            className="primary-button secondary-button"
-            disabled={refreshing}
-            type="button"
-            onClick={() => void refreshRows("manual")}
-          >
+          <LabsButton variant="secondary" disabled={refreshing} onClick={() => void refreshRows("manual")}>
             {refreshing ? "Refreshing..." : "Refresh events"}
-          </button>
+          </LabsButton>
         </div>
 
         {error ? (
@@ -179,16 +106,15 @@ export function PlanIncentivesConsole({ initialUmRequestId = null }: { initialUm
                     </td>
                     <td>{formatPaymentAmount(row)}</td>
                     <td>
-                      <button
-                        className="row-action"
-                        type="button"
+                      <LabsButton
+                        variant="row"
                         onClick={() => {
                           setSelectedUmRequestId(row.umRequestId);
                           setDetailsUmRequestId(row.umRequestId);
                         }}
                       >
                         View details
-                      </button>
+                      </LabsButton>
                     </td>
                   </tr>
                 );
@@ -252,15 +178,12 @@ function businessPolicyBadgeVariant(row: IncentiveWorklistRow): "success" | "war
 }
 
 function paymentPolicyBadgeVariant(row: IncentiveWorklistRow): "success" | "warning" | "neutral" {
-  const outcome = formatPaymentPolicyOutcome(row);
-
-  if (outcome === "Paid") {
-    return "success";
+  switch (row.paymentPolicyStatus) {
+    case "paid":
+      return "success";
+    case "blocked":
+      return "warning";
+    default:
+      return "neutral";
   }
-
-  if (outcome === "Blocked") {
-    return "warning";
-  }
-
-  return "neutral";
 }

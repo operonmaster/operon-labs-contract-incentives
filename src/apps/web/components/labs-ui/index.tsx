@@ -1,10 +1,75 @@
-import type { ReactNode } from "react";
+import type { ButtonHTMLAttributes, ReactNode } from "react";
+import Link from "next/link";
 
 export { LabsSelect } from "./LabsSelect";
 export type { LabsSelectOption } from "./LabsSelect";
+export { LabsModal } from "./LabsModal";
 
 function cx(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
+}
+
+type LabsButtonVariant = "primary" | "secondary" | "row";
+
+const LABS_BUTTON_VARIANT_CLASS: Record<LabsButtonVariant, string> = {
+  primary: "primary-button",
+  secondary: "primary-button secondary-button",
+  row: "row-action"
+};
+
+/**
+ * Shared button primitive over the app's button styles. `variant` selects the
+ * established class contract (primary action, secondary action, in-row action) so
+ * call sites stop hand-writing `className="primary-button"` etc. All native button
+ * props (onClick, disabled, aria-*, ...) pass through; type defaults to "button".
+ */
+export function LabsButton({
+  variant = "primary",
+  className,
+  type = "button",
+  ...props
+}: Readonly<{ variant?: LabsButtonVariant } & ButtonHTMLAttributes<HTMLButtonElement>>) {
+  return <button className={cx(LABS_BUTTON_VARIANT_CLASS[variant], className)} type={type} {...props} />;
+}
+
+export interface LabsUseCaseNavItem {
+  id: string;
+  label: string;
+  href: string;
+  /** Query-param key to carry the active `contextId` on this link (e.g. "umRequestId"). */
+  param?: string;
+}
+
+/**
+ * Shared three-up "use case" nav used by every feature area. Replaces the three
+ * near-identical *UseCaseNavigation components; each feature now supplies a config
+ * array, including which links should carry the context id (which previously
+ * diverged silently between features).
+ */
+export function LabsUseCaseNav({
+  ariaLabel,
+  activeId,
+  contextId,
+  items
+}: Readonly<{
+  ariaLabel: string;
+  activeId: string;
+  contextId?: string | null;
+  items: ReadonlyArray<LabsUseCaseNavItem>;
+}>) {
+  return (
+    <nav className="use-case-nav" aria-label={ariaLabel}>
+      {items.map((item) => {
+        const href =
+          item.param && contextId ? `${item.href}?${item.param}=${encodeURIComponent(contextId)}` : item.href;
+        return (
+          <Link key={item.id} aria-current={item.id === activeId ? "page" : undefined} href={href}>
+            {item.label}
+          </Link>
+        );
+      })}
+    </nav>
+  );
 }
 
 export function LabsPageShell({
@@ -82,10 +147,10 @@ export function LabsProductFrame({
 }>) {
   return (
     <section className={cx("op-product-frame", className)}>
-      <div className="op-product-toolbar" aria-hidden="true">
-        <span></span>
-        <span></span>
-        <span></span>
+      <div className="op-product-toolbar">
+        <span aria-hidden="true"></span>
+        <span aria-hidden="true"></span>
+        <span aria-hidden="true"></span>
         <strong>{title}</strong>
         {meta ? <em>{meta}</em> : null}
       </div>

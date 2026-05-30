@@ -1,7 +1,8 @@
 "use client";
 
 import type { DelegatePlanAuditRow } from "../../lib/delegate-um-workflow";
-import { LabsBadge } from "../labs-ui";
+import { LabsBadge, LabsButton, LabsModal } from "../labs-ui";
+import { EvidenceRows, controlStatusBadgeVariant, formatTransaction } from "../incentive-audit-evidence";
 import {
   businessPolicyStatusBadgeVariant,
   formatCurrency,
@@ -17,15 +18,13 @@ interface DelegatePlanAuditDetailsModalProps {
 
 export function DelegatePlanAuditDetailsModal({ row, onClose }: DelegatePlanAuditDetailsModalProps) {
   return (
-    <div className="modal-backdrop audit-modal-backdrop" role="presentation" onClick={onClose}>
-      <section
-        aria-modal="true"
-        className="modal plan-audit-modal policy-details-modal delegate-policy-event-modal payment-policy-details-modal"
-        role="dialog"
-        aria-labelledby="delegate-plan-audit-title"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="modal-toolbar">
+    <LabsModal
+      onClose={onClose}
+      labelledBy="delegate-plan-audit-title"
+      className="plan-audit-modal policy-details-modal delegate-policy-event-modal payment-policy-details-modal"
+      backdropClassName="audit-modal-backdrop"
+    >
+      <div className="modal-toolbar">
           <div>
             <span className="eyebrow">Policy event</span>
             <h2 id="delegate-plan-audit-title">Policy Event Audit Details</h2>
@@ -48,9 +47,9 @@ export function DelegatePlanAuditDetailsModal({ row, onClose }: DelegatePlanAudi
               </div>
             </dl>
           </div>
-          <button className="row-action" type="button" onClick={onClose}>
+          <LabsButton variant="row" onClick={onClose}>
             Close details
-          </button>
+          </LabsButton>
         </div>
 
         <dl className="detail-grid policy-event-outcome-strip">
@@ -147,104 +146,6 @@ export function DelegatePlanAuditDetailsModal({ row, onClose }: DelegatePlanAudi
             />
           </section>
         </div>
-      </section>
-    </div>
-  );
-}
-
-interface EvidenceDisplayRow {
-  id: string;
-  label: string;
-  expected?: string;
-  actual?: string;
-  actualVariant: "success" | "warning";
-}
-
-function EvidenceRows({
-  rows,
-  emptyLabel
-}: {
-  rows: EvidenceDisplayRow[];
-  emptyLabel: string;
-}) {
-  if (rows.length === 0) {
-    return <p className="empty-state">{emptyLabel}</p>;
-  }
-
-  return (
-    <div className="policy-criteria-table-wrap">
-      <table className="policy-criteria-table policy-audit-evidence-table">
-        <colgroup>
-          <col />
-          <col className="policy-audit-evidence-actual-column" />
-        </colgroup>
-        <thead>
-          <tr>
-            <th>Criterion/Control</th>
-            <th className="badge-cell">Actual</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.id}>
-              <td>
-                <strong>{row.label}</strong>
-                {hasEvidenceValue(row.expected) ? (
-                  <span className="criterion-reason-code">Expected: {row.expected?.trim()}</span>
-                ) : null}
-              </td>
-              <td className="badge-cell">
-                <LabsBadge variant={row.actualVariant}>{formatActualValue(row)}</LabsBadge>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function hasEvidenceValue(value: string | undefined) {
-  return Boolean(value?.trim());
-}
-
-function formatActualValue(row: EvidenceDisplayRow) {
-  if (row.actual?.trim()) {
-    return row.actual;
-  }
-
-  return row.actualVariant === "success" ? "Verified" : "Not verified";
-}
-
-function controlStatusBadgeVariant(
-  status: DelegatePlanAuditRow["paymentPolicyControls"][number]["status"]
-): "success" | "warning" {
-  switch (status) {
-    case "passed":
-      return "success";
-    case "failed":
-    case "not_run":
-      return "warning";
-  }
-}
-
-export function formatTransaction(transactionId: string | null) {
-  if (!transactionId) {
-    return "Not recorded";
-  }
-
-  if (transactionId.startsWith("testnet-")) {
-    return transactionId;
-  }
-
-  return (
-    <a
-      className="transaction-link"
-      href={`https://hashscan.io/testnet/transaction/${encodeURIComponent(transactionId)}`}
-      target="_blank"
-      rel="noreferrer"
-    >
-      {transactionId}
-    </a>
+    </LabsModal>
   );
 }

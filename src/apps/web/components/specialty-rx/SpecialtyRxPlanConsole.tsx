@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import type { SpecialtyRxPlanAuditRow } from "../../lib/specialty-rx-workflow";
-import { LabsBadge, LabsHero, LabsPageShell } from "../labs-ui";
+import { LabsBadge, LabsButton, LabsHero, LabsPageShell } from "../labs-ui";
 import { SpecialtyRxUseCaseNavigation } from "./SpecialtyRxUseCaseNavigation";
 import { SpecialtyRxPlanDetailsModal } from "./SpecialtyRxPlanDetailsModal";
 import {
@@ -16,12 +16,7 @@ import {
   paymentPolicyStatusBadgeVariant,
   specialtySlaBadgeVariant
 } from "./specialty-rx-formatters";
-
-interface SpecialtyRxPlanRowsResponse {
-  rows: SpecialtyRxPlanAuditRow[];
-}
-
-type RefreshSource = "initial" | "manual";
+import { useIncentiveWorklist } from "../use-incentive-worklist";
 
 export function SpecialtyRxPlanConsole({
   initialFulfillmentCaseId = null
@@ -29,83 +24,21 @@ export function SpecialtyRxPlanConsole({
   initialFulfillmentCaseId?: string | null;
 }) {
   const requestedFulfillmentCaseId = initialFulfillmentCaseId;
-  const [rows, setRows] = useState<SpecialtyRxPlanAuditRow[]>([]);
-  const [selectedFulfillmentCaseId, setSelectedFulfillmentCaseId] = useState<string | null>(null);
   const [detailsFulfillmentCaseId, setDetailsFulfillmentCaseId] = useState<string | null>(null);
-  const [initialLoading, setInitialLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const mountedRef = useRef(false);
-  const refreshSequenceRef = useRef(0);
-
-  const refreshRows = useCallback(async (source: RefreshSource = "manual") => {
-    const requestId = refreshSequenceRef.current + 1;
-    refreshSequenceRef.current = requestId;
-
-    if (source === "manual" && mountedRef.current) {
-      setRefreshing(true);
-    }
-
-    if (mountedRef.current) {
-      setError(null);
-    }
-
-    try {
-      const response = await fetch("/api/specialty-rx/plan", {
-        cache: "no-store"
-      });
-      const payload = (await response.json()) as SpecialtyRxPlanRowsResponse | { error?: string };
-
-      if (!mountedRef.current || requestId !== refreshSequenceRef.current) {
-        return;
-      }
-
-      if (!response.ok || !("rows" in payload)) {
-        setError("error" in payload && payload.error ? payload.error : "Unable to load specialty fulfillment plan rows");
-        return;
-      }
-
-      setRows(payload.rows);
-      setSelectedFulfillmentCaseId((currentFulfillmentCaseId) => {
-        if (currentFulfillmentCaseId && payload.rows.some((row) => row.fulfillmentCaseId === currentFulfillmentCaseId)) {
-          return currentFulfillmentCaseId;
-        }
-
-        if (
-          requestedFulfillmentCaseId &&
-          payload.rows.some((row) => row.fulfillmentCaseId === requestedFulfillmentCaseId)
-        ) {
-          return requestedFulfillmentCaseId;
-        }
-
-        return payload.rows[0]?.fulfillmentCaseId ?? null;
-      });
-    } catch {
-      if (mountedRef.current && requestId === refreshSequenceRef.current) {
-        setError("Unable to load specialty fulfillment plan rows");
-      }
-    } finally {
-      if (mountedRef.current && source === "initial") {
-        setInitialLoading(false);
-      }
-
-      if (mountedRef.current && source === "manual") {
-        setRefreshing(false);
-      }
-    }
-  }, [requestedFulfillmentCaseId]);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    const initialRefreshId = window.setTimeout(() => {
-      void refreshRows("initial");
-    }, 0);
-
-    return () => {
-      mountedRef.current = false;
-      window.clearTimeout(initialRefreshId);
-    };
-  }, [refreshRows]);
+  const {
+    rows,
+    selectedId: selectedFulfillmentCaseId,
+    setSelectedId: setSelectedFulfillmentCaseId,
+    initialLoading,
+    refreshing,
+    error,
+    refresh: refreshRows
+  } = useIncentiveWorklist<SpecialtyRxPlanAuditRow>({
+    endpoint: "/api/specialty-rx/plan",
+    getRowId: (row) => row.fulfillmentCaseId,
+    errorMessage: "Unable to load specialty fulfillment plan rows",
+    requestedId: requestedFulfillmentCaseId
+  });
 
   const detailsRow = rows.find((row) => row.fulfillmentCaseId === detailsFulfillmentCaseId) ?? null;
 
@@ -131,14 +64,9 @@ export function SpecialtyRxPlanConsole({
             <h2>Specialty fulfillment policy log</h2>
             <p>{rows.length === 1 ? "1 specialty fulfillment event loaded" : `${rows.length} specialty fulfillment events loaded`}</p>
           </div>
-          <button
-            className="primary-button secondary-button"
-            disabled={refreshing}
-            type="button"
-            onClick={() => void refreshRows("manual")}
-          >
+          <LabsButton variant="secondary" disabled={refreshing} onClick={() => void refreshRows("manual")}>
             {refreshing ? "Refreshing..." : "Refresh plan view"}
-          </button>
+          </LabsButton>
         </div>
 
         {error ? (
@@ -201,16 +129,15 @@ export function SpecialtyRxPlanConsole({
                     </LabsBadge>
                   </td>
                   <td>
-                    <button
-                      className="row-action"
-                      type="button"
+                    <LabsButton
+                      variant="row"
                       onClick={() => {
                         setSelectedFulfillmentCaseId(row.fulfillmentCaseId);
                         setDetailsFulfillmentCaseId(row.fulfillmentCaseId);
                       }}
                     >
                       View details
-                    </button>
+                    </LabsButton>
                   </td>
                 </tr>
               ))}

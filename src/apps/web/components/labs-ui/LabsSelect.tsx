@@ -14,6 +14,8 @@ export interface LabsSelectOption {
 }
 
 export function LabsSelect({
+  ariaLabel,
+  ariaLabelledby,
   disabled = false,
   id,
   onChange,
@@ -21,6 +23,8 @@ export function LabsSelect({
   placeholder,
   value
 }: Readonly<{
+  ariaLabel?: string;
+  ariaLabelledby?: string;
   disabled?: boolean;
   id?: string;
   onChange: (value: string) => void;
@@ -95,6 +99,8 @@ export function LabsSelect({
         aria-disabled={disabled}
         aria-expanded={isOpen}
         aria-haspopup="listbox"
+        aria-label={ariaLabel}
+        aria-labelledby={ariaLabelledby}
         className="labs-select-trigger"
         disabled={disabled}
         id={triggerId}

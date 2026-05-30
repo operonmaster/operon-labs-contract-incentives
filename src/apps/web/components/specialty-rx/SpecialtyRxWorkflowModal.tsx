@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { LabsBadge } from "../labs-ui";
+import { useState } from "react";
+import { LabsBadge, LabsButton, LabsModal } from "../labs-ui";
 import type { SpecialtyFulfillmentCase } from "../../lib/specialty-rx-store";
 import {
   formatFulfillmentCaseState,
@@ -28,27 +28,11 @@ const workflowSteps: Array<{ id: WorkflowStepId; label: string }> = [
 ];
 
 export function SpecialtyRxWorkflowModal({ caseRecord, onClose, onUpdated }: SpecialtyRxWorkflowModalProps) {
-  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const activeStepId = getActiveStepId(caseRecord);
   const activeStepIndex = workflowSteps.findIndex((step) => step.id === activeStepId);
   const terminal = caseRecord.state === "fulfilled" || caseRecord.state === "exception";
-
-  useEffect(() => {
-    closeButtonRef.current?.focus();
-  }, []);
-
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    }
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
 
   async function submitActiveStep() {
     if (terminal) {
@@ -80,15 +64,13 @@ export function SpecialtyRxWorkflowModal({ caseRecord, onClose, onUpdated }: Spe
   }
 
   return (
-    <div className="modal-backdrop audit-modal-backdrop" role="presentation" onClick={onClose}>
-      <section
-        aria-modal="true"
-        aria-labelledby="specialty-rx-workflow-title"
-        className="modal plan-audit-modal specialty-rx-modal"
-        role="dialog"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="modal-toolbar">
+    <LabsModal
+      onClose={onClose}
+      labelledBy="specialty-rx-workflow-title"
+      className="plan-audit-modal specialty-rx-modal"
+      backdropClassName="audit-modal-backdrop"
+    >
+      <div className="modal-toolbar">
           <div>
             <span className="eyebrow">Specialty fulfillment</span>
             <h2 id="specialty-rx-workflow-title">{caseRecord.serviceLabel}</h2>
@@ -99,9 +81,9 @@ export function SpecialtyRxWorkflowModal({ caseRecord, onClose, onUpdated }: Spe
               </LabsBadge>
             </p>
           </div>
-          <button ref={closeButtonRef} className="row-action" type="button" onClick={onClose}>
+          <LabsButton variant="row" onClick={onClose}>
             Close
-          </button>
+          </LabsButton>
         </div>
 
         <ol className="stepper compact-stepper specialty-rx-stepper" aria-label="Specialty fulfillment workflow steps">
@@ -147,8 +129,7 @@ export function SpecialtyRxWorkflowModal({ caseRecord, onClose, onUpdated }: Spe
         ) : null}
 
         {renderActiveSection(caseRecord, submitting, submitActiveStep)}
-      </section>
-    </div>
+    </LabsModal>
   );
 }
 
@@ -184,9 +165,9 @@ function renderActiveSection(
       <section className="delegate-review-section">
         <h3>Intake & Triage</h3>
         <p>Approved PA, prescription, assigned pharmacy, therapy metadata, and handoff packet are ready for fulfillment.</p>
-        <button className="primary-button" disabled={submitting} type="button" onClick={() => void submitActiveStep()}>
+        <LabsButton disabled={submitting} onClick={() => void submitActiveStep()}>
           {submitting ? "Completing..." : "Complete intake"}
-        </button>
+        </LabsButton>
       </section>
     );
   }
@@ -196,9 +177,9 @@ function renderActiveSection(
       <section className="delegate-review-section">
         <h3>Clear To Fill</h3>
         <p>Benefits check, valid prescription, REMS disposition, inventory, and copay readiness are confirmed.</p>
-        <button className="primary-button" disabled={submitting} type="button" onClick={() => void submitActiveStep()}>
+        <LabsButton disabled={submitting} onClick={() => void submitActiveStep()}>
           {submitting ? "Clearing..." : "Mark clear to fill"}
-        </button>
+        </LabsButton>
       </section>
     );
   }
@@ -208,9 +189,9 @@ function renderActiveSection(
       <section className="delegate-review-section">
         <h3>Schedule Shipment</h3>
         <p>Patient contact, delivery address, delivery window, cold-chain packout, and courier scheduling are documented.</p>
-        <button className="primary-button" disabled={submitting} type="button" onClick={() => void submitActiveStep()}>
+        <LabsButton disabled={submitting} onClick={() => void submitActiveStep()}>
           {submitting ? "Scheduling..." : "Schedule shipment"}
-        </button>
+        </LabsButton>
       </section>
     );
   }
@@ -219,9 +200,9 @@ function renderActiveSection(
     <section className="delegate-review-section">
       <h3>Confirm Fulfillment</h3>
       <p>Shipment, delivery confirmation, delivery attempt record, and temperature log are complete without avoidable exception.</p>
-      <button className="primary-button" disabled={submitting} type="button" onClick={() => void submitActiveStep()}>
+      <LabsButton disabled={submitting} onClick={() => void submitActiveStep()}>
         {submitting ? "Confirming..." : "Confirm fulfillment"}
-      </button>
+      </LabsButton>
     </section>
   );
 }

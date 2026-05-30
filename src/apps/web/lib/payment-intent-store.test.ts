@@ -95,6 +95,106 @@ describe("payment intent store", () => {
       })
     ).rejects.toThrow("PAYMENT_INTENT_ID_MISMATCH:incentiveEvaluationId");
   });
+
+  it("requires atomic create support so reservations cannot race", async () => {
+    // A backend whose document refs lack atomic create() must be rejected rather
+    // than falling back to a racy check-then-set.
+    const noCreateFirestore: FirestoreDatabase = {
+      collection() {
+        return {
+          doc() {
+            return {
+              async set() {},
+              async get() {
+                return { exists: false, data: () => undefined };
+              }
+            };
+          },
+          async get() {
+            return { docs: [] };
+          },
+          orderBy() {
+            return {
+              async get() {
+                return { docs: [] };
+              }
+            };
+          }
+        };
+      }
+    };
+    const store = createFirestorePaymentIntentStore(
+      {
+        projectId: "operon-labs-nonprod",
+        databaseId: "(default)"
+      },
+      noCreateFirestore
+    );
+
+    await expect(store.reserveIntent(buildTestPaymentIntent())).rejects.toThrow(
+      "PAYMENT_INTENT_RESERVE_REQUIRES_ATOMIC_CREATE"
+    );
+  });
+
+  it("does not classify transient Firestore create failures as duplicate reservations", async () => {
+    const unavailableFirestore: FirestoreDatabase = {
+      collection() {
+        return {
+          doc() {
+            return {
+              async create() {
+                throw new Error("UNAVAILABLE");
+              },
+              async set() {},
+              async get() {
+                return { exists: false, data: () => undefined };
+              }
+            };
+          },
+          async get() {
+            return { docs: [] };
+          },
+          orderBy() {
+            return {
+              async get() {
+                return { docs: [] };
+              }
+            };
+          }
+        };
+      }
+    };
+    const store = createFirestorePaymentIntentStore(
+      {
+        projectId: "operon-labs-nonprod",
+        databaseId: "(default)"
+      },
+      unavailableFirestore
+    );
+
+    await expect(store.reserveIntent(buildTestPaymentIntent())).rejects.toThrow("UNAVAILABLE");
+  });
+
+  it("persists the failure reason code when a reserved intent fails settlement", async () => {
+    const store = createFirestorePaymentIntentStore(
+      {
+        projectId: "operon-labs-nonprod",
+        databaseId: "(default)"
+      },
+      createFakeFirestore()
+    );
+    const intent = buildTestPaymentIntent();
+
+    await store.reserveIntent(intent);
+    await store.markIntentFailed(intent.id, "HEDERA_PAYMENT_AMOUNT_EXCEEDS_PLAN_MAX");
+
+    await expect(store.getIntent(intent.id)).resolves.toMatchObject({
+      id: intent.id,
+      status: "failed",
+      transactionId: null,
+      failureReasonCode: "HEDERA_PAYMENT_AMOUNT_EXCEEDS_PLAN_MAX"
+    });
+  });
 });
 
 function buildTestPaymentIntent() {

@@ -110,11 +110,10 @@ describe("provider documentation workflow", () => {
     expect(rows[0]).not.toHaveProperty("paResult");
     expect(rows[0]).not.toHaveProperty("denialReason");
     expect(rows[0]!.transactionId).toContain("testnet-");
-    expect(executePolicyBoundPaymentMock.mock.calls[0]?.[1]).toMatchObject({
-      paymentIntentStore: expect.objectContaining({
-        backend: "firestore"
-      })
-    });
+    // In memory mode (tests) the lib has no durable intent store, so the workflow
+    // forwards `undefined` and the executor uses its own in-process fallback. The
+    // production firestore default is covered by payment-intent-store.test.ts.
+    expect(executePolicyBoundPaymentMock.mock.calls[0]?.[1]?.paymentIntentStore).toBeUndefined();
     expect(rows[0]!.policyControls).toEqual(
       expect.arrayContaining([
         "Allowed submitter and recipient wallet",
@@ -1687,6 +1686,43 @@ describe("provider documentation workflow", () => {
 
     expect(submitted.caseId).toMatch(PA_CASE_ID_PATTERN);
     await expect(workflow.listPriorAuths()).resolves.toHaveLength(1);
+  });
+
+  it("logs but does not surface async incentive processing failures during submission", async () => {
+    const platform = createInMemoryUmPlatform();
+    const throwingPolicyStore = {
+      backend: "memory" as const,
+      async findPolicies() {
+        throw new Error("POLICY_STORE_UNAVAILABLE");
+      },
+      async getPolicy() {
+        return null;
+      },
+      async listPolicies() {
+        return [];
+      },
+      async savePolicy() {}
+    } as unknown as Parameters<typeof createProviderDocumentationWorkflow>[2];
+    const workflow = createProviderDocumentationWorkflow(platform, undefined, throwingPolicyStore);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const submitted = await workflow.submitPriorAuth({
+      requestType: "outpatient_service",
+      serviceCode: "knee_mri",
+      dtr: {
+        symptomDurationConfirmed: true,
+        conservativeTherapyConfirmed: true,
+        examFindingsConfirmed: true,
+        clinicalNoteAttached: true
+      }
+    });
+
+    expect(submitted.caseId).toMatch(PA_CASE_ID_PATTERN);
+    await expect(workflow.listPriorAuths()).resolves.toHaveLength(1);
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("PROVIDER_DOCUMENTATION_INCENTIVE_PROCESSING_FAILED")
+    );
+    errorSpy.mockRestore();
   });
 
   it("submits full-body wellness MRI and creates a zero-value blocked policy row", async () => {

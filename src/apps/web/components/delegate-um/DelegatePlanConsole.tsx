@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import type { DelegatePlanAuditRow } from "../../lib/delegate-um-workflow";
-import { LabsBadge, LabsHero, LabsPageShell } from "../labs-ui";
+import { LabsBadge, LabsButton, LabsHero, LabsPageShell } from "../labs-ui";
 import { DelegatePlanAuditDetailsModal } from "./DelegatePlanAuditDetailsModal";
 import { DelegateUseCaseNavigation } from "./DelegateUseCaseNavigation";
 import {
@@ -15,89 +15,25 @@ import {
   formatSlaStatus,
   paymentStatusBadgeVariant
 } from "./delegate-formatters";
-
-interface DelegateRowsResponse {
-  rows: DelegatePlanAuditRow[];
-}
-
-type RefreshSource = "initial" | "manual";
+import { useIncentiveWorklist } from "../use-incentive-worklist";
 
 export function DelegatePlanConsole({ initialUmRequestId = null }: { initialUmRequestId?: string | null }) {
   const requestedUmRequestId = initialUmRequestId;
-  const [rows, setRows] = useState<DelegatePlanAuditRow[]>([]);
-  const [selectedUmRequestId, setSelectedUmRequestId] = useState<string | null>(null);
   const [detailsUmRequestId, setDetailsUmRequestId] = useState<string | null>(null);
-  const [initialLoading, setInitialLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const mountedRef = useRef(false);
-  const refreshSequenceRef = useRef(0);
-
-  const refreshRows = useCallback(async (source: RefreshSource = "manual") => {
-    const requestId = refreshSequenceRef.current + 1;
-    refreshSequenceRef.current = requestId;
-
-    if (source === "manual" && mountedRef.current) {
-      setRefreshing(true);
-    }
-
-    if (mountedRef.current) {
-      setError(null);
-    }
-
-    try {
-      const response = await fetch("/api/delegate-um/plan", {
-        cache: "no-store"
-      });
-      const payload = (await response.json()) as DelegateRowsResponse | { error?: string };
-
-      if (!mountedRef.current || requestId !== refreshSequenceRef.current) {
-        return;
-      }
-
-      if (!response.ok || !("rows" in payload)) {
-        setError("error" in payload && payload.error ? payload.error : "Unable to load delegate plan rows");
-        return;
-      }
-
-      setRows(payload.rows);
-      setSelectedUmRequestId((currentUmRequestId) => {
-        if (currentUmRequestId && payload.rows.some((row) => row.umRequestId === currentUmRequestId)) {
-          return currentUmRequestId;
-        }
-
-        if (requestedUmRequestId && payload.rows.some((row) => row.umRequestId === requestedUmRequestId)) {
-          return requestedUmRequestId;
-        }
-
-        return payload.rows[0]?.umRequestId ?? null;
-      });
-    } catch {
-      if (mountedRef.current && requestId === refreshSequenceRef.current) {
-        setError("Unable to load delegate plan rows");
-      }
-    } finally {
-      if (mountedRef.current && source === "initial") {
-        setInitialLoading(false);
-      }
-
-      if (mountedRef.current && source === "manual") {
-        setRefreshing(false);
-      }
-    }
-  }, [requestedUmRequestId]);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    const initialRefreshId = window.setTimeout(() => {
-      void refreshRows("initial");
-    }, 0);
-
-    return () => {
-      mountedRef.current = false;
-      window.clearTimeout(initialRefreshId);
-    };
-  }, [refreshRows]);
+  const {
+    rows,
+    selectedId: selectedUmRequestId,
+    setSelectedId: setSelectedUmRequestId,
+    initialLoading,
+    refreshing,
+    error,
+    refresh: refreshRows
+  } = useIncentiveWorklist<DelegatePlanAuditRow>({
+    endpoint: "/api/delegate-um/plan",
+    getRowId: (row) => row.umRequestId,
+    errorMessage: "Unable to load delegate plan rows",
+    requestedId: requestedUmRequestId
+  });
 
   const detailsRow = rows.find((row) => row.umRequestId === detailsUmRequestId) ?? null;
 
@@ -120,14 +56,9 @@ export function DelegatePlanConsole({ initialUmRequestId = null }: { initialUmRe
             <h2>Delegate determination log</h2>
             <p>{rows.length === 1 ? "1 delegated request loaded" : `${rows.length} delegated requests loaded`}</p>
           </div>
-          <button
-            className="primary-button secondary-button"
-            disabled={refreshing}
-            type="button"
-            onClick={() => void refreshRows("manual")}
-          >
+          <LabsButton variant="secondary" disabled={refreshing} onClick={() => void refreshRows("manual")}>
             {refreshing ? "Refreshing..." : "Refresh plan view"}
-          </button>
+          </LabsButton>
         </div>
 
         {error ? (
@@ -181,16 +112,15 @@ export function DelegatePlanConsole({ initialUmRequestId = null }: { initialUmRe
                     </LabsBadge>
                   </td>
                   <td>
-                    <button
-                      className="row-action"
-                      type="button"
+                    <LabsButton
+                      variant="row"
                       onClick={() => {
                         setSelectedUmRequestId(row.umRequestId);
                         setDetailsUmRequestId(row.umRequestId);
                       }}
                     >
                       View details
-                    </button>
+                    </LabsButton>
                   </td>
                 </tr>
               ))}

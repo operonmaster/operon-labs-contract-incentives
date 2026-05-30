@@ -155,7 +155,7 @@ export const SCHEDULE_SLA_HOURS = 24 as const;
 
 const SPECIALTY_POLICY_CONTROLS = [
   "Approved pharmacy benefit PA linked",
-  "Intake completion starts Fulfillment SLA",
+  "Clear-to-fill timestamp starts Fulfillment SLA",
   "Fulfillment SLA met by shipment scheduling",
   "Delivery confirmation recorded as closure evidence",
   "External blockers excluded from pharmacy reward"
@@ -221,7 +221,7 @@ export function createSpecialtyRxWorkflow(
         paymentPolicyEvidenceStore
       });
 
-      return [...rows.values()].sort((left, right) =>
+      return caseRecords.map((caseRecord) => rows.get(caseRecord.id) ?? buildBaseRow(caseRecord)).sort((left, right) =>
         (right.deliveryConfirmedAt ?? right.fulfillmentCase.updatedAt).localeCompare(
           left.deliveryConfirmedAt ?? left.fulfillmentCase.updatedAt
         )
@@ -245,7 +245,6 @@ export function createSpecialtyRxWorkflow(
       const updated = {
         ...caseRecord,
         state: "clear_to_fill" as const,
-        fulfillmentSlaStartedAt: timestamp,
         intake: {
           approvedPaLinked: true,
           prescriptionPresent: input.prescriptionPresent,
@@ -271,8 +270,9 @@ export function createSpecialtyRxWorkflow(
       const updated = {
         ...caseRecord,
         state: "shipment_scheduled" as const,
+        fulfillmentSlaStartedAt: timestamp,
         clearToFillAt: timestamp,
-        clearToFill: { ...input },
+        clearToFill: buildClearToFillState(input),
         updatedAt: timestamp
       };
       await caseStore.saveCase(updated);
@@ -288,10 +288,7 @@ export function createSpecialtyRxWorkflow(
       const updated = {
         ...caseRecord,
         shipmentScheduledAt: timestamp,
-        shipment: {
-          ...caseRecord.shipment,
-          ...input
-        },
+        shipment: buildShipmentState(caseRecord.shipment, input),
         updatedAt: timestamp
       };
       await caseStore.saveCase(updated);
@@ -341,7 +338,7 @@ export function createSpecialtyRxWorkflow(
           state: isException ? "exception" as const : "fulfilled" as const,
           deliveryConfirmedAt: input.deliveryConfirmed ? timestamp : null,
           exceptionRecordedAt: isException ? timestamp : null,
-          fulfillment: { ...input },
+          fulfillment: buildFulfillmentState(input),
           updatedAt: timestamp
         };
         const row = await settleFulfillment(updated, {
@@ -380,6 +377,48 @@ function isApprovedPharmacyUmRequest(request: UMRequest): boolean {
 
 function buildFulfillmentCaseId(umRequestId: string): string {
   return umRequestId.replace(/^PA-/, "RXF-");
+}
+
+// Persisted state objects are built field-by-field from the typed input so that a
+// request body cannot inject unknown keys or override server-owned eligibility
+// fields (e.g. shipment.coldChainRequired, which is not part of ScheduleShipmentInput).
+function buildClearToFillState(input: ClearToFillInput): SpecialtyFulfillmentCase["clearToFill"] {
+  return {
+    benefitsOrClaimCheckCompleted: input.benefitsOrClaimCheckCompleted,
+    prescriptionValid: input.prescriptionValid,
+    prescriberClarificationRequired: input.prescriberClarificationRequired,
+    prescriberClarificationResolved: input.prescriberClarificationResolved,
+    remsRequired: input.remsRequired,
+    remsAuthorizationConfirmed: input.remsAuthorizationConfirmed,
+    inventoryAvailable: input.inventoryAvailable,
+    copayOrPaymentReady: input.copayOrPaymentReady
+  };
+}
+
+function buildShipmentState(
+  current: SpecialtyFulfillmentCase["shipment"],
+  input: ScheduleShipmentInput
+): SpecialtyFulfillmentCase["shipment"] {
+  return {
+    patientContactAttemptDocumented: input.patientContactAttemptDocumented,
+    addressConfirmed: input.addressConfirmed,
+    deliveryWindowConfirmed: input.deliveryWindowConfirmed,
+    coldChainRequired: current.coldChainRequired,
+    coldChainPackoutValidated: input.coldChainPackoutValidated,
+    courierScheduled: input.courierScheduled
+  };
+}
+
+function buildFulfillmentState(input: ConfirmFulfillmentInput): SpecialtyFulfillmentCase["fulfillment"] {
+  return {
+    shipped: input.shipped,
+    deliveryConfirmed: input.deliveryConfirmed,
+    deliveryAttemptDocumented: input.deliveryAttemptDocumented,
+    temperatureLogValid: input.temperatureLogValid,
+    avoidableFulfillmentException: input.avoidableFulfillmentException,
+    externalBlockerDocumented: input.externalBlockerDocumented,
+    exceptionReasonCode: input.exceptionReasonCode
+  };
 }
 
 function buildCaseFromApprovedRequest(request: UMRequest): SpecialtyFulfillmentCase {
@@ -888,7 +927,7 @@ function buildSpecialtyRxEvidence(caseRecord: SpecialtyFulfillmentCase): Special
     intakeComplete: Object.values(caseRecord.intake).every(Boolean),
     clearToFillComplete: isClearToFillEvidenceComplete(caseRecord),
     shipmentScheduledWithinSla: isWithinSla(
-      caseRecord.fulfillmentSlaStartedAt,
+      caseRecord.clearToFillAt,
       caseRecord.shipmentScheduledAt,
       caseRecord.scheduleSlaHours
     ),

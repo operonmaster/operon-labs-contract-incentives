@@ -91,19 +91,29 @@ class FirestorePaymentIntentStore implements PaymentIntentPersistenceStore {
       updatedAt: new Date().toISOString()
     };
 
-    if (ref.create) {
-      try {
-        await ref.create(reserved);
-      } catch {
-        const duplicate = await ref.get();
-        return {
-          allowed: false,
-          reasonCode: "DUPLICATE_PAYMENT_BLOCKED",
-          intent: duplicate.data() as PaymentIntent
-        };
+    // Duplicate prevention relies on an atomic create: a check-then-set fallback
+    // would allow two concurrent requests to both reserve the same settlement tuple.
+    if (!ref.create) {
+      throw new Error("PAYMENT_INTENT_RESERVE_REQUIRES_ATOMIC_CREATE");
+    }
+
+    try {
+      await ref.create(reserved);
+    } catch (error) {
+      if (!isAlreadyExistsError(error)) {
+        throw error;
       }
-    } else {
-      await ref.set(reserved);
+
+      const duplicate = await ref.get();
+      if (!duplicate.exists) {
+        throw error;
+      }
+
+      return {
+        allowed: false,
+        reasonCode: "DUPLICATE_PAYMENT_BLOCKED",
+        intent: duplicate.data() as PaymentIntent
+      };
     }
 
     return {
@@ -129,7 +139,7 @@ class FirestorePaymentIntentStore implements PaymentIntentPersistenceStore {
       } satisfies PaymentIntent);
   }
 
-  async markIntentFailed(intentId: string): Promise<void> {
+  async markIntentFailed(intentId: string, reasonCode: string): Promise<void> {
     const existing = await this.getIntent(intentId);
     if (!existing || existing.status === "submitted") {
       return;
@@ -142,6 +152,7 @@ class FirestorePaymentIntentStore implements PaymentIntentPersistenceStore {
         ...existing,
         status: "failed",
         transactionId: null,
+        failureReasonCode: reasonCode,
         updatedAt: new Date().toISOString()
       } satisfies PaymentIntent);
   }
@@ -191,6 +202,20 @@ function validatePaymentIntentIds(intent: PaymentIntent): void {
   if (intent.id !== expectedIntentId) {
     throw new Error("PAYMENT_INTENT_ID_MISMATCH:id");
   }
+}
+
+function isAlreadyExistsError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const errorWithCode = error as Error & { code?: unknown };
+  return (
+    errorWithCode.code === 6 ||
+    errorWithCode.code === "already-exists" ||
+    errorWithCode.code === "ALREADY_EXISTS" ||
+    error.message.includes("ALREADY_EXISTS")
+  );
 }
 
 function assertCanonicalPaId(value: string, fieldName: string): void {

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Children, useState, type ReactNode } from "react";
 import type { PolicySummary } from "../../lib/policy-view-model";
 import { policyBoundaryStatement } from "../../lib/policy-view-model";
-import { LabsBadge, LabsHero, LabsPageShell } from "../labs-ui";
+import { LabsBadge, LabsButton, LabsHero, LabsModal, LabsPageShell } from "../labs-ui";
 import { UseCaseNavigation } from "./UseCaseNavigation";
 
 interface PolicyConsoleProps {
@@ -185,7 +185,7 @@ function policyStatusBadgeVariant(status: string): "success" | "warning" | "neut
 
 function PolicyDetailsModal({ onClose, policy }: { onClose: () => void; policy: PolicySummary }) {
   const isBusinessPolicy = policy.category === "business";
-  const modalClassName = `modal plan-audit-modal policy-details-modal ${
+  const modalClassName = `plan-audit-modal policy-details-modal ${
     isBusinessPolicy ? "business-policy-details-modal" : "payment-policy-details-modal"
   }`;
   const sectionsClassName = `policy-modal-sections ${
@@ -193,23 +193,21 @@ function PolicyDetailsModal({ onClose, policy }: { onClose: () => void; policy: 
   }`;
 
   return (
-    <div className="modal-backdrop audit-modal-backdrop" role="presentation" onClick={onClose}>
-      <section
-        aria-modal="true"
-        aria-labelledby="policy-details-title"
-        className={modalClassName}
-        role="dialog"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="modal-toolbar">
+    <LabsModal
+      onClose={onClose}
+      labelledBy="policy-details-title"
+      className={modalClassName}
+      backdropClassName="audit-modal-backdrop"
+    >
+      <div className="modal-toolbar">
           <div>
             <span className="eyebrow">{policy.category === "business" ? "Business policy" : "Payment policy"}</span>
             <h2 id="policy-details-title">{policy.title}</h2>
             <p>{policy.summary}</p>
           </div>
-          <button className="row-action" type="button" onClick={onClose}>
+          <LabsButton variant="row" onClick={onClose}>
             Close details
-          </button>
+          </LabsButton>
         </div>
 
         <dl className="detail-grid policy-detail-grid">
@@ -249,8 +247,7 @@ function PolicyDetailsModal({ onClose, policy }: { onClose: () => void; policy: 
             </section>
           ))}
         </div>
-      </section>
-    </div>
+    </LabsModal>
   );
 }
 

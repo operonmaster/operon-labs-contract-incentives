@@ -1,6 +1,12 @@
-import Link from "next/link";
+import { LabsUseCaseNav, type LabsUseCaseNavItem } from "../labs-ui";
 
 type SpecialtyRxUseCaseView = "pharmacy" | "plan" | "policies";
+
+const items: LabsUseCaseNavItem[] = [
+  { id: "pharmacy", label: "Specialty Pharmacy View", href: "/specialty-rx" },
+  { id: "plan", label: "Health Plan View", href: "/specialty-rx/plan", param: "fulfillmentCaseId" },
+  { id: "policies", label: "Policies View", href: "/specialty-rx/policies" }
+];
 
 export function SpecialtyRxUseCaseNavigation({
   activeView,
@@ -9,21 +15,12 @@ export function SpecialtyRxUseCaseNavigation({
   activeView: SpecialtyRxUseCaseView;
   fulfillmentCaseId?: string | null;
 }) {
-  const planHref = fulfillmentCaseId
-    ? `/specialty-rx/plan?fulfillmentCaseId=${encodeURIComponent(fulfillmentCaseId)}`
-    : "/specialty-rx/plan";
-
   return (
-    <nav className="use-case-nav" aria-label="Specialty Rx use case views">
-      <Link aria-current={activeView === "pharmacy" ? "page" : undefined} href="/specialty-rx">
-        Specialty Pharmacy View
-      </Link>
-      <Link aria-current={activeView === "plan" ? "page" : undefined} href={planHref}>
-        Health Plan View
-      </Link>
-      <Link aria-current={activeView === "policies" ? "page" : undefined} href="/specialty-rx/policies">
-        Policies View
-      </Link>
-    </nav>
+    <LabsUseCaseNav
+      ariaLabel="Specialty Rx use case views"
+      activeId={activeView}
+      contextId={fulfillmentCaseId}
+      items={items}
+    />
   );
 }

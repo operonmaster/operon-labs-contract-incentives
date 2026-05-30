@@ -30,18 +30,13 @@ describe("DelegatePlanConsole source", () => {
     expect(source).not.toContain("Selected request");
   });
 
-  it("keeps an existing selected UM request ahead of the initial delegate deep link on refresh", () => {
+  it("loads delegate plan rows through the shared incentive worklist hook", () => {
     const source = readFileSync(path.join(process.cwd(), "src/apps/web/components/delegate-um/DelegatePlanConsole.tsx"), "utf8");
-    const currentSelectionCheck = source.indexOf(
-      "currentUmRequestId && payload.rows.some((row) => row.umRequestId === currentUmRequestId)"
-    );
-    const requestedSelectionCheck = source.indexOf(
-      "requestedUmRequestId && payload.rows.some((row) => row.umRequestId === requestedUmRequestId)"
-    );
 
-    expect(currentSelectionCheck).toBeGreaterThan(-1);
-    expect(requestedSelectionCheck).toBeGreaterThan(-1);
-    expect(currentSelectionCheck).toBeLessThan(requestedSelectionCheck);
+    expect(source).toContain("useIncentiveWorklist");
+    expect(source).toContain('endpoint: "/api/delegate-um/plan"');
+    expect(source).toContain("getRowId: (row) => row.umRequestId");
+    expect(source).toContain("requestedId: requestedUmRequestId");
   });
 
   it("renders delegate policy details with the shared plan audit modal treatment", () => {
@@ -50,11 +45,12 @@ describe("DelegatePlanConsole source", () => {
       "utf8"
     );
 
-    expect(source).toContain('className="modal-backdrop audit-modal-backdrop"');
+    expect(source).toContain("LabsModal");
+    expect(source).toContain('backdropClassName="audit-modal-backdrop"');
     expect(source).toContain("policy-details-modal");
     expect(source).toContain("delegate-policy-event-modal");
     expect(source).toContain('className="policy-modal-sections payment-policy-modal-sections"');
-    expect(source).toContain('role="dialog"');
+    expect(source).toContain('labelledBy="delegate-plan-audit-title"');
     expect(source).toContain("Policy Event Audit Details");
     expect(source).toContain("<dt>Delegate vendor</dt>");
     expect(source).toContain("<dt>Business policy status</dt>");
@@ -69,11 +65,9 @@ describe("DelegatePlanConsole source", () => {
     expect(source).toContain("formatTransaction(row.transactionId)");
     expect(source).toContain("row.policyCriteria.map");
     expect(source).toContain("row.paymentPolicyControls.map");
-    expect(source).toContain("Criterion/Control");
-    expect(source).toContain("Expected:");
-    expect(source).toContain("Actual");
-    expect(source).toContain("<colgroup>");
-    expect(source).toContain('className="policy-audit-evidence-actual-column"');
+    // The evidence table now comes from the shared incentive-audit module.
+    expect(source).toContain("incentive-audit-evidence");
+    expect(source).toContain("EvidenceRows");
     expect(source).not.toContain("<th>Expected</th>");
     expect(source).not.toContain('<th className="badge-cell">Result</th>');
     expect(source).not.toContain("Final outcome");
@@ -142,9 +136,9 @@ describe("DelegatePlanConsole source", () => {
     expect(anchorRowBlock).toMatch(/display:\s*(inline-flex|flex)/);
     expect(anchorTermBlock).not.toContain("text-transform: uppercase");
     expect(anchorTermBlock).not.toContain("Geist Mono");
-    expect(anchorTermBlock).toContain('font-family: "Geist", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif');
+    expect(anchorTermBlock).toContain('font-family: var(--op-font-sans), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif');
     expect(anchorTermBlock).toContain("font-size: 13px");
-    expect(anchorValueBlock).toContain('font-family: "Geist", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif');
+    expect(anchorValueBlock).toContain('font-family: var(--op-font-sans), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif');
     expect(anchorValueBlock).toContain("font-size: 13px");
     expect(anchorValueBlock).toContain("overflow-wrap: anywhere");
     expect(anchorSeparatorBlock).toContain('content: ":"');
