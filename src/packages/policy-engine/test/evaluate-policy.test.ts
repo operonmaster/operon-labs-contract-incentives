@@ -564,4 +564,108 @@ describe("evaluatePolicy", () => {
       ])
     });
   });
+
+  it("blocks appeals incentives when outcome safety flags or PHI markers are missing or non-boolean", () => {
+    const {
+      appealOutcomeUsed: _appealOutcomeUsed,
+      costSavingsMetricUsed: _costSavingsMetricUsed,
+      denialReversalMetricUsed: _denialReversalMetricUsed,
+      containsPhi: _containsPhi,
+      ...missingSafetyFlags
+    } = completeAppealRequest.requestObject;
+    const missing = evaluatePolicy({
+      policy: appealsPolicy,
+      request: {
+        ...completeAppealRequest,
+        requestObject: missingSafetyFlags
+      },
+      monthToDateAmount: 0
+    });
+    const nonBoolean = evaluatePolicy({
+      policy: appealsPolicy,
+      request: {
+        ...completeAppealRequest,
+        requestObject: {
+          ...completeAppealRequest.requestObject,
+          appealOutcomeUsed: "false",
+          costSavingsMetricUsed: "false",
+          denialReversalMetricUsed: "false",
+          containsPhi: "false"
+        }
+      },
+      monthToDateAmount: 0
+    });
+
+    for (const result of [missing, nonBoolean]) {
+      expect(result).toMatchObject({
+        decision: "blocked",
+        amount: 0,
+        walletId: null,
+        reasonCodes: expect.arrayContaining([
+          "PROHIBITED_APPEAL_OUTCOME_METRIC",
+          "PROHIBITED_COST_SAVINGS_METRIC",
+          "PROHIBITED_DENIAL_REVERSAL_METRIC",
+          "PHI_IN_PAYMENT_METADATA"
+        ])
+      });
+    }
+  });
+
+  it("enforces appeals request type eligibility and exclusions", () => {
+    const notEligible = evaluatePolicy({
+      policy: {
+        ...appealsPolicy,
+        incentiveScope: {
+          eligibleRequestTypes: ["outpatient_service"]
+        }
+      },
+      request: completeAppealRequest,
+      monthToDateAmount: 0
+    });
+    const excluded = evaluatePolicy({
+      policy: {
+        ...appealsPolicy,
+        incentiveScope: {
+          eligibleRequestTypes: ["pharmacy_benefit"],
+          excludedRequestTypes: ["pharmacy_benefit"]
+        }
+      },
+      request: completeAppealRequest,
+      monthToDateAmount: 0
+    });
+
+    expect(notEligible).toMatchObject({
+      decision: "blocked",
+      amount: 0,
+      reasonCodes: expect.arrayContaining(["REQUEST_TYPE_NOT_ELIGIBLE"])
+    });
+    expect(excluded).toMatchObject({
+      decision: "blocked",
+      amount: 0,
+      reasonCodes: expect.arrayContaining(["REQUEST_TYPE_EXCLUDED"])
+    });
+  });
+
+  it("requires timestamp evidence when appeals SLA flags are true", () => {
+    const result = evaluatePolicy({
+      policy: appealsPolicy,
+      request: {
+        ...completeAppealRequest,
+        requestObject: {
+          ...completeAppealRequest.requestObject,
+          acknowledgedAt: null,
+          packetReadyAt: null,
+          acknowledgedWithinSla: true,
+          packetReadyWithinSla: true
+        }
+      },
+      monthToDateAmount: 0
+    });
+
+    expect(result).toMatchObject({
+      decision: "blocked",
+      amount: 0,
+      reasonCodes: expect.arrayContaining(["ACKNOWLEDGEMENT_SLA_EXCEEDED", "PACKET_READINESS_SLA_EXCEEDED"])
+    });
+  });
 });

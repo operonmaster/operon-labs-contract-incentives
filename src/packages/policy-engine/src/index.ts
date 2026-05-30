@@ -297,15 +297,30 @@ function evaluateAppealsPacketQualityPolicy(input: EvaluatePolicyInput): PolicyE
     reasonCodes.push("APPEALS_SUBMITTER_NOT_IN_CONTRACT");
   }
 
+  const requestType = String(request.requestObject.requestType ?? "");
+  const excludedRequestTypes = policy.incentiveScope.excludedRequestTypes ?? [];
+  const eligibleRequestTypes = policy.incentiveScope.eligibleRequestTypes ?? [];
+  if (excludedRequestTypes.includes(requestType)) {
+    reasonCodes.push("REQUEST_TYPE_EXCLUDED");
+  } else if (eligibleRequestTypes.length > 0 && !eligibleRequestTypes.includes(requestType)) {
+    reasonCodes.push("REQUEST_TYPE_NOT_ELIGIBLE");
+  }
+
   if (request.requestObject.originalOutcomeStatus !== "denied") {
     reasonCodes.push("LINKED_PA_NOT_DENIED");
   }
 
-  if (policy.eligibilityCriteria.requiresAppealAcknowledgementWithinSla && request.requestObject.acknowledgedWithinSla !== true) {
+  if (
+    policy.eligibilityCriteria.requiresAppealAcknowledgementWithinSla &&
+    (request.requestObject.acknowledgedWithinSla !== true || typeof request.requestObject.acknowledgedAt !== "string")
+  ) {
     reasonCodes.push("ACKNOWLEDGEMENT_SLA_EXCEEDED");
   }
 
-  if (policy.eligibilityCriteria.requiresAppealPacketReadyWithinSla && request.requestObject.packetReadyWithinSla !== true) {
+  if (
+    policy.eligibilityCriteria.requiresAppealPacketReadyWithinSla &&
+    (request.requestObject.packetReadyWithinSla !== true || typeof request.requestObject.packetReadyAt !== "string")
+  ) {
     reasonCodes.push("PACKET_READINESS_SLA_EXCEEDED");
   }
 
@@ -337,19 +352,19 @@ function evaluateAppealsPacketQualityPolicy(input: EvaluatePolicyInput): PolicyE
     reasonCodes.push("REWORK_REQUIRED");
   }
 
-  if (policy.eligibilityCriteria.prohibitsAppealOutcomeIncentive && request.requestObject.appealOutcomeUsed === true) {
+  if (policy.eligibilityCriteria.prohibitsAppealOutcomeIncentive && request.requestObject.appealOutcomeUsed !== false) {
     reasonCodes.push("PROHIBITED_APPEAL_OUTCOME_METRIC");
   }
 
-  if (request.requestObject.costSavingsMetricUsed === true) {
+  if (request.requestObject.costSavingsMetricUsed !== false) {
     reasonCodes.push("PROHIBITED_COST_SAVINGS_METRIC");
   }
 
-  if (request.requestObject.denialReversalMetricUsed === true) {
+  if (request.requestObject.denialReversalMetricUsed !== false) {
     reasonCodes.push("PROHIBITED_DENIAL_REVERSAL_METRIC");
   }
 
-  if (request.requestObject.containsPhi === true) {
+  if (request.requestObject.containsPhi !== false) {
     reasonCodes.push("PHI_IN_PAYMENT_METADATA");
   }
 

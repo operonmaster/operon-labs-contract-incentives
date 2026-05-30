@@ -433,10 +433,10 @@ function assertSpecialtyRxEvidenceMatchesEvent(
 }
 
 function assertAppealsPacketEventIds(event: { appealId: string; umRequestId: string }): void {
-  if (!event.appealId.startsWith("APL-")) {
+  if (!/^APL-[A-Z0-9]+(?:-[A-Z0-9]+)*$/.test(event.appealId)) {
     throw new Error(`APPEALS_EVENT_ID_NOT_CANONICAL:${event.appealId}`);
   }
-  if (!event.umRequestId.startsWith("PA-")) {
+  if (!/^PA-[A-Z0-9]+(?:-[A-Z0-9]+)*$/.test(event.umRequestId)) {
     throw new Error(`APPEALS_UM_REQUEST_ID_NOT_CANONICAL:${event.umRequestId}`);
   }
 }
