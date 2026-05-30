@@ -352,7 +352,7 @@ function evaluateAppealsPacketQualityPolicy(input: EvaluatePolicyInput): PolicyE
     reasonCodes.push("REWORK_REQUIRED");
   }
 
-  if (policy.eligibilityCriteria.prohibitsAppealOutcomeIncentive && request.requestObject.appealOutcomeUsed !== false) {
+  if (request.requestObject.appealOutcomeUsed !== false) {
     reasonCodes.push("PROHIBITED_APPEAL_OUTCOME_METRIC");
   }
 

@@ -611,6 +611,48 @@ describe("evaluatePolicy", () => {
     }
   });
 
+  it("blocks appeals outcome metrics even when the policy omits the outcome prohibition flag", () => {
+    const { prohibitsAppealOutcomeIncentive: _prohibitsAppealOutcomeIncentive, ...criteriaWithoutOutcomeProhibition } =
+      appealsPolicy.eligibilityCriteria;
+    const policyWithoutOutcomeProhibition = {
+      ...appealsPolicy,
+      eligibilityCriteria: criteriaWithoutOutcomeProhibition
+    };
+    const {
+      appealOutcomeUsed: _appealOutcomeUsed,
+      ...requestObjectWithoutOutcomeFlag
+    } = completeAppealRequest.requestObject;
+
+    const trueOutcomeMetric = evaluatePolicy({
+      policy: policyWithoutOutcomeProhibition,
+      request: {
+        ...completeAppealRequest,
+        requestObject: {
+          ...completeAppealRequest.requestObject,
+          appealOutcomeUsed: true
+        }
+      },
+      monthToDateAmount: 0
+    });
+    const missingOutcomeMetric = evaluatePolicy({
+      policy: policyWithoutOutcomeProhibition,
+      request: {
+        ...completeAppealRequest,
+        requestObject: requestObjectWithoutOutcomeFlag
+      },
+      monthToDateAmount: 0
+    });
+
+    for (const result of [trueOutcomeMetric, missingOutcomeMetric]) {
+      expect(result).toMatchObject({
+        decision: "blocked",
+        amount: 0,
+        walletId: null,
+        reasonCodes: expect.arrayContaining(["PROHIBITED_APPEAL_OUTCOME_METRIC"])
+      });
+    }
+  });
+
   it("enforces appeals request type eligibility and exclusions", () => {
     const notEligible = evaluatePolicy({
       policy: {
