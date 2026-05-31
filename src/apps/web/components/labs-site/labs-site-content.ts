@@ -27,6 +27,8 @@ export interface AboutStep {
   body: string;
 }
 
+export type CurrentExperimentSlug = "provider-documentation" | "delegate-um" | "specialty-rx" | "appeals";
+
 export const labsNavItems: LabsNavItem[] = [
   { id: "labs", label: "Labs", href: "/labs" },
   { id: "experiments", label: "Experiments", href: "/labs/experiments" },
@@ -133,7 +135,7 @@ export const experimentMethodSteps = [
   "Controlled execution"
 ];
 
-export const experimentFramingBySlug: Record<string, string> = {
+export const experimentFramingBySlug: Record<CurrentExperimentSlug, string> = {
   "provider-documentation": "Can better upstream evidence reduce avoidable prior-auth friction?",
   "delegate-um": "Can delegated review quality be proven without relying on outcome incentives?",
   "specialty-rx": "Can post-authorization fulfillment be measured as a trust-preserving workflow?",

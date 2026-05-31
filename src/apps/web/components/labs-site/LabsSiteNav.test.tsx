@@ -16,5 +16,9 @@ describe("LabsSiteNav", () => {
     expect(markup).toContain('href="/"');
     expect(markup).toContain("Demo catalog");
     expect(markup).toContain('aria-current="page"');
+    expect(markup).toMatch(
+      /<a\b(?=[^>]*href="\/labs\/themes")(?=[^>]*aria-current="page")[^>]*>Themes<\/a>/
+    );
+    expect(markup.match(/aria-current="page"/g)).toHaveLength(1);
   });
 });

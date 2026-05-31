@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   aboutSteps,
+  type CurrentExperimentSlug,
   experimentFramingBySlug,
   experimentMethodSteps,
   fieldNotes,
@@ -53,6 +54,14 @@ describe("labs site content", () => {
   });
 
   it("frames every current experiment with a research question", () => {
+    const expectedSlugs: CurrentExperimentSlug[] = [
+      "provider-documentation",
+      "delegate-um",
+      "specialty-rx",
+      "appeals"
+    ];
+
+    expect(Object.keys(experimentFramingBySlug)).toEqual(expectedSlugs);
     expect(experimentFramingBySlug).toMatchObject({
       "provider-documentation": "Can better upstream evidence reduce avoidable prior-auth friction?",
       "delegate-um": "Can delegated review quality be proven without relying on outcome incentives?",
