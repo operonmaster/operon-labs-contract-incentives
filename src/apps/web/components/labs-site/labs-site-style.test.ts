@@ -14,8 +14,6 @@ describe("Labs magazine stylesheet", () => {
     expect(css).toContain(".labs-magazine-nav");
     expect(css).toContain(".labs-magazine-portal-grid");
     expect(css).toContain(".labs-magazine-experiment-grid");
-    expect(css).not.toContain(".labs-draft-page");
-    expect(css).not.toContain(".labs-draft-domain-grid");
-    expect(css).not.toContain(".labs-draft-pattern-list");
+    expect(css).not.toMatch(/\.labs-draft-/);
   });
 });

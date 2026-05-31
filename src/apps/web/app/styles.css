@@ -2520,7 +2520,7 @@ body {
   margin: 0;
 }
 
-.labs-magazine-feature div {
+.labs-magazine-feature > div {
   display: grid;
   gap: 10px;
 }
