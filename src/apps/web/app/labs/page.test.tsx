@@ -4,22 +4,28 @@ import { describe, expect, it } from "vitest";
 import LabsPage from "./page";
 
 describe("LabsPage", () => {
-  it("frames Operon Labs as broader than the current incentive demos", () => {
+  it("renders a sparse Magazine Lab front door", () => {
     const markup = renderToStaticMarkup(<LabsPage />);
 
-    expect(markup).toContain("Applied R&amp;D for verifiable healthcare operations");
-    expect(markup).toContain("Operon Labs turns healthcare trust infrastructure into working clinical-ops experiments.");
-    expect(markup).toContain("Trust &amp; Evidence");
-    expect(markup).toContain("Digital Identity");
-    expect(markup).toContain("Verifiable Consent");
-    expect(markup).toContain("Incentives &amp; Rewards");
-    expect(markup).toContain("Instant Payments");
-    expect(markup).toContain("Clinical Ops Agents");
-    expect(markup).toContain("Provider Documentation Completeness");
-    expect(markup).toContain("Delegate UM SLA Bonus");
-    expect(markup).toContain("Specialty Rx Fulfillment SLA");
-    expect(markup).toContain("Appeals Packet Quality");
-    expect(markup).toContain('href="/"');
-    expect(markup).toContain('href="mailto:partners@operon.cloud"');
+    expect(markup).toContain("The lab for verifiable healthcare operations.");
+    expect(markup).toContain("Operon Labs prototypes trust, consent, identity, and value-flow systems");
+    expect(markup).toContain("Policy-triggered rewards for clinical operations");
+    expect(markup).toContain("What counts as proof in a prior-auth workflow?");
+    expect(markup).toContain("Patient consent as executable infrastructure");
+    expect(markup).toContain('href="/labs/experiments"');
+    expect(markup).toContain('href="/labs/themes"');
+    expect(markup).toContain('href="/labs/notes"');
+    expect(markup).toContain('href="/labs/about"');
+  });
+
+  it("keeps heavy taxonomy off the homepage", () => {
+    const markup = renderToStaticMarkup(<LabsPage />);
+
+    expect(markup).not.toContain("Digital Identity");
+    expect(markup).not.toContain("Verifiable Consent");
+    expect(markup).not.toContain("Instant Payments");
+    expect(markup).not.toContain("Clinical Ops Agents");
+    expect(markup).not.toContain("Was the actor authorized?");
+    expect(markup).not.toContain("Each experiment needs a workflow, a trust claim, and an execution path.");
   });
 });
