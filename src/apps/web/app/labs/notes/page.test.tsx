@@ -1,19 +1,17 @@
-import { renderToStaticMarkup } from "react-dom/server";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import NotesPage from "./page";
+function readRepoFile(path: string) {
+  return readFileSync(resolve(process.cwd(), path), "utf8");
+}
 
 describe("NotesPage", () => {
-  it("renders static field-note teasers", () => {
-    const markup = renderToStaticMarkup(<NotesPage />);
+  it("redirects the retired notes route to briefs", () => {
+    const source = readRepoFile("src/apps/web/app/labs/notes/page.tsx");
 
-    expect(markup).toContain("Field notes from the trust layer.");
-    expect(markup).toContain("What counts as proof in a prior-auth workflow?");
-    expect(markup).toContain("Patient consent as executable infrastructure");
-    expect(markup).toContain("Rewards without outcome bias");
-    expect(markup).toContain("When instant payment needs a human checkpoint");
-    expect(markup).toContain(
-      "A practical pattern for combining programmable settlement with explicit approval controls."
-    );
+    expect(source).toContain('from "next/navigation"');
+    expect(source).toContain('redirect("/labs/briefs")');
+    expect(source).not.toContain("Field notes from the trust layer.");
   });
 });

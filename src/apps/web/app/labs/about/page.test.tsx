@@ -1,18 +1,17 @@
-import { renderToStaticMarkup } from "react-dom/server";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import AboutPage from "./page";
+function readRepoFile(path: string) {
+  return readFileSync(resolve(process.cwd(), path), "utf8");
+}
 
 describe("AboutPage", () => {
-  it("renders the Labs method and partner CTA", () => {
-    const markup = renderToStaticMarkup(<AboutPage />);
+  it("redirects the retired about route to method", () => {
+    const source = readRepoFile("src/apps/web/app/labs/about/page.tsx");
 
-    expect(markup).toContain("How Operon Labs works.");
-    expect(markup).toContain("Bring a workflow");
-    expect(markup).toContain("Define the trust claim");
-    expect(markup).toContain("Build the evidence path");
-    expect(markup).toContain("Make it inspectable");
-    expect(markup).toContain('href="mailto:partners@operon.cloud"');
-    expect(markup).toContain('href="/labs/experiments"');
+    expect(source).toContain('from "next/navigation"');
+    expect(source).toContain('redirect("/labs/method")');
+    expect(source).not.toContain("How Operon Labs works.");
   });
 });

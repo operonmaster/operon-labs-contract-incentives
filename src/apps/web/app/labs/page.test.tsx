@@ -4,28 +4,32 @@ import { describe, expect, it } from "vitest";
 import LabsPage from "./page";
 
 describe("LabsPage", () => {
-  it("renders a sparse Magazine Lab front door", () => {
+  it("renders the Proof Studio front door", () => {
     const markup = renderToStaticMarkup(<LabsPage />);
 
-    expect(markup).toContain("The lab for verifiable healthcare operations.");
-    expect(markup).toContain("Operon Labs prototypes trust, consent, identity, and value-flow systems");
-    expect(markup).toContain("Policy-triggered rewards for clinical operations");
-    expect(markup).toContain("What counts as proof in a prior-auth workflow?");
-    expect(markup).toContain("Patient consent as executable infrastructure");
-    expect(markup).toContain('href="/labs/experiments"');
+    expect(markup).toContain("Proof studio for healthcare operations.");
+    expect(markup).toContain("Operon Labs turns identity, consent, evidence, incentives, and instant settlement");
+    expect(markup).toContain("From pilot activity to operational proof");
+    expect(markup).toContain("Policy-bound clinical operations rewards");
+    expect(markup).toContain("ID.Operon");
+    expect(markup).toContain("Trust.Operon");
+    expect(markup).toContain("Pulse.Operon");
+    expect(markup).toContain('href="/labs/proofs"');
     expect(markup).toContain('href="/labs/themes"');
-    expect(markup).toContain('href="/labs/notes"');
-    expect(markup).toContain('href="/labs/about"');
+    expect(markup).toContain('href="/labs/briefs"');
+    expect(markup).toContain('href="/labs/method"');
   });
 
   it("keeps heavy taxonomy off the homepage", () => {
     const markup = renderToStaticMarkup(<LabsPage />);
 
-    expect(markup).not.toContain("Digital Identity");
-    expect(markup).not.toContain("Verifiable Consent");
-    expect(markup).not.toContain("Instant Payments");
-    expect(markup).not.toContain("Clinical Ops Agents");
-    expect(markup).not.toContain("Was the actor authorized?");
-    expect(markup).not.toContain("Each experiment needs a workflow, a trust claim, and an execution path.");
+    expect(markup).not.toContain("Digital Identity &amp; Authority");
+    expect(markup).not.toContain("Verifiable Consent &amp; Delegation");
+    expect(markup).not.toContain("Instant Settlement &amp; Value Flow");
+    expect(markup).not.toContain("Clinical Ops Agents &amp; AI Proof");
+    expect(markup).not.toContain("Why screenshots do not prove healthcare operations");
+    expect(markup).not.toContain("Select an executive-pressure workflow");
+    expect(markup).not.toContain("Experiments you can inspect.");
+    expect(markup).not.toContain("Field notes from the trust layer.");
   });
 });

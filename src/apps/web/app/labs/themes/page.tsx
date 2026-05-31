@@ -4,21 +4,22 @@ import { researchThemes } from "../../../components/labs-site/labs-site-content"
 
 export default function ThemesPage() {
   return (
-    <LabsPageShell className="labs-magazine-page">
+    <LabsPageShell className="labs-proof-page">
       <LabsSiteNav activeId="themes" />
 
-      <LabsHero compact eyebrow="Research themes" title="Research themes for trust-native healthcare operations.">
+      <LabsHero compact eyebrow="Themes" title="Themes for trust-native healthcare operations.">
         <p>
-          These themes hold the deeper taxonomy behind the Labs homepage: proof, identity, consent, incentives,
-          payments, and standards-aware agents.
+          The broader agenda behind the proof portfolio: evidence, authority, consent, rewards, settlement, and
+          AI-ready operations.
         </p>
       </LabsHero>
 
-      <section className="labs-magazine-theme-grid" aria-label="Operon Labs research themes">
+      <section className="labs-proof-theme-grid" aria-label="Operon Labs research themes">
         {researchThemes.map((theme) => (
-          <article className="labs-magazine-theme-card" key={theme.title}>
+          <article className="labs-proof-theme-card" key={theme.title}>
             <LabsBadge variant="info">{theme.title}</LabsBadge>
             <p>{theme.body}</p>
+            <p>{theme.executiveClaim}</p>
           </article>
         ))}
       </section>

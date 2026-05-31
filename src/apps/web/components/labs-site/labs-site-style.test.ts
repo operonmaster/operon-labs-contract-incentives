@@ -6,14 +6,15 @@ function readRepoFile(path: string) {
   return readFileSync(resolve(process.cwd(), path), "utf8");
 }
 
-describe("Labs magazine stylesheet", () => {
-  it("uses the magazine namespace and removes the overloaded draft namespace", () => {
+describe("Labs proof stylesheet", () => {
+  it("uses the proof namespace and removes retired draft namespaces", () => {
     const css = readRepoFile("src/apps/web/app/styles.css");
 
-    expect(css).toContain(".labs-magazine-page");
-    expect(css).toContain(".labs-magazine-nav");
-    expect(css).toContain(".labs-magazine-portal-grid");
-    expect(css).toContain(".labs-magazine-experiment-grid");
+    expect(css).toContain(".labs-proof-page");
+    expect(css).toContain(".labs-proof-nav");
+    expect(css).toContain(".labs-proof-portal-grid");
+    expect(css).toContain(".labs-proof-proof-grid");
+    expect(css).not.toMatch(/\.labs-magazine-/);
     expect(css).not.toMatch(/\.labs-draft-/);
   });
 });

@@ -2429,11 +2429,11 @@ body {
   overflow-wrap: anywhere;
 }
 
-.labs-magazine-page {
+.labs-proof-page {
   max-width: 1180px;
 }
 
-.labs-magazine-nav {
+.labs-proof-nav {
   align-items: center;
   border-bottom: 1px solid var(--op-line);
   display: grid;
@@ -2442,9 +2442,9 @@ body {
   padding: 6px 0 14px;
 }
 
-.labs-magazine-brand,
-.labs-magazine-demo-link,
-.labs-magazine-nav-links a {
+.labs-proof-brand,
+.labs-proof-demo-link,
+.labs-proof-nav-links a {
   font-family: var(--op-font-mono), ui-monospace, monospace;
   font-size: 12px;
   font-weight: 500;
@@ -2452,11 +2452,11 @@ body {
   text-transform: uppercase;
 }
 
-.labs-magazine-brand {
+.labs-proof-brand {
   color: var(--op-ink);
 }
 
-.labs-magazine-nav-links {
+.labs-proof-nav-links {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
@@ -2464,41 +2464,41 @@ body {
   justify-content: center;
 }
 
-.labs-magazine-nav-links a,
-.labs-magazine-demo-link {
+.labs-proof-nav-links a,
+.labs-proof-demo-link {
   border: 1px solid transparent;
   border-radius: 999px;
   color: var(--op-muted);
   padding: 7px 10px;
 }
 
-.labs-magazine-nav-links a[aria-current="page"] {
+.labs-proof-nav-links a[aria-current="page"] {
   background: rgba(59, 130, 246, 0.16);
   border-color: rgba(96, 165, 250, 0.18);
   color: var(--op-blue-2);
 }
 
-.labs-magazine-actions {
+.labs-proof-actions {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
 }
 
-.labs-magazine-feature {
+.labs-proof-feature {
   align-items: end;
   display: grid;
   gap: 18px;
   grid-template-columns: minmax(0, 1fr) auto;
 }
 
-.labs-magazine-feature h2,
-.labs-magazine-teaser h2,
-.labs-magazine-portal h2,
-.labs-magazine-experiment-card h2,
-.labs-magazine-note-card h2,
-.labs-magazine-process-step h2,
-.labs-magazine-cta h2 {
+.labs-proof-feature h2,
+.labs-proof-teaser h2,
+.labs-proof-portal h2,
+.labs-proof-proof-card h2,
+.labs-proof-brief-card h2,
+.labs-proof-process-step h2,
+.labs-proof-cta h2 {
   color: var(--op-ink);
   font-size: 24px;
   font-weight: 600;
@@ -2507,58 +2507,58 @@ body {
   margin: 0;
 }
 
-.labs-magazine-feature p,
-.labs-magazine-teaser p,
-.labs-magazine-portal p,
-.labs-magazine-experiment-card p,
-.labs-magazine-theme-card p,
-.labs-magazine-note-card p,
-.labs-magazine-process-step p,
-.labs-magazine-cta p {
+.labs-proof-feature p,
+.labs-proof-teaser p,
+.labs-proof-portal p,
+.labs-proof-proof-card p,
+.labs-proof-theme-card p,
+.labs-proof-brief-card p,
+.labs-proof-process-step p,
+.labs-proof-cta p {
   color: var(--op-muted);
   line-height: 1.55;
   margin: 0;
 }
 
-.labs-magazine-feature > div {
+.labs-proof-feature > div {
   display: grid;
   gap: 10px;
 }
 
-.labs-magazine-teaser-grid,
-.labs-magazine-portal-grid,
-.labs-magazine-experiment-grid,
-.labs-magazine-theme-grid,
-.labs-magazine-note-grid,
-.labs-magazine-process-list {
+.labs-proof-teaser-grid,
+.labs-proof-portal-grid,
+.labs-proof-proof-grid,
+.labs-proof-theme-grid,
+.labs-proof-brief-grid,
+.labs-proof-process-list {
   display: grid;
   gap: 14px;
 }
 
-.labs-magazine-teaser-grid {
+.labs-proof-teaser-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.labs-magazine-portal-grid,
-.labs-magazine-theme-grid,
-.labs-magazine-note-grid {
+.labs-proof-portal-grid,
+.labs-proof-theme-grid,
+.labs-proof-brief-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.labs-magazine-experiment-grid {
+.labs-proof-proof-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.labs-magazine-process-list {
+.labs-proof-process-list {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
-.labs-magazine-teaser,
-.labs-magazine-portal,
-.labs-magazine-experiment-card,
-.labs-magazine-theme-card,
-.labs-magazine-note-card,
-.labs-magazine-process-step {
+.labs-proof-teaser,
+.labs-proof-portal,
+.labs-proof-proof-card,
+.labs-proof-theme-card,
+.labs-proof-brief-card,
+.labs-proof-process-step {
   background: rgba(10, 15, 31, 0.72);
   border: 1px solid var(--op-line);
   border-radius: 8px;
@@ -2567,15 +2567,15 @@ body {
   padding: 18px;
 }
 
-.labs-magazine-portal span,
-.labs-magazine-process-step span,
-.labs-magazine-method-list span {
+.labs-proof-portal span,
+.labs-proof-process-step span,
+.labs-proof-method-list span {
   color: var(--op-muted-2);
   font-family: var(--op-font-mono), ui-monospace, monospace;
   font-size: 12px;
 }
 
-.labs-magazine-experiment-card em {
+.labs-proof-proof-card em {
   color: var(--op-green-2);
   font-family: var(--op-font-mono), ui-monospace, monospace;
   font-size: 11px;
@@ -2583,7 +2583,7 @@ body {
   text-transform: uppercase;
 }
 
-.labs-magazine-method-list {
+.labs-proof-method-list {
   display: grid;
   gap: 10px;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -2592,7 +2592,7 @@ body {
   padding: 0;
 }
 
-.labs-magazine-method-list li {
+.labs-proof-method-list li {
   align-items: center;
   border: 1px solid var(--op-line);
   border-radius: 8px;
@@ -2602,12 +2602,12 @@ body {
   padding: 12px;
 }
 
-.labs-magazine-method-list strong {
+.labs-proof-method-list strong {
   color: var(--op-ink-2);
   font-size: 13px;
 }
 
-.labs-magazine-cta {
+.labs-proof-cta {
   align-items: center;
   background: rgba(5, 8, 22, 0.72);
   border: 1px solid rgba(52, 211, 153, 0.2);
@@ -2653,22 +2653,22 @@ body {
     padding: 14px;
   }
 
-  .labs-magazine-nav,
-  .labs-magazine-feature,
-  .labs-magazine-cta {
+  .labs-proof-nav,
+  .labs-proof-feature,
+  .labs-proof-cta {
     align-items: start;
     grid-template-columns: 1fr;
   }
 
-  .labs-magazine-nav-links {
+  .labs-proof-nav-links {
     justify-content: start;
   }
 
-  .labs-magazine-portal-grid,
-  .labs-magazine-theme-grid,
-  .labs-magazine-note-grid,
-  .labs-magazine-process-list,
-  .labs-magazine-method-list {
+  .labs-proof-portal-grid,
+  .labs-proof-theme-grid,
+  .labs-proof-brief-grid,
+  .labs-proof-process-list,
+  .labs-proof-method-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -2685,23 +2685,23 @@ body {
     font-size: 16px;
   }
 
-  .labs-magazine-teaser-grid,
-  .labs-magazine-portal-grid,
-  .labs-magazine-experiment-grid,
-  .labs-magazine-theme-grid,
-  .labs-magazine-note-grid,
-  .labs-magazine-process-list,
-  .labs-magazine-method-list {
+  .labs-proof-teaser-grid,
+  .labs-proof-portal-grid,
+  .labs-proof-proof-grid,
+  .labs-proof-theme-grid,
+  .labs-proof-brief-grid,
+  .labs-proof-process-list,
+  .labs-proof-method-list {
     grid-template-columns: 1fr;
   }
 
-  .labs-magazine-feature h2,
-  .labs-magazine-teaser h2,
-  .labs-magazine-portal h2,
-  .labs-magazine-experiment-card h2,
-  .labs-magazine-note-card h2,
-  .labs-magazine-process-step h2,
-  .labs-magazine-cta h2 {
+  .labs-proof-feature h2,
+  .labs-proof-teaser h2,
+  .labs-proof-portal h2,
+  .labs-proof-proof-card h2,
+  .labs-proof-brief-card h2,
+  .labs-proof-process-step h2,
+  .labs-proof-cta h2 {
     font-size: 21px;
   }
 }
