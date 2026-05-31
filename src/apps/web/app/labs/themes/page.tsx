@@ -7,19 +7,19 @@ export default function ThemesPage() {
     <LabsPageShell className="labs-proof-page">
       <LabsSiteNav activeId="themes" />
 
-      <LabsHero compact eyebrow="Themes" title="Themes for trust-native healthcare operations.">
+      <LabsHero compact eyebrow="Themes" title="The claims behind trust-native healthcare operations.">
         <p>
-          The broader agenda behind the proof portfolio: evidence, authority, consent, rewards, settlement, and
-          AI-ready operations.
+          Each theme is a position, not a glossary entry. It states the operating claim Labs is building toward and the
+          reason the proof models look the way they do.
         </p>
       </LabsHero>
 
       <section className="labs-proof-theme-grid" aria-label="Operon Labs research themes">
         {researchThemes.map((theme) => (
           <article className="labs-proof-theme-card" key={theme.title}>
-            <LabsBadge variant="info">{theme.title}</LabsBadge>
+            <LabsBadge variant="neutral">{theme.title}</LabsBadge>
+            <h2>{theme.executiveClaim}</h2>
             <p>{theme.body}</p>
-            <p>{theme.executiveClaim}</p>
           </article>
         ))}
       </section>

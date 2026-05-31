@@ -1,5 +1,5 @@
 export interface LabsNavItem {
-  id: "labs" | "proofs" | "themes" | "briefs" | "method";
+  id: "overview" | "proofs" | "themes" | "signals" | "co-innovate";
   label: string;
   href: string;
 }
@@ -17,13 +17,19 @@ export interface ResearchTheme {
   executiveClaim: string;
 }
 
-export interface Brief {
-  label: "Executive brief" | "Operating pattern" | "Trust signal" | "Proof model";
+export interface Signal {
+  label: "Executive signal" | "Operating pattern" | "Proof model";
+  title: string;
+  body: string;
+  status: "Published" | "In progress";
+}
+
+export interface CoInnovateOffer {
   title: string;
   body: string;
 }
 
-export interface MethodStep {
+export interface CoInnovateStep {
   title: string;
   body: string;
 }
@@ -46,11 +52,11 @@ export interface ProofCard {
 }
 
 export const labsNavItems: LabsNavItem[] = [
-  { id: "labs", label: "Labs", href: "/labs" },
+  { id: "overview", label: "Overview", href: "/labs" },
   { id: "proofs", label: "Proofs", href: "/labs/proofs" },
   { id: "themes", label: "Themes", href: "/labs/themes" },
-  { id: "briefs", label: "Briefs", href: "/labs/briefs" },
-  { id: "method", label: "Method", href: "/labs/method" }
+  { id: "signals", label: "Signals", href: "/labs/signals" },
+  { id: "co-innovate", label: "Co-Innovate", href: "/labs/co-innovate" }
 ];
 
 export const labsPortalCards: LabsPortalCard[] = [
@@ -58,25 +64,25 @@ export const labsPortalCards: LabsPortalCard[] = [
     title: "Proofs",
     href: "/labs/proofs",
     kicker: "01",
-    body: "Working proof models you can inspect."
+    body: "Working proof models leaders can inspect."
   },
   {
     title: "Themes",
     href: "/labs/themes",
     kicker: "02",
-    body: "The trust infrastructure agenda."
+    body: "The operating claims behind the proof portfolio."
   },
   {
-    title: "Briefs",
-    href: "/labs/briefs",
+    title: "Signals",
+    href: "/labs/signals",
     kicker: "03",
-    body: "Executive signals and operating patterns."
+    body: "Forward intelligence for healthcare operations leaders."
   },
   {
-    title: "Method",
-    href: "/labs/method",
+    title: "Co-Innovate",
+    href: "/labs/co-innovate",
     kicker: "04",
-    body: "How Labs turns a workflow into proof."
+    body: "Bring a workflow. Leave with a proof."
   }
 ];
 
@@ -138,27 +144,27 @@ export const proofCards: ProofCard[] = [
 export const researchThemes: ResearchTheme[] = [
   {
     title: "Trust & Evidence",
-    body: "Signed events, proof packets, audit trails, provenance, and AI accountability.",
-    executiveClaim: "Healthcare leaders need shared evidence, not screenshots and retrospective reconciliation."
+    body: "Signed workflow events, policy-safe evidence packets, and a shared audit trail that every party can inspect.",
+    executiveClaim: "Operations leaders need shared evidence, not screenshots and month-end reconciliation."
   },
   {
     title: "Digital Identity & Authority",
     body: "Verifiable identities for patients, providers, plans, vendors, systems, and agents.",
-    executiveClaim: "Every action needs a reliable actor and authority model."
+    executiveClaim: "Every action needs a reliable answer to who acted and under what authority."
   },
   {
     title: "Verifiable Consent & Delegation",
     body: "Patient permissions, enterprise delegation, access scopes, revocation, and approval records.",
-    executiveClaim: "Consent should act like runtime infrastructure, not static paperwork."
+    executiveClaim: "Consent should behave like a runtime control, not a scanned form in a folder."
   },
   {
     title: "Incentives & Rewards",
     body: "Policy-based rewards for quality, timeliness, completeness, coordination, and evidence readiness.",
-    executiveClaim: "Value should move when contract-defined operational quality is proven."
+    executiveClaim: "Value should move when contract-defined operational quality is proven, not assumed."
   },
   {
     title: "Instant Settlement & Value Flow",
-    body: "Programmable settlement, micropayments, reward rails, usage billing, capped exposure, and payment controls.",
+    body: "Programmable settlement, reward rails, usage billing, capped exposure, and payment controls.",
     executiveClaim: "Payment can be fast only when the proof and controls are explicit."
   },
   {
@@ -168,55 +174,72 @@ export const researchThemes: ResearchTheme[] = [
   }
 ];
 
-export const briefs: Brief[] = [
+export const signals: Signal[] = [
   {
-    label: "Executive brief",
-    title: "From AI pilot to operational proof",
-    body: "Why clinical operations leaders need case-level evidence before they can scale automation."
+    label: "Executive signal",
+    title: "Why healthcare AI pilots struggle to become operational proof",
+    status: "Published",
+    body:
+      "Most AI value in healthcare operations is asserted beside the workflow, not measured inside it. Labs focuses on the missing proof layer: baselines, signed events, policy context, and case-level evidence that leaders can inspect."
   },
   {
     label: "Operating pattern",
-    title: "Consent as executable infrastructure",
-    body: "Why patient and enterprise permissions should behave like active controls, not scanned artifacts."
-  },
-  {
-    label: "Proof model",
-    title: "Rewards without outcome bias",
-    body: "How to reward operational quality without tying incentives to clinical or financial outcomes."
-  },
-  {
-    label: "Trust signal",
-    title: "Why screenshots do not prove healthcare operations",
-    body: "The case for signed workflow events, policy-safe evidence, and shared audit trails."
+    title: "How to reward quality without rewarding outcomes",
+    status: "Published",
+    body:
+      "The durable pattern separates operational quality from clinical and financial outcomes. Reward timeliness, evidence completeness, rationale quality, and coordination while policy makes prohibited outcomes explicitly out of scope."
   },
   {
     label: "Operating pattern",
     title: "When instant settlement needs a human checkpoint",
-    body: "A practical pattern for combining programmable settlement with explicit approval controls."
+    status: "Published",
+    body:
+      "Programmable payment is strongest when routine cases settle inside explicit limits and exceptions route to a named human. Labs treats the checkpoint as a control, not a delay."
+  },
+  {
+    label: "Proof model",
+    title: "Agents are about to act inside operations. Can you prove what they did?",
+    status: "In progress",
+    body:
+      "As agents enter prior authorization, pharmacy handoffs, and appeals prep, the governing question shifts from whether AI can act to whether the organization can prove what it did, under whose authority, and inside which policy."
   }
 ];
 
-export const methodSteps: MethodStep[] = [
+export const coInnovateOffer: CoInnovateOffer[] = [
   {
-    title: "Select an executive-pressure workflow",
+    title: "A working proof, not a slide deck",
     body:
-      "Start with a real operating problem: prior authorization friction, delegated vendor performance, specialty pharmacy handoffs, appeals readiness, consent enforcement, AI impact, or value-flow reconciliation."
+      "Leave with an inspectable proof model of your workflow: visible actors, evidence, policy decisions, controls, settlement path, and audit trail."
+  },
+  {
+    title: "Production-aligned primitives",
+    body:
+      "Model the workflow with Operon's identity, consent, evidence, policy, incentive, and settlement primitives so useful work has a path beyond a workshop."
+  },
+  {
+    title: "Your operating context, reusable proof",
+    body:
+      "Bring the pressure, constraints, and domain detail. Labs turns them into a reusable proof pattern your team can evaluate with stakeholders."
+  }
+];
+
+export const coInnovateSteps: CoInnovateStep[] = [
+  {
+    title: "Bring an executive-pressure workflow",
+    body:
+      "Start with a real operating problem: prior-auth friction, delegated vendor performance, specialty handoffs, appeals readiness, consent enforcement, AI impact, or value-flow reconciliation."
   },
   {
     title: "Define the proof claim",
     body: "State what must be proven, who must prove it, under what authority, and what would count as sufficient evidence."
   },
   {
-    title: "Model identity, consent, policy, and evidence",
-    body: "Connect the actor model, consent or delegation boundary, policy controls, evidence packet, and audit event sequence."
-  },
-  {
     title: "Build an inspectable proof model",
-    body: "Produce a working workflow surface with visible controls, assumptions, policy decisions, and audit trail."
+    body: "Model the actors, consent or delegation boundary, policy controls, evidence packet, value movement, and audit sequence."
   },
   {
     title: "Decide the next path",
     body:
-      "Retire the idea, turn it into a partner proof, map it into ID.Operon, Trust.Operon, or Pulse.Operon, or productize it as a future Operon capability."
+      "Retire it, keep it as an internal proof, graduate it toward an Operon.Cloud capability, or move into a partner implementation."
   }
 ];

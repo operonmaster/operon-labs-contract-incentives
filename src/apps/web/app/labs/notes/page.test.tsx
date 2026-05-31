@@ -7,11 +7,11 @@ function readRepoFile(path: string) {
 }
 
 describe("NotesPage", () => {
-  it("redirects the retired notes route to briefs", () => {
+  it("redirects the retired notes route to signals", () => {
     const source = readRepoFile("src/apps/web/app/labs/notes/page.tsx");
 
     expect(source).toContain('from "next/navigation"');
-    expect(source).toContain('redirect("/labs/briefs")');
+    expect(source).toContain('redirect("/labs/signals")');
     expect(source).not.toContain("Field notes from the trust layer.");
   });
 });

@@ -1,19 +1,17 @@
-import { renderToStaticMarkup } from "react-dom/server";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import MethodPage from "./page";
+function readRepoFile(path: string) {
+  return readFileSync(resolve(process.cwd(), path), "utf8");
+}
 
 describe("MethodPage", () => {
-  it("renders the Labs proof method and partner CTA", () => {
-    const markup = renderToStaticMarkup(<MethodPage />);
+  it("redirects the retired method route to co-innovate", () => {
+    const source = readRepoFile("src/apps/web/app/labs/method/page.tsx");
 
-    expect(markup).toContain("How Labs turns workflows into proof.");
-    expect(markup).toContain("Select an executive-pressure workflow");
-    expect(markup).toContain("Define the proof claim");
-    expect(markup).toContain("Model identity, consent, policy, and evidence");
-    expect(markup).toContain("Build an inspectable proof model");
-    expect(markup).toContain("Decide the next path");
-    expect(markup).toContain('href="mailto:partners@operon.cloud"');
-    expect(markup).toContain('href="/labs/proofs"');
+    expect(source).toContain('from "next/navigation"');
+    expect(source).toContain('redirect("/labs/co-innovate")');
+    expect(source).not.toContain("How Labs turns workflows into proof.");
   });
 });

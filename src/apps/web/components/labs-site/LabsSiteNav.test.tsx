@@ -4,19 +4,23 @@ import { describe, expect, it } from "vitest";
 import { LabsSiteNav } from "./LabsSiteNav";
 
 describe("LabsSiteNav", () => {
-  it("renders a compact Proof Studio nav with all Labs links", () => {
+  it("renders a compact executive Proof Studio nav with all Labs links", () => {
     const markup = renderToStaticMarkup(<LabsSiteNav activeId="themes" />);
 
     expect(markup).toContain("Operon Labs");
     expect(markup).toContain('href="/labs"');
     expect(markup).toContain('href="/labs/proofs"');
     expect(markup).toContain('href="/labs/themes"');
-    expect(markup).toContain('href="/labs/briefs"');
-    expect(markup).toContain('href="/labs/method"');
+    expect(markup).toContain('href="/labs/signals"');
+    expect(markup).toContain('href="/labs/co-innovate"');
     expect(markup).toContain('href="/"');
     expect(markup).toContain("Demo catalog");
+    expect(markup).toContain("Overview");
+    expect(markup).toContain("Co-Innovate");
     expect(markup).not.toContain("Experiments");
     expect(markup).not.toContain("Notes");
+    expect(markup).not.toContain("Briefs");
+    expect(markup).not.toContain("Method");
     expect(markup).toMatch(
       /<a\b(?=[^>]*href="\/labs\/themes")(?=[^>]*aria-current="page")[^>]*>Themes<\/a>/
     );

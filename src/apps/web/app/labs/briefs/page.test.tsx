@@ -1,18 +1,17 @@
-import { renderToStaticMarkup } from "react-dom/server";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import BriefsPage from "./page";
+function readRepoFile(path: string) {
+  return readFileSync(resolve(process.cwd(), path), "utf8");
+}
 
 describe("BriefsPage", () => {
-  it("renders executive brief teasers", () => {
-    const markup = renderToStaticMarkup(<BriefsPage />);
+  it("redirects the retired briefs route to signals", () => {
+    const source = readRepoFile("src/apps/web/app/labs/briefs/page.tsx");
 
-    expect(markup).toContain("Briefs from the healthcare proof layer.");
-    expect(markup).toContain("From AI pilot to operational proof");
-    expect(markup).toContain("Consent as executable infrastructure");
-    expect(markup).toContain("Rewards without outcome bias");
-    expect(markup).toContain("Why screenshots do not prove healthcare operations");
-    expect(markup).toContain("When instant settlement needs a human checkpoint");
-    expect(markup).toContain("Executive brief");
+    expect(source).toContain('from "next/navigation"');
+    expect(source).toContain('redirect("/labs/signals")');
+    expect(source).not.toContain("Briefs from the healthcare proof layer.");
   });
 });

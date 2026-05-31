@@ -7,31 +7,32 @@ import { labsPortalCards, platformSpine, proofMethodSteps } from "../../componen
 export default function LabsPage() {
   return (
     <LabsPageShell className="labs-proof-page">
-      <LabsSiteNav activeId="labs" />
+      <LabsSiteNav activeId="overview" />
 
-      <LabsHero eyebrow="Operon Labs" title="Proof studio for healthcare operations.">
+      <LabsHero eyebrow="Operon Labs · Proof Studio" title="Where healthcare operations become provable.">
         <p>
-          Operon Labs turns identity, consent, evidence, incentives, and instant settlement into working proof models
-          for clinical operations leaders.
+          Operon Labs helps healthcare leaders turn high-pressure workflows into inspectable proof models: who acted,
+          what evidence exists, what policy applied, what value moved, and what can be audited.
         </p>
         <div className="labs-proof-actions" aria-label="Labs homepage actions">
-          <Link className="primary-button" href="/labs/proofs">
-            View proof portfolio
+          <Link className="primary-button" href="/labs/co-innovate">
+            Co-innovate with Labs
           </Link>
-          <Link className="primary-button secondary-button" href="/labs/themes">
-            Explore themes
+          <Link className="primary-button secondary-button" href="/labs/proofs">
+            See the proofs
           </Link>
         </div>
       </LabsHero>
 
-      <LabsProductFrame title="From pilot activity to operational proof" meta="Proof system">
+      <LabsProductFrame title="The gap Labs closes" meta="Proof over promises">
         <section className="labs-proof-feature">
           <div>
-            <span className="label">Operating thesis</span>
-            <h2>Healthcare innovation needs proof systems, not more pilot activity.</h2>
+            <span className="label">Operating tension</span>
+            <h2>Proof beats pilot activity.</h2>
             <p>
-              Labs makes the operating claim inspectable: who acted, under what authority, what evidence exists, what
-              policy applied, what value moved, and what can be audited later.
+              Leaders are investing in AI, vendors, delegated workflows, rewards, and automation. Labs turns the hard
+              question into a proof system: what happened, who had authority, which policy applied, and why value should
+              move.
             </p>
           </div>
           <ol className="labs-proof-method-list" aria-label="Proof system sequence">
@@ -45,21 +46,40 @@ export default function LabsPage() {
         </section>
       </LabsProductFrame>
 
-      <LabsProductFrame title="Featured proof model" meta="Policy-bound rewards">
+      <LabsProductFrame title="Featured proof" meta="Delegated UM quality">
         <section className="labs-proof-feature">
           <div>
-            <span className="label">Controlled settlement</span>
-            <h2>Policy-bound clinical operations rewards</h2>
+            <span className="label">Working proof model</span>
+            <h2>Score delegated review quality without paying for outcomes.</h2>
             <p>
-              A working proof model for evidence packets, SLA policies, human approval, controlled settlement, and
-              audit-ready incentive records.
+              Timeliness, rationale completeness, and audit readiness are measured and rewarded, while approvals,
+              denials, savings, and utilization stay explicitly out of scope.
             </p>
           </div>
-          <Link className="primary-button" href="/labs/proofs">
+          <Link className="primary-button" href="/delegate-um">
             Open proof
           </Link>
         </section>
       </LabsProductFrame>
+
+      <section className="labs-proof-cta" aria-labelledby="labs-coinnovate-heading">
+        <div>
+          <span className="label">Co-innovate with Labs</span>
+          <h2 id="labs-coinnovate-heading">Bring a workflow. Leave with a proof.</h2>
+          <p>
+            Bring an operating problem under pressure. Labs will turn it into an inspectable proof model your teams can
+            evaluate, govern, and act on.
+          </p>
+        </div>
+        <div className="labs-proof-actions">
+          <Link className="primary-button" href="/labs/co-innovate">
+            See how it works
+          </Link>
+          <a className="primary-button secondary-button" href="mailto:partners@operon.cloud">
+            Bring a workflow
+          </a>
+        </div>
+      </section>
 
       <section className="labs-proof-teaser-grid" aria-label="Operon platform spine">
         {platformSpine.map((item) => (

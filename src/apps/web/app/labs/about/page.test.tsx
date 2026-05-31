@@ -7,11 +7,11 @@ function readRepoFile(path: string) {
 }
 
 describe("AboutPage", () => {
-  it("redirects the retired about route to method", () => {
+  it("redirects the retired about route to co-innovate", () => {
     const source = readRepoFile("src/apps/web/app/labs/about/page.tsx");
 
     expect(source).toContain('from "next/navigation"');
-    expect(source).toContain('redirect("/labs/method")');
+    expect(source).toContain('redirect("/labs/co-innovate")');
     expect(source).not.toContain("How Operon Labs works.");
   });
 });
