@@ -7,7 +7,8 @@ describe("LabsPage", () => {
   it("renders the executive Innovation Studio front door", () => {
     const markup = renderToStaticMarkup(<LabsPage />);
 
-    expect(markup).toContain("Innovation Studio for Healthcare Operations");
+    expect(markup).toContain("<h1>Innovation studio for healthcare operations and clinical workflows</h1>");
+    expect(markup).not.toContain("<em>Innovation Studio</em> for Healthcare Operations");
     expect(markup).toContain('<span class="eyebrow">Healthcare operations innovation studio</span>');
     expect(markup).toContain("Bring a healthcare operations workflow under pressure.");
     expect(markup).toContain("Healthcare innovation breaks when the operating model is unclear.");
@@ -23,8 +24,9 @@ describe("LabsPage", () => {
     expect(markup).toContain("No outcome bias");
     expect(markup).toContain("Quality incentive");
     expect(markup).toContain("View working demo");
-    expect(markup).toContain("Bring a workflow. Leave with a working model.");
-    expect(markup).toContain("From operating pressure to implementation path");
+    expect(markup).toContain("Bring a workflow. Leave with <em>a working model.</em>");
+    expect(markup).toContain("From operating pressure to <em>implementation path</em>");
+    expect(markup).toContain("before you <em>bet a contract on it?</em>");
     expect(markup).toContain("Book a Call");
     expect(markup).toContain('href="/labs/book-a-call"');
     expect(markup).toContain('href="/labs/initiatives"');

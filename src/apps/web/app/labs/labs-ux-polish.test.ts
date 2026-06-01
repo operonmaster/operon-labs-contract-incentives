@@ -29,6 +29,14 @@ describe("Labs UX polish", () => {
     expect(css).toMatch(/\.labs-proof-page::before\s*\{[^}]*rgba\(96, 165, 250, 0\.055\)/s);
   });
 
+  it("uses restrained headline accents instead of coloring every homepage title", () => {
+    const css = readRepoFile("src/apps/web/app/styles.css");
+
+    expect(css).toMatch(
+      /\.labs-home-section-header h2 em,\s*\.labs-home-final-cta h2 em\s*\{[^}]*color: var\(--op-blue-2\);[^}]*font-style: normal;[^}]*font-weight: 500;/s
+    );
+  });
+
   it("keeps Labs mobile navigation compact instead of wrapping into stacked rows", () => {
     const css = readRepoFile("src/apps/web/app/styles.css");
 

@@ -37,7 +37,10 @@ export default function LabsPage() {
     <LabsPageShell className="labs-proof-page labs-home-page">
       <LabsSiteNav activeId="overview" />
 
-      <LabsHero eyebrow="Healthcare operations innovation studio" title="Innovation Studio for Healthcare Operations">
+      <LabsHero
+        eyebrow="Healthcare operations innovation studio"
+        title="Innovation studio for healthcare operations and clinical workflows"
+      >
         <p>
           Bring a healthcare operations workflow under pressure. Operon Labs turns it into a working model your team can
           inspect, govern, and take toward implementation.
@@ -99,7 +102,9 @@ export default function LabsPage() {
       <section className="labs-home-coinnovate" aria-labelledby="labs-coinnovate-heading">
         <div className="labs-home-section-header">
           <span className="label">Co-innovate with Labs</span>
-          <h2 id="labs-coinnovate-heading">Bring a workflow. Leave with a working model.</h2>
+          <h2 id="labs-coinnovate-heading">
+            Bring a workflow. Leave with <em>a working model.</em>
+          </h2>
           <p>
             Labs runs as an executive innovation track. You bring the operating pressure; we build the model with you
             using Operon&apos;s identity, consent, evidence, policy, incentive, and settlement primitives.
@@ -120,7 +125,9 @@ export default function LabsPage() {
       <section className="labs-home-process-section" aria-labelledby="labs-process-heading">
         <div className="labs-home-section-header">
           <span className="label">How Labs works</span>
-          <h2 id="labs-process-heading">From operating pressure to implementation path</h2>
+          <h2 id="labs-process-heading">
+            From operating pressure to <em>implementation path</em>
+          </h2>
           <p>
             Labs is not a workshop artifact generator. We use the workflow you bring as the intake surface, then turn it
             into a model your team can validate, govern, and decide how to implement.
@@ -141,7 +148,9 @@ export default function LabsPage() {
       <section className="labs-proof-cta labs-home-final-cta" aria-labelledby="labs-final-heading">
         <div>
           <span className="label">Next step</span>
-          <h2 id="labs-final-heading">Have a workflow you need to validate before you bet a contract on it?</h2>
+          <h2 id="labs-final-heading">
+            Have a workflow you need to validate before you <em>bet a contract on it?</em>
+          </h2>
           <p>Bring it to Labs. We will turn it into a working model you can inspect, measure, govern, and share.</p>
         </div>
         <div className="labs-proof-actions">

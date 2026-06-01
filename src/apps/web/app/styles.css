@@ -2719,6 +2719,13 @@ body {
   max-width: 100%;
 }
 
+.labs-home-section-header h2 em,
+.labs-home-final-cta h2 em {
+  color: var(--op-blue-2);
+  font-style: normal;
+  font-weight: 500;
+}
+
 .labs-home-offer-card h3 {
   font-size: 19px;
   line-height: 1.16;
