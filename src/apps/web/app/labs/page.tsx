@@ -37,7 +37,7 @@ export default function LabsPage() {
     <LabsPageShell className="labs-proof-page labs-home-page">
       <LabsSiteNav activeId="overview" />
 
-      <LabsHero eyebrow="Operon Labs" title="Innovation Studio for Healthcare Operations">
+      <LabsHero eyebrow="Healthcare operations innovation studio" title="Innovation Studio for Healthcare Operations">
         <p>
           Bring a healthcare operations workflow under pressure. Operon Labs turns it into a working model your team can
           inspect, govern, and take toward implementation.

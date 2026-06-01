@@ -8,6 +8,8 @@ describe("LabsSiteNav", () => {
     const markup = renderToStaticMarkup(<LabsSiteNav activeId="themes" />);
 
     expect(markup).toContain("Operon Labs");
+    expect(markup).toContain("%2Fassets%2Fbranding%2Foperon-logo.png");
+    expect(markup).toContain('alt=""');
     expect(markup).toContain('href="/labs"');
     expect(markup).toContain('href="/labs/initiatives"');
     expect(markup).toContain('href="/labs/themes"');

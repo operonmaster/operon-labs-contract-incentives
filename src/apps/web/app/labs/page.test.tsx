@@ -8,6 +8,7 @@ describe("LabsPage", () => {
     const markup = renderToStaticMarkup(<LabsPage />);
 
     expect(markup).toContain("Innovation Studio for Healthcare Operations");
+    expect(markup).toContain('<span class="eyebrow">Healthcare operations innovation studio</span>');
     expect(markup).toContain("Bring a healthcare operations workflow under pressure.");
     expect(markup).toContain("Healthcare innovation breaks when the operating model is unclear.");
     expect(markup).toContain("what can run, who can act, what evidence proves it");
@@ -32,6 +33,7 @@ describe("LabsPage", () => {
     expect(markup).toContain('href="/delegate-um"');
     expect(markup).not.toContain('href="mailto:partners@operon.cloud"');
     expect(markup).not.toContain("Open model");
+    expect(markup).not.toContain('<span class="eyebrow">Operon Labs</span>');
     expect(markup).not.toContain("Reward review quality without paying for outcomes.");
     expect(markup).not.toContain("Example operating model");
   });

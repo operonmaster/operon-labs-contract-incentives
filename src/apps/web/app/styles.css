@@ -1770,6 +1770,12 @@ body {
   z-index: -1;
 }
 
+.labs-proof-page::before {
+  background-image:
+    linear-gradient(rgba(96, 165, 250, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(96, 165, 250, 0.055) 1px, transparent 1px);
+}
+
 .op-page-shell::after {
   background: linear-gradient(90deg, rgba(59, 130, 246, 0.8), rgba(16, 185, 129, 0.55), rgba(245, 158, 11, 0.55));
   content: "";
@@ -1828,7 +1834,7 @@ body {
 }
 
 .labs-proof-page .op-hero {
-  padding: 36px 0 34px;
+  padding: 32px 0 34px;
 }
 
 .op-hero h1,
@@ -1843,8 +1849,9 @@ body {
 }
 
 .labs-proof-page .op-hero:not(.compact) h1 {
-  font-size: 66px;
-  line-height: 1.03;
+  font-size: 62px;
+  font-weight: 400;
+  line-height: 1.02;
 }
 
 .op-hero h1 em,
@@ -2467,7 +2474,24 @@ body {
 }
 
 .labs-proof-brand {
+  align-items: center;
   color: var(--op-ink);
+  display: inline-flex;
+  gap: 10px;
+  text-transform: none;
+}
+
+.labs-proof-brand-mark {
+  flex: 0 0 auto;
+  height: 30px;
+  width: 30px;
+}
+
+.labs-proof-brand-text {
+  font-family: var(--op-font-sans), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: 0;
 }
 
 .labs-proof-nav-links {

@@ -12,12 +12,21 @@ describe("Labs UX polish", () => {
 
     expect(css).toMatch(/\.op-hero-copy\s*\{[^}]*display: grid;[^}]*gap: 24px;/s);
     expect(css).toMatch(
-      /\.labs-proof-page \.op-hero:not\(\.compact\) h1\s*\{[^}]*font-size: 66px;[^}]*line-height: 1\.03;/s
+      /\.labs-proof-page \.op-hero:not\(\.compact\) h1\s*\{[^}]*font-size: 62px;[^}]*font-weight: 400;[^}]*line-height: 1\.02;/s
     );
     expect(css).toMatch(
       /@media \(max-width: 860px\)[\s\S]*\.labs-proof-page \.op-hero:not\(\.compact\) h1\s*\{[\s\S]*font-size: 46px;[\s\S]*line-height: 1\.03;/s
     );
-    expect(css).toMatch(/\.labs-proof-page \.op-hero\s*\{[^}]*padding: 36px 0 34px;/s);
+    expect(css).toMatch(/\.labs-proof-page \.op-hero\s*\{[^}]*padding: 32px 0 34px;/s);
+  });
+
+  it("aligns the Labs brand treatment with the Operon brief system", () => {
+    const css = readRepoFile("src/apps/web/app/styles.css");
+
+    expect(css).toMatch(/\.labs-proof-brand-mark\s*\{[^}]*height: 30px;[^}]*width: 30px;/s);
+    expect(css).toMatch(/\.labs-proof-brand-text\s*\{[^}]*font-family: var\(--op-font-sans\)/s);
+    expect(css).toMatch(/\.labs-proof-brand-text\s*\{[^}]*font-size: 18px;/s);
+    expect(css).toMatch(/\.labs-proof-page::before\s*\{[^}]*rgba\(96, 165, 250, 0\.055\)/s);
   });
 
   it("keeps Labs mobile navigation compact instead of wrapping into stacked rows", () => {
