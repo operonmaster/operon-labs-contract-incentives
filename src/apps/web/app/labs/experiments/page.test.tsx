@@ -7,11 +7,11 @@ function readRepoFile(path: string) {
 }
 
 describe("ExperimentsPage", () => {
-  it("redirects the retired experiments route to proofs", () => {
+  it("redirects the retired experiments route to initiatives", () => {
     const source = readRepoFile("src/apps/web/app/labs/experiments/page.tsx");
 
     expect(source).toContain('from "next/navigation"');
-    expect(source).toContain('redirect("/labs/proofs")');
+    expect(source).toContain('redirect("/labs/initiatives")');
     expect(source).not.toContain("Experiments you can inspect.");
   });
 });

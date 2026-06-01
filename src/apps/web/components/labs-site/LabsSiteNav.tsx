@@ -15,8 +15,12 @@ export function LabsSiteNav({ activeId }: Readonly<{ activeId: LabsNavItem["id"]
           </Link>
         ))}
       </div>
-      <Link className="labs-proof-demo-link" href="/">
-        Demo catalog
+      <Link
+        aria-current={activeId === "book-a-call" ? "page" : undefined}
+        className="labs-proof-book-link"
+        href="/labs/book-a-call"
+      >
+        Book a Call
       </Link>
     </nav>
   );

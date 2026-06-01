@@ -104,6 +104,34 @@ describe("AppealsConsole", () => {
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain(startedAppeal.id);
   });
 
+  it("only exposes the Start appeal action for denied prior authorizations", async () => {
+    stubAppealsFetch([
+      buildPriorAuthRow({ appealCase: null, canStartAppeal: true }),
+      buildPriorAuthRow({
+        appealCase: null,
+        umRequestId: "PA-260526-0900-APPROVED",
+        outcomeStatus: "approved",
+        eligibilityStatus: "not_appeal_eligible"
+      }),
+      buildPriorAuthRow({
+        appealCase: null,
+        umRequestId: "PA-260526-0900-PENDING",
+        state: "pend",
+        outcomeStatus: null,
+        eligibilityStatus: "awaiting_determination"
+      })
+    ]);
+    const container = await renderAppealsConsole();
+
+    await waitForText(container, "3 prior authorizations loaded");
+
+    const startAppealButtons = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).filter(
+      (button) => button.textContent === "Start appeal"
+    );
+    expect(startAppealButtons).toHaveLength(1);
+    expect(startAppealButtons[0]?.disabled).toBe(false);
+  });
+
   it("keeps terminal packet-ready summary open with a health plan handoff link", async () => {
     const inReview = buildAppealCase({ state: "evidence_indexed" });
     const packetReady = buildAppealCase({
@@ -171,26 +199,34 @@ function buildAppealCase(overrides: Partial<AppealCase> = {}): AppealCase {
 
 function buildPriorAuthRow({
   appealCase,
-  canStartAppeal = false
+  canStartAppeal = false,
+  eligibilityStatus,
+  outcomeStatus = "denied",
+  state = "determined",
+  umRequestId = "PA-260526-0900-DENIED01"
 }: {
   appealCase: AppealCase | null;
   canStartAppeal?: boolean;
+  eligibilityStatus?: AppealsPriorAuthRow["eligibilityStatus"];
+  outcomeStatus?: AppealsPriorAuthRow["outcomeStatus"];
+  state?: AppealsPriorAuthRow["state"];
+  umRequestId?: string;
 }): AppealsPriorAuthRow {
   return {
     umRequest: {
-      id: "PA-260526-0900-DENIED01",
+      id: umRequestId,
       requestType: "pharmacy_benefit",
-      state: "determined",
-      outcomeStatus: "denied",
+      state,
+      outcomeStatus,
       submittedAt: "2026-06-18T15:00:00.000Z"
     } as AppealsPriorAuthRow["umRequest"],
-    umRequestId: "PA-260526-0900-DENIED01",
+    umRequestId,
     planDisplay: "Acme Health PPO",
     requestType: "pharmacy_benefit",
     serviceLabel: "Humira (adalimumab)",
-    state: "determined",
-    outcomeStatus: "denied",
-    eligibilityStatus: appealCase ? "open" : "startable",
+    state,
+    outcomeStatus,
+    eligibilityStatus: eligibilityStatus ?? (appealCase ? "open" : "startable"),
     canStartAppeal,
     appealCase
   };

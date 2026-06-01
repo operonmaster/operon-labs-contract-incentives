@@ -9,18 +9,18 @@ export default function CoInnovatePage() {
     <LabsPageShell className="labs-proof-page">
       <LabsSiteNav activeId="co-innovate" />
 
-      <LabsHero compact eyebrow="Co-Innovate" title="Bring a workflow. Leave with a proof.">
+      <LabsHero compact eyebrow="Co-Innovate" title="Bring a workflow. Leave with a working model.">
         <p>
-          Operon Labs runs as an executive proof-studio track. You bring an operating problem under pressure; we build an
-          inspectable proof model with you using Operon&apos;s identity, consent, evidence, policy, incentive, and
-          settlement primitives.
+          Operon Labs runs as an executive innovation track. You bring an operating problem under pressure; we build an
+          inspectable model with you using Operon&apos;s identity, consent, evidence, policy, incentive, and settlement
+          primitives.
         </p>
       </LabsHero>
 
-      <section className="labs-proof-teaser-grid" aria-label="What you leave with">
+      <section className="labs-proof-teaser-grid" aria-label="Co-innovation inputs and outputs">
         {coInnovateOffer.map((offer) => (
           <article className="labs-proof-teaser" key={offer.title}>
-            <span className="label">What you leave with</span>
+            <span className="label">{offer.label}</span>
             <h2>{offer.title}</h2>
             <p>{offer.body}</p>
           </article>
@@ -39,16 +39,16 @@ export default function CoInnovatePage() {
 
       <section className="labs-proof-cta" aria-labelledby="labs-coinnovate-cta-heading">
         <div>
-          <span className="label">Apply to co-innovate</span>
-          <h2 id="labs-coinnovate-cta-heading">Have a workflow you need to prove before you bet a contract on it?</h2>
-          <p>Bring it to Labs. We will turn it into a proof model you can inspect, measure, and govern.</p>
+          <span className="label">Next step</span>
+          <h2 id="labs-coinnovate-cta-heading">Have a workflow you need to validate before you bet a contract on it?</h2>
+          <p>Bring it to Labs. We will turn it into a working model you can inspect, measure, and govern.</p>
         </div>
         <div className="labs-proof-actions">
-          <a className="primary-button" href="mailto:partners@operon.cloud">
-            Bring a workflow
-          </a>
-          <Link className="primary-button secondary-button" href="/labs/proofs">
-            See current proofs
+          <Link className="primary-button" href="/labs/book-a-call">
+            Book a Call
+          </Link>
+          <Link className="primary-button secondary-button" href="/labs/initiatives">
+            See current initiatives
           </Link>
         </div>
       </section>

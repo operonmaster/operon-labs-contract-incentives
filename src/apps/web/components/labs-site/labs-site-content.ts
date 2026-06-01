@@ -1,5 +1,5 @@
 export interface LabsNavItem {
-  id: "overview" | "proofs" | "themes" | "signals" | "co-innovate";
+  id: "overview" | "initiatives" | "themes" | "signals" | "co-innovate" | "book-a-call";
   label: string;
   href: string;
 }
@@ -18,13 +18,14 @@ export interface ResearchTheme {
 }
 
 export interface Signal {
-  label: "Executive signal" | "Operating pattern" | "Proof model";
+  label: "Executive signal" | "Operating pattern" | "Governance question";
   title: string;
   body: string;
   status: "Published" | "In progress";
 }
 
 export interface CoInnovateOffer {
+  label: string;
   title: string;
   body: string;
 }
@@ -40,20 +41,20 @@ export interface PlatformSpineItem {
   body: string;
 }
 
-export type ProofSlug = "provider-documentation" | "delegate-um" | "specialty-rx" | "appeals";
+export type InitiativeSlug = "provider-documentation" | "delegate-um" | "specialty-rx" | "appeals";
 
-export interface ProofCard {
-  slug: ProofSlug;
+export interface InitiativeCard {
+  slug: InitiativeSlug;
   title: string;
   route: string;
   executiveQuestion: string;
-  whatIsProven: string;
-  controlSurface: string;
+  modelFocus: string;
+  operatingControls: string;
 }
 
 export const labsNavItems: LabsNavItem[] = [
   { id: "overview", label: "Overview", href: "/labs" },
-  { id: "proofs", label: "Proofs", href: "/labs/proofs" },
+  { id: "initiatives", label: "Initiatives", href: "/labs/initiatives" },
   { id: "themes", label: "Themes", href: "/labs/themes" },
   { id: "signals", label: "Signals", href: "/labs/signals" },
   { id: "co-innovate", label: "Co-Innovate", href: "/labs/co-innovate" }
@@ -61,16 +62,16 @@ export const labsNavItems: LabsNavItem[] = [
 
 export const labsPortalCards: LabsPortalCard[] = [
   {
-    title: "Proofs",
-    href: "/labs/proofs",
+    title: "Initiatives",
+    href: "/labs/initiatives",
     kicker: "01",
-    body: "Working proof models leaders can inspect."
+    body: "Healthcare operations models moving from idea to implementation."
   },
   {
     title: "Themes",
     href: "/labs/themes",
     kicker: "02",
-    body: "The operating claims behind the proof portfolio."
+    body: "The strategic healthcare operations agenda behind Labs."
   },
   {
     title: "Signals",
@@ -82,11 +83,13 @@ export const labsPortalCards: LabsPortalCard[] = [
     title: "Co-Innovate",
     href: "/labs/co-innovate",
     kicker: "04",
-    body: "Bring a workflow. Leave with a proof."
+    body: "Bring a workflow. Leave with a working model."
   }
 ];
 
-export const proofMethodSteps = ["Actor", "Evidence", "Policy", "Control", "Settlement", "Audit"];
+export const initiativeMethodSteps = ["Workflow", "Actors", "Data", "Policy", "Value", "Path"];
+
+export const operatingModelSpine = ["Workflow", "Authority", "Evidence", "Policy", "Value", "Path"];
 
 export const platformSpine: PlatformSpineItem[] = [
   {
@@ -106,51 +109,61 @@ export const platformSpine: PlatformSpineItem[] = [
   }
 ];
 
-export const proofCards: ProofCard[] = [
+export const initiativeCards: InitiativeCard[] = [
   {
     slug: "provider-documentation",
-    title: "Prior Auth Evidence Readiness",
+    title: "Prior Auth Readiness Model",
     route: "/provider-documentation",
-    executiveQuestion: "Can upstream evidence reduce avoidable prior-auth friction before review starts?",
-    whatIsProven: "Clean documentation, PAS submission, policy-safe evidence, and an eligible or blocked incentive.",
-    controlSurface: "Evidence completeness, benefit coverage, payment cap, approved wallet, and non-PHI settlement memo."
+    executiveQuestion: "Can better documentation readiness reduce avoidable prior-auth friction before review starts?",
+    modelFocus: "Documentation readiness, PAS submission, policy-safe evidence, and an eligible or blocked incentive.",
+    operatingControls: "Completeness, benefit coverage, payment cap, approved wallet, and non-PHI settlement memo."
   },
   {
     slug: "delegate-um",
-    title: "Delegated UM Quality Proof",
+    title: "Delegated UM Quality Model",
     route: "/delegate-um",
     executiveQuestion: "Can delegated review quality be measured without rewarding approvals, denials, savings, or utilization?",
-    whatIsProven: "Timely review, complete rationale, quality audit, approved submitter, and payment controls.",
-    controlSurface: "Delegate SLA, audit readiness, outcome-bias exclusions, recipient controls, and plan settlement policy."
+    modelFocus: "Timely review, complete rationale, quality audit, approved submitter, and payment controls.",
+    operatingControls: "Delegate SLA, audit readiness, outcome-bias exclusions, recipient controls, and plan settlement policy."
   },
   {
     slug: "specialty-rx",
-    title: "Specialty Rx Fulfillment Proof",
+    title: "Specialty Rx Fulfillment Model",
     route: "/specialty-rx",
     executiveQuestion: "Can post-authorization fulfillment be measured as a trust-preserving operating workflow?",
-    whatIsProven: "Clear-to-fill readiness, shipment scheduling, delivery confirmation, exception separation, and cold-chain evidence.",
-    controlSurface: "Fulfillment milestones, external blocker separation, handling complexity, and prohibited steering metrics."
+    modelFocus: "Clear-to-fill readiness, shipment scheduling, delivery confirmation, exception separation, and cold-chain evidence.",
+    operatingControls: "Fulfillment milestones, external blocker separation, handling complexity, and prohibited steering metrics."
   },
   {
     slug: "appeals",
-    title: "Appeals Readiness Proof",
+    title: "Appeals Readiness Model",
     route: "/appeals",
     executiveQuestion: "Can exception-path readiness be rewarded without touching appeal outcomes?",
-    whatIsProven: "A receipt-based SLA, acknowledgement, required documents, clinical rationale, policy citation, and evidence index.",
-    controlSurface: "Packet readiness, acknowledgement timing, quality audit, no reversal incentive, and non-PHI payment metadata."
+    modelFocus: "A receipt-based SLA, acknowledgement, required documents, clinical rationale, policy citation, and evidence index.",
+    operatingControls: "Packet readiness, acknowledgement timing, quality audit, no reversal incentive, and non-PHI payment metadata."
   }
 ];
 
 export const researchThemes: ResearchTheme[] = [
   {
-    title: "Trust & Evidence",
-    body: "Signed workflow events, policy-safe evidence packets, and a shared audit trail that every party can inspect.",
-    executiveClaim: "Operations leaders need shared evidence, not screenshots and month-end reconciliation."
+    title: "Clinical Ops Agents & AI Accountability",
+    body: "Standards-aware agents across prior authorization, pharmacy, appeals, delegated operations, and future workflows.",
+    executiveClaim: "AI belongs inside governed workflows, not beside them."
+  },
+  {
+    title: "Incentives & Rewards",
+    body: "Policy-based rewards for timeliness, completeness, coordination, quality, and implementation readiness.",
+    executiveClaim: "Reward design should improve operations without training clinical or financial bias."
+  },
+  {
+    title: "Instant Payments & Value Flow",
+    body: "Programmable payments, reward rails, capped exposure, usage billing, and human checkpoints for exceptions.",
+    executiveClaim: "Payment innovation matters when value can move at the speed of completed work."
   },
   {
     title: "Digital Identity & Authority",
     body: "Verifiable identities for patients, providers, plans, vendors, systems, and agents.",
-    executiveClaim: "Every action needs a reliable answer to who acted and under what authority."
+    executiveClaim: "Every operational action needs a reliable answer to who acted and under what authority."
   },
   {
     title: "Verifiable Consent & Delegation",
@@ -158,68 +171,67 @@ export const researchThemes: ResearchTheme[] = [
     executiveClaim: "Consent should behave like a runtime control, not a scanned form in a folder."
   },
   {
-    title: "Incentives & Rewards",
-    body: "Policy-based rewards for quality, timeliness, completeness, coordination, and evidence readiness.",
-    executiveClaim: "Value should move when contract-defined operational quality is proven, not assumed."
-  },
-  {
-    title: "Instant Settlement & Value Flow",
-    body: "Programmable settlement, reward rails, usage billing, capped exposure, and payment controls.",
-    executiveClaim: "Payment can be fast only when the proof and controls are explicit."
-  },
-  {
-    title: "Clinical Ops Agents & AI Proof",
-    body: "Standards-aware agents across prior authorization, pharmacy, appeals, delegated operations, and future workflows.",
-    executiveClaim: "AI does not scale on output. It scales when operations can prove what changed."
+    title: "Operational Visibility",
+    body: "Workflow events, policy-safe evidence packets, status changes, and shared records that teams can inspect.",
+    executiveClaim: "Leaders need a clear operating record before they can automate, reward, or redesign work."
   }
 ];
 
 export const signals: Signal[] = [
   {
     label: "Executive signal",
-    title: "Why healthcare AI pilots struggle to become operational proof",
+    title: "Why healthcare AI pilots struggle to become operating models",
     status: "Published",
     body:
-      "Most AI value in healthcare operations is asserted beside the workflow, not measured inside it. Labs focuses on the missing proof layer: baselines, signed events, policy context, and case-level evidence that leaders can inspect."
+      "Most AI value in healthcare operations is asserted beside the workflow, not adopted inside it. Labs focuses on ownership, workflow fit, baseline operations, and the implementation path from pilot to operating model."
   },
   {
     label: "Operating pattern",
     title: "How to reward quality without rewarding outcomes",
     status: "Published",
     body:
-      "The durable pattern separates operational quality from clinical and financial outcomes. Reward timeliness, evidence completeness, rationale quality, and coordination while policy makes prohibited outcomes explicitly out of scope."
+      "The durable pattern separates operational quality from clinical and financial outcomes. Reward timeliness, readiness, rationale quality, and coordination while policy keeps prohibited outcomes explicitly out of scope."
   },
   {
     label: "Operating pattern",
-    title: "When instant settlement needs a human checkpoint",
+    title: "When instant payments need a human checkpoint",
     status: "Published",
     body:
-      "Programmable payment is strongest when routine cases settle inside explicit limits and exceptions route to a named human. Labs treats the checkpoint as a control, not a delay."
+      "Programmable payment is strongest when routine cases move inside explicit limits and exceptions route to a named human. Labs treats the checkpoint as an operating design choice, not a delay."
   },
   {
-    label: "Proof model",
-    title: "Agents are about to act inside operations. Can you prove what they did?",
+    label: "Governance question",
+    title: "Agentic operations need ownership before autonomy",
     status: "In progress",
     body:
-      "As agents enter prior authorization, pharmacy handoffs, and appeals prep, the governing question shifts from whether AI can act to whether the organization can prove what it did, under whose authority, and inside which policy."
+      "As agents enter prior authorization, pharmacy handoffs, and appeals prep, the question shifts from whether AI can act to whether the organization has workflow ownership, implementation path, and governance for what happens next."
   }
 ];
 
 export const coInnovateOffer: CoInnovateOffer[] = [
   {
-    title: "A working proof, not a slide deck",
+    label: "What you bring",
+    title: "An executive-pressure workflow",
     body:
-      "Leave with an inspectable proof model of your workflow: visible actors, evidence, policy decisions, controls, settlement path, and audit trail."
+      "Bring a workflow where ownership, authority, evidence, policy, consent, incentives, or payment path is unclear. Labs uses it as the intake surface: workflow, authority, evidence, policy, value, and path to implementation."
   },
   {
+    label: "What we build",
+    title: "A working model, not a slide deck",
+    body:
+      "Leave with an inspectable operating model of your workflow: visible actors, evidence, policy decisions, controls, settlement path, and audit trail."
+  },
+  {
+    label: "What it connects to",
     title: "Production-aligned primitives",
     body:
       "Model the workflow with Operon's identity, consent, evidence, policy, incentive, and settlement primitives so useful work has a path beyond a workshop."
   },
   {
-    title: "Your operating context, reusable proof",
+    label: "What you keep",
+    title: "Your context, reusable pattern",
     body:
-      "Bring the pressure, constraints, and domain detail. Labs turns them into a reusable proof pattern your team can evaluate with stakeholders."
+      "Bring the pressure, constraints, and domain detail. Labs turns them into a reusable pattern your team can evaluate with stakeholders."
   }
 ];
 
@@ -230,16 +242,16 @@ export const coInnovateSteps: CoInnovateStep[] = [
       "Start with a real operating problem: prior-auth friction, delegated vendor performance, specialty handoffs, appeals readiness, consent enforcement, AI impact, or value-flow reconciliation."
   },
   {
-    title: "Define the proof claim",
-    body: "State what must be proven, who must prove it, under what authority, and what would count as sufficient evidence."
+    title: "Define the operating claim",
+    body: "State what needs to change, who must act, under what authority, and what would count as sufficient evidence."
   },
   {
-    title: "Build an inspectable proof model",
+    title: "Build an inspectable model",
     body: "Model the actors, consent or delegation boundary, policy controls, evidence packet, value movement, and audit sequence."
   },
   {
     title: "Decide the next path",
     body:
-      "Retire it, keep it as an internal proof, graduate it toward an Operon.Cloud capability, or move into a partner implementation."
+      "Retire it, keep it as an internal validation model, graduate it toward an Operon.Cloud capability, or move into a partner implementation."
   }
 ];

@@ -52,9 +52,27 @@ describe("Operon Labs design system", () => {
     expect(source).toContain("export function LabsDeckRail");
     expect(source).toContain("export function LabsBadge");
     expect(source).toContain("export function LabsButton");
+    expect(source).toContain("export function LabsForm");
+    expect(source).toContain("export function LabsTextField");
+    expect(source).toContain("export function LabsTextareaField");
     expect(source).toContain("export function LabsUseCaseNav");
     expect(source).toContain('export { LabsSelect } from "./LabsSelect"');
     expect(source).toContain('export { LabsModal } from "./LabsModal"');
+  });
+
+  it("exposes shared form field primitives for Labs intake surfaces", () => {
+    const source = readRepoFile("src/apps/web/components/labs-ui/index.tsx");
+    const css = readRepoFile("src/apps/web/app/styles.css");
+
+    expect(source).toContain("FormHTMLAttributes");
+    expect(source).toContain("InputHTMLAttributes");
+    expect(source).toContain("TextareaHTMLAttributes");
+    expect(source).toContain("labs-form");
+    expect(source).toContain("labs-form-field");
+    expect(source).toContain("labs-form-control");
+    expect(css).toContain(".labs-form");
+    expect(css).toContain(".labs-form-field");
+    expect(css).toContain(".labs-form-control");
   });
 
   it("exposes a custom Labs select primitive inspired by the platform dropdown", () => {

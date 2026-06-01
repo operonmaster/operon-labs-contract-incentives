@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { LabsBadge, LabsHero, LabsPageShell } from "../../../components/labs-ui";
 import { LabsSiteNav } from "../../../components/labs-site/LabsSiteNav";
 import { researchThemes } from "../../../components/labs-site/labs-site-content";
@@ -7,10 +9,10 @@ export default function ThemesPage() {
     <LabsPageShell className="labs-proof-page">
       <LabsSiteNav activeId="themes" />
 
-      <LabsHero compact eyebrow="Themes" title="The claims behind trust-native healthcare operations.">
+      <LabsHero compact eyebrow="Themes" title="Innovation themes for healthcare operations.">
         <p>
-          Each theme is a position, not a glossary entry. It states the operating claim Labs is building toward and the
-          reason the proof models look the way they do.
+          Each theme is a position on the operating models healthcare teams need next: AI-enabled workflows,
+          incentives, identity, consent, value movement, and visibility into what happened.
         </p>
       </LabsHero>
 
@@ -22,6 +24,24 @@ export default function ThemesPage() {
             <p>{theme.body}</p>
           </article>
         ))}
+      </section>
+
+      <section className="labs-proof-cta" aria-labelledby="labs-themes-cta-heading">
+        <div>
+          <span className="label">Explore with Labs</span>
+          <h2 id="labs-themes-cta-heading">Working on one of these questions?</h2>
+          <p>
+            Talk through the healthcare operations theme your team is trying to turn into a governed implementation.
+          </p>
+        </div>
+        <div className="labs-proof-actions">
+          <Link className="primary-button" href="/labs/book-a-call">
+            Book a Call
+          </Link>
+          <Link className="primary-button secondary-button" href="/labs/initiatives">
+            Explore initiatives
+          </Link>
+        </div>
       </section>
     </LabsPageShell>
   );

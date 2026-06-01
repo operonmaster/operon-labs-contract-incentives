@@ -175,14 +175,18 @@ export function AppealsConsole() {
                       >
                         Open appeal
                       </LabsButton>
-                    ) : (
+                    ) : row.canStartAppeal ? (
                       <LabsButton
                         variant="row"
-                        disabled={!row.canStartAppeal || startingUmRequestId === row.umRequestId}
+                        disabled={startingUmRequestId === row.umRequestId}
                         onClick={(event) => void startAppeal(row, event.currentTarget)}
                       >
                         {startingUmRequestId === row.umRequestId ? "Starting..." : "Start appeal"}
                       </LabsButton>
+                    ) : (
+                      <span className="empty-state" aria-label="No appeal action available">
+                        &mdash;
+                      </span>
                     )}
                   </td>
                 </tr>
