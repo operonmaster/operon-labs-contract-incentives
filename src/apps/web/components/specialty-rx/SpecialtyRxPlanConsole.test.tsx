@@ -135,7 +135,7 @@ function buildSpecialtyRxPlanAuditRow(): SpecialtyRxPlanAuditRow {
     paymentPolicyStatus: "paid",
     incentiveStatus: "paid",
     paymentStatus: "auto_executed",
-    incentiveValue: 7,
+    incentiveValue: 5,
     currency: "HBAR",
     settlementToken: { symbol: "HBAR" },
     reason: "Fulfillment completed within SLA",

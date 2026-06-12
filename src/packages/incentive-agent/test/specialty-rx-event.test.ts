@@ -31,8 +31,7 @@ const policy: IncentivePolicy = {
   payout: {
     token: "HBAR",
     amountPerEligibleRequest: 5,
-    monthlyCap: 700,
-    coldChainHandlingAddOn: { amount: 2, maxPerRequest: 7 }
+    monthlyCap: 700
   },
   settlement: { mode: "auto", recipientWalletId: "0.0.9049549", requiresHumanApproval: false }
 };
@@ -122,7 +121,7 @@ describe("evaluateSpecialtyRxFulfillmentEvent", () => {
     expect(evaluation.request.requestObject).not.toHaveProperty("deliveryConfirmedWithinSla");
     expect(evaluation.result).toMatchObject({
       decision: "approved",
-      amount: 7,
+      amount: 5,
       reasonCodes: []
     });
   });

@@ -58,10 +58,6 @@ export interface IncentivePolicy {
     token: TokenSymbol;
     amountPerEligibleRequest: number;
     monthlyCap: number;
-    coldChainHandlingAddOn?: {
-      amount: number;
-      maxPerRequest: number;
-    };
   };
   settlement: {
     mode: SettlementMode;
@@ -502,7 +498,7 @@ function evaluateSpecialtyRxFulfillmentPolicy(input: EvaluatePolicyInput): Polic
     reasonCodes.push("DELIVERY_CLOSURE_EVIDENCE_MISSING");
   }
 
-  const amount = specialtyRxFulfillmentAmount(policy, request);
+  const amount = policy.payout.amountPerEligibleRequest;
   if (monthToDateAmount + amount > policy.payout.monthlyCap) {
     reasonCodes.push("MONTHLY_CAP_EXCEEDED");
   }
@@ -521,38 +517,20 @@ function evaluateSpecialtyRxFulfillmentPolicy(input: EvaluatePolicyInput): Polic
     decision: blocked ? "blocked" : "approved",
     policy,
     reasonCodes,
-    token,
-    amountOverride: amount
+    token
   });
-}
-
-function specialtyRxFulfillmentAmount(policy: IncentivePolicy, request: EvaluationRequest): number {
-  const baseAmount = policy.payout.amountPerEligibleRequest;
-  const addOn = policy.payout.coldChainHandlingAddOn;
-  if (
-    !addOn ||
-    request.requestObject.coldChainRequired !== true ||
-    request.requestObject.coldChainPackoutValidated !== true ||
-    request.requestObject.temperatureLogValid !== true
-  ) {
-    return baseAmount;
-  }
-
-  return Math.min(baseAmount + addOn.amount, addOn.maxPerRequest);
 }
 
 function result({
   decision,
   policy,
   reasonCodes,
-  token,
-  amountOverride
+  token
 }: {
   decision: PolicyDecision;
   policy: IncentivePolicy;
   reasonCodes: string[];
   token: TokenSymbol;
-  amountOverride?: number;
 }): PolicyEvaluationResult {
   const approved = decision === "approved";
 
@@ -560,7 +538,7 @@ function result({
     decision,
     policyId: policy.policyId,
     policyVersion: policy.version,
-    amount: approved ? (amountOverride ?? policy.payout.amountPerEligibleRequest) : 0,
+    amount: approved ? policy.payout.amountPerEligibleRequest : 0,
     currency: token,
     settlementToken: {
       symbol: token

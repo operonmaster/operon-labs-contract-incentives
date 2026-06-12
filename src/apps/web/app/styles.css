@@ -1579,6 +1579,135 @@ main {
   line-height: 1.35;
 }
 
+.business-policy-details-modal {
+  max-width: 1120px;
+  width: min(100%, 1120px);
+}
+
+.business-policy-explainer-toolbar {
+  margin-bottom: 2px;
+}
+
+.policy-configured-outcome {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(52, 211, 153, 0.28);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+}
+
+.policy-configured-outcome span,
+.policy-explainer-context-grid dt,
+.policy-explainer-gate-group > span,
+.policy-explainer-bottom-card > span,
+.policy-explainer-bottom-card dt {
+  color: var(--op-muted);
+  font-family: var(--op-font-mono), ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.policy-configured-outcome strong {
+  color: var(--op-ink);
+  font-size: 18px;
+  line-height: 1.35;
+}
+
+.policy-explainer-context-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+}
+
+.policy-explainer-context-grid div,
+.policy-explainer-gate-group,
+.policy-explainer-bottom-card {
+  background: rgba(5, 8, 22, 0.5);
+  border: 1px solid var(--op-line);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.policy-explainer-context-grid dd {
+  margin: 8px 0 0;
+}
+
+.policy-explainer-section {
+  display: grid;
+  gap: 10px;
+}
+
+.policy-explainer-section-heading {
+  display: grid;
+  gap: 5px;
+}
+
+.policy-explainer-section-heading p {
+  color: var(--op-muted);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.policy-explainer-gate-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.policy-explainer-gate-group {
+  align-content: start;
+  display: grid;
+  gap: 10px;
+}
+
+.policy-explainer-gate-group ul {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.policy-explainer-gate-group li {
+  display: grid;
+  gap: 7px;
+}
+
+.policy-explainer-gate-group li strong {
+  color: var(--op-ink-2);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.policy-explainer-bottom-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.policy-explainer-bottom-card {
+  display: grid;
+  gap: 10px;
+}
+
+.policy-explainer-bottom-card dl {
+  display: grid;
+  gap: 9px;
+  margin: 0;
+}
+
+.policy-explainer-bottom-card dl div {
+  display: grid;
+  gap: 5px;
+}
+
+.policy-explainer-bottom-card dd {
+  margin: 0;
+}
+
 .policy-criteria-toggle {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1725,6 +1854,9 @@ main {
 
   .business-policy-details-modal .policy-detail-grid,
   .business-policy-details-modal .policy-modal-sections,
+  .policy-explainer-context-grid,
+  .policy-explainer-gate-grid,
+  .policy-explainer-bottom-grid,
   .payment-policy-details-modal .policy-detail-grid,
   .payment-policy-details-modal .policy-modal-sections {
     grid-template-columns: 1fr;

@@ -4,8 +4,9 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { DelegateUseCaseNavigation } from "../delegate-um/DelegateUseCaseNavigation";
-import type { PolicySummary } from "../../lib/policy-view-model";
-import { PolicyConsole } from "./PolicyConsole";
+import { defaultIncentivePolicies } from "../../lib/policy-store";
+import { buildBusinessPolicyCards, type PolicySummary } from "../../lib/policy-view-model";
+import { buildBusinessPolicyExplainerModel, PolicyConsole } from "./PolicyConsole";
 
 function readRepoFile(path: string) {
   return readFileSync(resolve(process.cwd(), path), "utf8");
@@ -70,6 +71,167 @@ describe("provider documentation policy console", () => {
     expect(source).toContain("policyBoundaryStatement");
     expect(source).toContain("Plan-level Hedera Agent Kit settlement controls");
     expect(source).not.toContain('className="panel detail-panel"');
+  });
+
+  it("models business policy details as a demo explainer with badges only for configured values", () => {
+    const model = buildBusinessPolicyExplainerModel(providerDocumentationPolicy);
+
+    expect(model.configuredOutcome).toBe(
+      "Pays 5 HBAR when an eligible PA request has the required DTR documentation and passes covered-benefit checks."
+    );
+    expect(model.configuredOutcome).not.toContain("policy-detail-value-badge");
+    expect(model.contextItems).toEqual([
+      { label: "Plan", value: "Acme Health PPO", variant: "success" },
+      { label: "Provider", value: "Lakeside Provider Admin", variant: "success" },
+      { label: "Status", value: "Active", variant: "success" }
+    ]);
+    expect(model.gateGroups).toEqual([
+      {
+        title: "Request scope",
+        items: [
+          { label: "Request type is eligible", values: ["Pharmacy Benefit"], variant: "success" },
+          { label: "Service code is included", values: ["0169-4525-14", "0074-0554-02"], variant: "success" }
+        ]
+      },
+      {
+        title: "Coverage requirements",
+        items: [{ label: "Applies only to covered benefits", values: ["Yes"], variant: "success" }]
+      },
+      {
+        title: "Documentation requirements",
+        items: [{ label: "DTR completion required when requested", values: ["Yes"], variant: "success" }]
+      }
+    ]);
+    expect(model.bottomCards).toEqual([
+      {
+        title: "Payment",
+        items: [
+          { label: "Payout rule", values: ["5 HBAR"], variant: "success" },
+          { label: "Monthly control", values: ["500 HBAR"], variant: "success" }
+        ]
+      },
+      {
+        title: "Policy reference",
+        items: [
+          { label: "Policy ID", values: ["plcy_2N7P5R8T0V4X6Z1B3D9F"], variant: "neutral" },
+          { label: "Effective", values: ["2026-05-01", "No end date"], variant: "neutral" }
+        ]
+      },
+      {
+        title: "Settlement",
+        items: [{ label: "Settlement", values: ["Auto", "0.0.9049549", "No human approval"], variant: "neutral" }]
+      }
+    ]);
+  });
+
+  it("models Delegate UM policies around SLA performance and review evidence", () => {
+    const policy = buildBusinessPolicyCards(defaultIncentivePolicies.delegate_um_acme_sla_bonus)[0]!;
+    const model = buildBusinessPolicyExplainerModel(policy);
+
+    expect(model.configuredOutcome).toBe(
+      "Pays 5 HBAR when a delegated UM determination is completed within the configured SLA with audit-ready clinical review evidence."
+    );
+    expect(model.contextItems).toEqual([
+      { label: "Plan", value: "Acme Health PPO", variant: "success" },
+      { label: "Delegate", value: "Northstar UM", variant: "success" },
+      { label: "Status", value: "Active", variant: "success" }
+    ]);
+    expect(model.gateGroups).toEqual([
+      {
+        title: "Request scope",
+        items: [{ label: "Request type is eligible", values: ["Pharmacy Benefit"], variant: "success" }]
+      },
+      {
+        title: "SLA performance",
+        items: [{ label: "Determination completed within SLA", values: ["24 hours"], variant: "success" }]
+      },
+      {
+        title: "Review evidence",
+        items: [
+          { label: "Clinical documentation reviewed", values: ["Yes"], variant: "success" },
+          { label: "Medical necessity criteria met", values: ["Yes"], variant: "success" },
+          { label: "Plan policy requirements checked", values: ["Yes"], variant: "success" },
+          { label: "Decision rationale documented", values: ["Yes"], variant: "success" }
+        ]
+      }
+    ]);
+  });
+
+  it("models Specialty Rx policies around fulfillment SLA and specialty controls", () => {
+    const policy = buildBusinessPolicyCards(defaultIncentivePolicies.specialty_rx_acme_fulfillment_sla)[0]!;
+    const model = buildBusinessPolicyExplainerModel(policy);
+
+    expect(model.configuredOutcome).toBe(
+      "Pays 5 HBAR when an approved pharmacy PA is fulfilled without avoidable exceptions and the shipment is scheduled within the fulfillment SLA."
+    );
+    expect(model.contextItems).toEqual([
+      { label: "Plan", value: "Acme Health PPO", variant: "success" },
+      { label: "Pharmacy", value: "Atlas Specialty Rx", variant: "success" },
+      { label: "Status", value: "Active", variant: "success" }
+    ]);
+    expect(model.gateGroups).toEqual([
+      {
+        title: "Request scope",
+        items: [{ label: "Request type is eligible", values: ["Pharmacy Benefit"], variant: "success" }]
+      },
+      {
+        title: "Fulfillment SLA",
+        items: [
+          { label: "Fulfillment SLA met by shipment scheduling", values: ["Yes"], variant: "success" },
+          { label: "Delivery closure evidence recorded", values: ["Yes"], variant: "success" }
+        ]
+      },
+      {
+        title: "Specialty controls",
+        items: [
+          { label: "Cold-chain evidence required when applicable", values: ["Yes"], variant: "success" },
+          { label: "REMS authorization required when applicable", values: ["Yes"], variant: "success" },
+          { label: "No avoidable fulfillment exception", values: ["Yes"], variant: "success" }
+        ]
+      }
+    ]);
+    expect(model.bottomCards[0]).toEqual({
+      title: "Payment",
+      items: [
+        { label: "Payout rule", values: ["5 HBAR"], variant: "success" },
+        { label: "Monthly control", values: ["700 HBAR"], variant: "success" }
+      ]
+    });
+  });
+
+  it("models Appeals policies around packet SLA and outcome guardrails", () => {
+    const policy = buildBusinessPolicyCards(defaultIncentivePolicies.appeals_acme_packet_quality)[0]!;
+    const model = buildBusinessPolicyExplainerModel(policy);
+
+    expect(model.configuredOutcome).toBe(
+      "Pays 6 HBAR when an appeal packet is ready within the packet-readiness SLA and passes quality controls, without rewarding appeal outcome."
+    );
+    expect(model.contextItems).toEqual([
+      { label: "Plan", value: "Acme Health PPO", variant: "success" },
+      { label: "Submitter", value: "Lakeside Provider Admin", variant: "success" },
+      { label: "Status", value: "Active", variant: "success" }
+    ]);
+    expect(model.gateGroups).toEqual([
+      {
+        title: "Request scope",
+        items: [{ label: "Request type is eligible", values: ["Pharmacy Benefit", "Outpatient Service"], variant: "success" }]
+      },
+      {
+        title: "Packet SLA",
+        items: [
+          { label: "Appeal receipt starts packet-readiness SLA", values: ["Yes"], variant: "success" },
+          { label: "Acknowledgement is a sub-SLA", values: ["Yes"], variant: "success" }
+        ]
+      },
+      {
+        title: "Quality guardrails",
+        items: [
+          { label: "Packet quality audit required", values: ["Yes"], variant: "success" },
+          { label: "No appeal outcome incentive", values: ["Yes"], variant: "success" },
+          { label: "No cost savings or denial reversal metric", values: ["Yes"], variant: "success" }
+        ]
+      }
+    ]);
   });
 
   it("allows delegate policy pages to supply use-case-specific copy", () => {
@@ -229,6 +391,68 @@ const delegateBusinessPolicy: PolicySummary = {
     { label: "Payout", value: "5 HBAR" }
   ],
   detailSections: []
+};
+
+const providerDocumentationPolicy: PolicySummary = {
+  id: "plcy_2N7P5R8T0V4X6Z1B3D9F",
+  title: "Provider Documentation Completeness",
+  category: "business",
+  source: "Plan/provider contract policy",
+  appliesTo: "Provider Documentation Completeness",
+  payoutOrControl: "5 HBAR per eligible PA request",
+  status: "Active",
+  summary: "Provider Documentation Completeness DTR completion incentive for the contracted plan/provider pair.",
+  previewItems: [],
+  detailSections: [
+    {
+      title: "Policy identity",
+      items: [
+        "Policy ID: plcy_2N7P5R8T0V4X6Z1B3D9F",
+        "Version: v1",
+        "Evaluation type: provider_documentation_completeness",
+        "Storage collection: incentivePolicies"
+      ]
+    },
+    {
+      title: "Contract pair",
+      items: [
+        "Plan: Acme Health PPO (acme-health-ppo)",
+        "Provider: Lakeside Provider Admin (lakeside-provider-admin)",
+        "Effective from: 2026-05-01",
+        "Effective through: none"
+      ]
+    },
+    {
+      title: "Incentive scope",
+      items: [
+        "Eligible request types: Pharmacy Benefit (pharmacy_benefit)",
+        "Included service codes: NDC 0169-4525-14, NDC 0074-0554-02"
+      ]
+    },
+    {
+      title: "Eligibility criteria",
+      items: [
+        "Applies only to covered benefits: Yes",
+        "Requires DTR completion when requested: Yes"
+      ]
+    },
+    {
+      title: "Payout",
+      items: [
+        "Amount per eligible request: 5 HBAR",
+        "Monthly cap: 500 HBAR",
+        "Token: HBAR"
+      ]
+    },
+    {
+      title: "Settlement",
+      items: [
+        "Settlement mode: Auto",
+        "Recipient wallet ID: 0.0.9049549",
+        "Human approval required: No"
+      ]
+    }
+  ]
 };
 
 const delegateOutpatientBusinessPolicy: PolicySummary = {

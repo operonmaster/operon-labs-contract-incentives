@@ -31,11 +31,7 @@ const policy: IncentivePolicy = {
   payout: {
     token: "HBAR",
     amountPerEligibleRequest: 5,
-    monthlyCap: 700,
-    coldChainHandlingAddOn: {
-      amount: 2,
-      maxPerRequest: 7
-    }
+    monthlyCap: 700
   },
   settlement: {
     mode: "auto",
@@ -81,13 +77,13 @@ const approvedRequest: EvaluationRequest = {
 };
 
 describe("specialty_rx_fulfillment_sla policy", () => {
-  it("approves clean fulfillment and adds the cold-chain handling amount", () => {
+  it("approves clean fulfillment with the configured payout amount", () => {
     const result = evaluatePolicy({ policy, request: approvedRequest, monthToDateAmount: 0 });
 
     expect(result).toMatchObject({
       decision: "approved",
       policyId: "specialty-rx-fulfillment-sla-v1",
-      amount: 7,
+      amount: 5,
       currency: "HBAR",
       walletId: "0.0.9049549",
       reasonCodes: []
@@ -130,7 +126,7 @@ describe("specialty_rx_fulfillment_sla policy", () => {
 
     expect(result).toMatchObject({
       decision: "approved",
-      amount: 7,
+      amount: 5,
       walletId: "0.0.9049549",
       reasonCodes: []
     });
@@ -267,8 +263,8 @@ describe("specialty_rx_fulfillment_sla policy", () => {
     });
   });
 
-  it("enforces the monthly cap after cold-chain add-on calculation", () => {
-    const result = evaluatePolicy({ policy, request: approvedRequest, monthToDateAmount: 698 });
+  it("enforces the monthly cap against the configured payout amount", () => {
+    const result = evaluatePolicy({ policy, request: approvedRequest, monthToDateAmount: 696 });
 
     expect(result).toMatchObject({
       decision: "blocked",

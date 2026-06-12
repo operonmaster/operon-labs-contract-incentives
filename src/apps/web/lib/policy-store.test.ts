@@ -67,11 +67,7 @@ describe("policy store", () => {
         payout: {
           token: "HBAR",
           amountPerEligibleRequest: 5,
-          monthlyCap: 700,
-          coldChainHandlingAddOn: {
-            amount: 2,
-            maxPerRequest: 7
-          }
+          monthlyCap: 700
         },
         settlement: {
           mode: "auto",

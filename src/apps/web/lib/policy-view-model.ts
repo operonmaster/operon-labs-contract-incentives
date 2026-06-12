@@ -146,13 +146,7 @@ function buildSpecialtyRxFulfillmentBusinessPolicyCards(policy: IncentivePolicy)
         { label: "Plan", value: policy.contractPair.planName },
         { label: "Pharmacy", value: policy.contractPair.providerName },
         requestTypePreview(policy),
-        { label: "Payout", value: `${policy.payout.amountPerEligibleRequest} ${token}` },
-        {
-          label: "Cold-chain add-on",
-          value: policy.payout.coldChainHandlingAddOn
-            ? `${policy.payout.coldChainHandlingAddOn.amount} ${token}`
-            : "none"
-        }
+        { label: "Payout", value: `${policy.payout.amountPerEligibleRequest} ${token}` }
       ],
       detailSections: buildSpecialtyRxFulfillmentDetailSections(policy, token)
     }
@@ -423,11 +417,6 @@ function buildSpecialtyRxFulfillmentDetailSections(policy: IncentivePolicy, toke
       items: [
         `Amount per eligible request: ${policy.payout.amountPerEligibleRequest} ${token}`,
         `Monthly cap: ${policy.payout.monthlyCap} ${token}`,
-        `Cold-chain handling add-on: ${
-          policy.payout.coldChainHandlingAddOn
-            ? `${policy.payout.coldChainHandlingAddOn.amount} ${token}, max ${policy.payout.coldChainHandlingAddOn.maxPerRequest} ${token} per request`
-            : "none"
-        }`,
         `Token: ${token}`
       ]
     },
