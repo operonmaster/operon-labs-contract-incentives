@@ -271,7 +271,7 @@ export function createAppealsWorkflow(
     },
     async resolveMissingInfo(appealId, input, now = new Date()) {
       const caseRecord = await getCase(appealId);
-      assertAppealState(caseRecord, "decision_retrieved");
+      assertAppealStateOneOf(caseRecord, ["intake_validated", "decision_retrieved"]);
       if (!input.missingInfoResolved || (input.missingInfoRequired && !input.missingInfoRequested)) {
         throw new Error("APPEAL_MISSING_INFO_UNRESOLVED");
       }
@@ -279,6 +279,7 @@ export function createAppealsWorkflow(
       return saveUpdatedCase(caseStore, {
         ...caseRecord,
         state: "missing_info_resolved",
+        originalDecision: buildLinkedOriginalDecisionContext(caseRecord),
         missingInfo: {
           missingInfoRequired: input.missingInfoRequired,
           missingInfoRequested: input.missingInfoRequested,
@@ -461,9 +462,9 @@ function buildCaseFromDeniedRequest(request: UMRequest, expedited: boolean, now:
       requestedServiceMatched: false
     },
     originalDecision: {
-      denialReasonRetrieved: false,
-      priorDecisionSummaryIncluded: false,
-      coveragePolicyLocated: false
+      denialReasonRetrieved: Boolean(request.clinicalReview.denialReasonCode),
+      priorDecisionSummaryIncluded: true,
+      coveragePolicyLocated: true
     },
     missingInfo: {
       missingInfoRequired: false,
@@ -534,6 +535,20 @@ function assertAppealState(caseRecord: AppealCase, expected: AppealCase["state"]
   if (caseRecord.state !== expected) {
     throw new Error(`APPEAL_INVALID_STATE:${caseRecord.state}`);
   }
+}
+
+function assertAppealStateOneOf(caseRecord: AppealCase, expectedStates: AppealCase["state"][]): void {
+  if (!expectedStates.includes(caseRecord.state)) {
+    throw new Error(`APPEAL_INVALID_STATE:${caseRecord.state}`);
+  }
+}
+
+function buildLinkedOriginalDecisionContext(caseRecord: AppealCase): AppealCase["originalDecision"] {
+  return {
+    denialReasonRetrieved: caseRecord.originalDecision.denialReasonRetrieved || Boolean(caseRecord.originalDenialReasonCode),
+    priorDecisionSummaryIncluded: true,
+    coveragePolicyLocated: true
+  };
 }
 
 function isTerminalAppealCase(caseRecord: AppealCase): boolean {

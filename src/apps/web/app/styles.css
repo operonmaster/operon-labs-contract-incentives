@@ -2245,6 +2245,44 @@ body {
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.16);
 }
 
+.stepper li.viewing:not(.active) {
+  border-color: rgba(96, 165, 250, 0.72);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+  color: var(--op-ink);
+}
+
+.stepper li.stepper-disabled {
+  opacity: 0.62;
+}
+
+.stepper-step-button {
+  align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  gap: 4px;
+  height: 100%;
+  justify-items: center;
+  min-height: inherit;
+  padding: 0;
+  text-align: center;
+  width: 100%;
+}
+
+.stepper-step-button:disabled {
+  cursor: not-allowed;
+}
+
+.stepper-step-button:focus-visible {
+  border-radius: 6px;
+  outline: 2px solid var(--op-blue-2);
+  outline-offset: 2px;
+}
+
 .wizard-stage {
   min-height: 420px;
 }
@@ -2562,14 +2600,70 @@ body {
   width: min(100%, 1040px);
 }
 
+.appeals-context-panel {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.appeals-context-heading {
+  display: grid;
+  gap: 4px;
+}
+
+.appeals-context-heading h3 {
+  font-size: 15px;
+  margin: 0;
+}
+
+.appeals-context-heading p {
+  color: var(--op-muted);
+  margin: 0;
+}
+
+.appeals-context-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .appeals-stepper {
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   margin-bottom: 20px;
 }
 
 .appeals-stepper li {
   font-size: 12px;
   min-width: 0;
+}
+
+.appeals-step-checklist {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.appeals-step-checkbox {
+  align-items: center;
+  background: rgba(15, 23, 42, 0.48);
+  border: 1px solid var(--op-line);
+  border-radius: 8px;
+  color: var(--op-ink);
+  cursor: pointer;
+  display: flex;
+  gap: 10px;
+  min-height: 46px;
+  padding: 10px 12px;
+}
+
+.appeals-step-checkbox input {
+  accent-color: var(--op-blue);
+  flex: 0 0 auto;
+  height: 16px;
+  width: 16px;
+}
+
+.appeals-step-checkbox span {
+  font-size: 14px;
+  line-height: 1.25;
 }
 
 .appeals-prior-auth-worklist,
@@ -3099,8 +3193,16 @@ body {
 }
 
 @media (max-width: 720px) {
+  .appeals-context-grid {
+    grid-template-columns: 1fr;
+  }
+
   .appeals-stepper {
     grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  }
+
+  .appeals-step-checklist {
+    grid-template-columns: 1fr;
   }
 }
 

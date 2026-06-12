@@ -134,11 +134,6 @@ describe("appeals workflow", () => {
       planMemberMatched: true,
       requestedServiceMatched: true
     });
-    await workflow.retrieveOriginalDecision(appeal.id, {
-      denialReasonRetrieved: true,
-      priorDecisionSummaryIncluded: true,
-      coveragePolicyLocated: true
-    });
     await workflow.resolveMissingInfo(appeal.id, {
       missingInfoRequired: false,
       missingInfoRequested: false,
@@ -170,6 +165,56 @@ describe("appeals workflow", () => {
       incentiveValue: 6,
       reasonCodes: []
     });
+  });
+
+  it("resolves missing appeal information directly after intake validation", async () => {
+    const { workflow, denied } = await createDeniedAppealFixture("PA-260618-0902-SKIPOD01");
+    const appeal = await workflow.startAppeal(denied.id, { expedited: false }, new Date("2026-06-18T16:00:00.000Z"));
+
+    await workflow.acknowledgeAppeal(appeal.id, { appealRequestAcknowledged: true });
+    await workflow.validateIntake(appeal.id, {
+      appealRequestPresent: true,
+      appellantAuthorized: true,
+      planMemberMatched: true,
+      requestedServiceMatched: true
+    });
+
+    await expect(workflow.resolveMissingInfo(appeal.id, {
+      missingInfoRequired: false,
+      missingInfoRequested: false,
+      missingInfoResolved: true
+    })).resolves.toEqual(expect.objectContaining({
+      state: "missing_info_resolved",
+      originalDecision: {
+        denialReasonRetrieved: true,
+        priorDecisionSummaryIncluded: true,
+        coveragePolicyLocated: true
+      }
+    }));
+  });
+
+  it("keeps legacy decision-retrieved appeal cases eligible for missing-info resolution", async () => {
+    const { workflow, denied } = await createDeniedAppealFixture("PA-260618-0902-LEGACY01");
+    const appeal = await workflow.startAppeal(denied.id, { expedited: false }, new Date("2026-06-18T16:00:00.000Z"));
+
+    await workflow.acknowledgeAppeal(appeal.id, { appealRequestAcknowledged: true });
+    await workflow.validateIntake(appeal.id, {
+      appealRequestPresent: true,
+      appellantAuthorized: true,
+      planMemberMatched: true,
+      requestedServiceMatched: true
+    });
+    await workflow.retrieveOriginalDecision(appeal.id, {
+      denialReasonRetrieved: true,
+      priorDecisionSummaryIncluded: true,
+      coveragePolicyLocated: true
+    });
+
+    await expect(workflow.resolveMissingInfo(appeal.id, {
+      missingInfoRequired: false,
+      missingInfoRequested: false,
+      missingInfoResolved: true
+    })).resolves.toEqual(expect.objectContaining({ state: "missing_info_resolved" }));
   });
 
   it("blocks settlement when acknowledgement is late without resetting packet readiness clock", async () => {
@@ -442,11 +487,6 @@ async function completeAppealPacket(
     appellantAuthorized: true,
     planMemberMatched: true,
     requestedServiceMatched: true
-  });
-  await workflow.retrieveOriginalDecision(appealId, {
-    denialReasonRetrieved: true,
-    priorDecisionSummaryIncluded: true,
-    coveragePolicyLocated: true
   });
   await workflow.resolveMissingInfo(appealId, {
     missingInfoRequired: false,

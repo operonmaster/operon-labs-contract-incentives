@@ -10,7 +10,7 @@ export function formatAppealState(state: AppealCaseState): string {
     case "intake_validated":
       return "Intake Validated";
     case "decision_retrieved":
-      return "Decision Retrieved";
+      return "Missing Info Pending";
     case "missing_info_resolved":
       return "Missing Info Resolved";
     case "packet_assembled":

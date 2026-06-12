@@ -46,11 +46,14 @@ describe("AppealsConsole", () => {
 
     expect(markup).toContain("Acknowledge Receipt");
     expect(markup).toContain("Validate Intake");
-    expect(markup).toContain("Retrieve Original PA Decision");
+    expect(markup).not.toContain("Retrieve Original PA Decision");
     expect(markup).toContain("Resolve Missing Info");
     expect(markup).toContain("Assemble Packet");
     expect(markup).toContain("Index Evidence");
-    expect(markup).toContain("Route Reviewer");
+    expect(markup).toContain("Submit Appeal Package");
+    expect(markup).not.toContain("Route Reviewer");
+    expect(markup).not.toContain("Reviewer queue selected");
+    expect(markup).not.toContain("Reviewer conflict check complete");
   });
 
   it("closes an opened existing appeal without reopening from row selection", async () => {
@@ -70,6 +73,39 @@ describe("AppealsConsole", () => {
     });
 
     expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it("shows linked PA member, request, and denial context in the appeal workflow", async () => {
+    const row = buildPriorAuthRow({
+      appealCase: buildAppealCase(),
+      billingCode: "J3490",
+      denialReasonCode: "PLAN_CRITERIA_NOT_MET",
+      patientDisplay: "Maya Chen"
+    });
+    stubAppealsFetch([row]);
+    const container = await renderAppealsConsole();
+
+    await waitForText(container, "Open appeal");
+    await act(async () => {
+      findButton(container, "Open appeal").click();
+    });
+
+    const dialogText = document.querySelector('[role="dialog"]')?.textContent ?? "";
+    expect(dialogText).toContain("Member");
+    expect(dialogText).toContain("Maya Chen");
+    expect(dialogText).toContain("Provider");
+    expect(dialogText).toContain("Lakeside Provider Admin");
+    expect(dialogText).toContain("Denial reason");
+    expect(dialogText).toContain("Plan Criteria Not Met");
+    expect(dialogText).not.toContain("Billing code");
+    expect(dialogText).not.toContain("PA submitted");
+    expect(dialogText).not.toContain("PA determined");
+    expect(dialogText).not.toContain("Appeal received");
+    expect(dialogText).not.toContain("Acknowledgement SLA");
+    expect(dialogText).not.toContain("Packet-readiness SLA");
+    expect(document.querySelector('[role="dialog"] .appeals-denial-reason-badge')?.textContent).toBe(
+      "Plan Criteria Not Met"
+    );
   });
 
   it("starts an appeal, updates the row, and can close and reopen the workflow", async () => {
@@ -102,6 +138,159 @@ describe("AppealsConsole", () => {
     });
 
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain(startedAppeal.id);
+  });
+
+  it("lets operators inspect completed appeal workflow steps and return to the current step", async () => {
+    const appealCase = buildAppealCase({
+      state: "intake_validated",
+      acknowledgedAt: "2026-06-18T16:30:00.000Z",
+      intake: {
+        appealRequestPresent: true,
+        appellantAuthorized: true,
+        planMemberMatched: true,
+        requestedServiceMatched: true
+      }
+    });
+    stubAppealsFetch([buildPriorAuthRow({ appealCase })]);
+    const container = await renderAppealsConsole();
+
+    await waitForText(container, "Open appeal");
+    await act(async () => {
+      findButton(container, "Open appeal").click();
+    });
+
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Resolve Missing Info");
+    expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Retrieve Original PA Decision");
+    expect(findButton(document.body, "Resolve missing info").disabled).toBe(true);
+
+    await act(async () => {
+      findButtonByLabel(document.body, "Validate Intake").click();
+    });
+
+    const reviewedText = document.querySelector('[role="dialog"]')?.textContent ?? "";
+    expect(reviewedText).toContain("Validate Intake");
+    expect(reviewedText).toContain("Appeal request present");
+    expect(reviewedText).toContain("Appellant authorized");
+    expect(reviewedText).toContain("Completed step");
+    expect(Array.from(document.querySelectorAll("button")).some((button) => button.textContent === "Validate intake")).toBe(
+      false
+    );
+
+    await act(async () => {
+      findButtonByLabel(document.body, "Resolve Missing Info").click();
+    });
+
+    expect(findButton(document.body, "Resolve missing info").disabled).toBe(true);
+  });
+
+  it("requires intake assertions before posting the selected evidence values", async () => {
+    const activeIntake = buildAppealCase({
+      state: "acknowledged",
+      acknowledgedAt: "2026-06-18T16:30:00.000Z"
+    });
+    const updated = buildAppealCase({
+      state: "intake_validated",
+      acknowledgedAt: activeIntake.acknowledgedAt,
+      intake: {
+        appealRequestPresent: true,
+        appellantAuthorized: true,
+        planMemberMatched: true,
+        requestedServiceMatched: true
+      }
+    });
+    const fetchMock = stubAppealsFetch([buildPriorAuthRow({ appealCase: activeIntake })], {
+      [`/api/appeals/cases/${encodeURIComponent(activeIntake.id)}/intake`]: updated
+    });
+    const container = await renderAppealsConsole();
+
+    await waitForText(container, "Open appeal");
+    await act(async () => {
+      findButton(container, "Open appeal").click();
+    });
+
+    expect(findButton(document.body, "Validate intake").disabled).toBe(true);
+
+    for (const label of [
+      "Appeal request present",
+      "Appellant authorized",
+      "Member match confirmed",
+      "Requested service match confirmed"
+    ]) {
+      await act(async () => {
+        findCheckboxByLabel(document.body, label).click();
+      });
+    }
+
+    expect(findButton(document.body, "Validate intake").disabled).toBe(false);
+    await act(async () => {
+      findButton(document.body, "Validate intake").click();
+    });
+
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({
+      appealRequestPresent: true,
+      appellantAuthorized: true,
+      planMemberMatched: true,
+      requestedServiceMatched: true
+    });
+    await waitForText(document.body, "Resolve Missing Info");
+  });
+
+  it("indexes appeal evidence without exposing PHI metadata as an operator assertion", async () => {
+    const activeIndex = buildAppealCase({
+      state: "packet_assembled",
+      packet: {
+        requiredDocumentsPresent: true,
+        clinicalRationaleIncluded: true,
+        policyCitationIncluded: true,
+        evidenceIndexComplete: false,
+        qualityAuditPassed: true,
+        noReworkRequired: true
+      }
+    });
+    const updated = buildAppealCase({
+      state: "evidence_indexed",
+      packet: {
+        ...activeIndex.packet,
+        evidenceIndexComplete: true
+      }
+    });
+    const fetchMock = stubAppealsFetch([buildPriorAuthRow({ appealCase: activeIndex })], {
+      [`/api/appeals/cases/${encodeURIComponent(activeIndex.id)}/evidence-index`]: updated
+    });
+    const container = await renderAppealsConsole();
+
+    await waitForText(container, "Open appeal");
+    await act(async () => {
+      findButton(container, "Open appeal").click();
+    });
+
+    const dialogText = document.querySelector('[role="dialog"]')?.textContent ?? "";
+    expect(dialogText).toContain("Evidence index complete");
+    expect(dialogText).not.toContain("Payment metadata excludes PHI");
+    expect(findButton(document.body, "Index evidence").disabled).toBe(true);
+
+    await act(async () => {
+      findCheckboxByLabel(document.body, "Evidence index complete").click();
+    });
+
+    expect(findButton(document.body, "Index evidence").disabled).toBe(false);
+    await act(async () => {
+      findButton(document.body, "Index evidence").click();
+    });
+
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({
+      evidenceIndexComplete: true,
+      phiSafeForPaymentMetadata: true
+    });
+
+    await waitForText(document.body, "Submit Appeal Package");
+    await act(async () => {
+      findButtonByLabel(document.body, "Index Evidence").click();
+    });
+
+    const completedStepText = document.querySelector('[role="dialog"]')?.textContent ?? "";
+    expect(completedStepText).toContain("Evidence index complete");
+    expect(completedStepText).not.toContain("Payment metadata excludes PHI");
   });
 
   it("only exposes the Start appeal action for denied prior authorizations", async () => {
@@ -164,8 +353,21 @@ describe("AppealsConsole", () => {
     await act(async () => {
       findButton(container, "Open appeal").click();
     });
+    const dialogText = document.querySelector('[role="dialog"]')?.textContent ?? "";
+    expect(dialogText).toContain("Submit Appeal Package");
+    expect(dialogText).toContain("Appeal packet complete");
+    expect(dialogText).toContain("Submission confirmation captured");
+    expect(dialogText).not.toContain("Route Reviewer");
+    expect(dialogText).not.toContain("Reviewer queue selected");
+    expect(dialogText).not.toContain("Reviewer conflict check complete");
+
+    for (const label of ["Appeal packet complete", "Submission confirmation captured"]) {
+      await act(async () => {
+        findCheckboxByLabel(document.body, label).click();
+      });
+    }
     await act(async () => {
-      findButton(document.body, "Route reviewer").click();
+      findButton(document.body, "Submit package").click();
     });
 
     await waitForText(document.body, "Appeal packet ready");
@@ -206,7 +408,7 @@ function buildAppealCase(overrides: Partial<AppealCase> = {}): AppealCase {
     expedited: false,
     intake: { appealRequestPresent: false, appellantAuthorized: false, planMemberMatched: false, requestedServiceMatched: false },
     originalDecision: { denialReasonRetrieved: false, priorDecisionSummaryIncluded: false, coveragePolicyLocated: false },
-    missingInfo: { missingInfoRequired: false, missingInfoRequested: false, missingInfoResolved: true },
+    missingInfo: { missingInfoRequired: false, missingInfoRequested: false, missingInfoResolved: false },
     packet: { requiredDocumentsPresent: false, clinicalRationaleIncluded: false, policyCitationIncluded: false, evidenceIndexComplete: false, qualityAuditPassed: false, noReworkRequired: false },
     routing: { reviewerQueueSelected: false, reviewerConflictCheckComplete: false, finalDecisionOutsideIncentive: true },
     updatedAt: "2026-06-18T16:00:00.000Z",
@@ -218,24 +420,40 @@ function buildPriorAuthRow({
   appealCase,
   canStartAppeal = false,
   eligibilityStatus,
+  billingCode = "J3490",
+  denialReasonCode = "PLAN_CRITERIA_NOT_MET",
   outcomeStatus = "denied",
+  patientDisplay = "Maya Chen",
   state = "determined",
   umRequestId = "PA-260526-0900-DENIED01"
 }: {
   appealCase: AppealCase | null;
   canStartAppeal?: boolean;
   eligibilityStatus?: AppealsPriorAuthRow["eligibilityStatus"];
+  billingCode?: string;
+  denialReasonCode?: string | null;
   outcomeStatus?: AppealsPriorAuthRow["outcomeStatus"];
+  patientDisplay?: string;
   state?: AppealsPriorAuthRow["state"];
   umRequestId?: string;
 }): AppealsPriorAuthRow {
   return {
     umRequest: {
       id: umRequestId,
+      patientDisplay,
+      planDisplay: "Acme Health PPO",
+      providerDisplay: "Lakeside Provider Admin",
       requestType: "pharmacy_benefit",
+      serviceLabel: "Humira (adalimumab)",
+      serviceCode: "humira_adalimumab",
+      billingCode,
       state,
       outcomeStatus,
-      submittedAt: "2026-06-18T15:00:00.000Z"
+      submittedAt: "2026-06-18T15:00:00.000Z",
+      determinedAt: state === "determined" ? "2026-06-18T15:35:00.000Z" : null,
+      clinicalReview: {
+        denialReasonCode: outcomeStatus === "denied" ? denialReasonCode : null
+      }
     } as AppealsPriorAuthRow["umRequest"],
     umRequestId,
     planDisplay: "Acme Health PPO",
@@ -308,4 +526,29 @@ function findButton(container: HTMLElement, text: string): HTMLButtonElement {
   }
 
   return button;
+}
+
+function findButtonByLabel(container: HTMLElement, label: string): HTMLButtonElement {
+  const button = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
+    (candidate) => candidate.getAttribute("aria-label") === label
+  );
+
+  if (!button) {
+    throw new Error(`Button not found by label: ${label}`);
+  }
+
+  return button;
+}
+
+function findCheckboxByLabel(container: HTMLElement, label: string): HTMLInputElement {
+  const labelElement = Array.from(container.querySelectorAll<HTMLLabelElement>("label")).find((candidate) =>
+    candidate.textContent?.includes(label)
+  );
+  const checkbox = labelElement?.querySelector<HTMLInputElement>('input[type="checkbox"]');
+
+  if (!checkbox) {
+    throw new Error(`Checkbox not found by label: ${label}`);
+  }
+
+  return checkbox;
 }

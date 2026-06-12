@@ -35,9 +35,8 @@ export function AppealsConsole() {
     errorMessage: "Unable to load appeal prior authorization rows"
   });
 
-  const workflowCase = workflowAppealId
-    ? rows.find((row) => row.appealCase?.id === workflowAppealId)?.appealCase ?? null
-    : null;
+  const workflowRow = workflowAppealId ? rows.find((row) => row.appealCase?.id === workflowAppealId) ?? null : null;
+  const workflowCase = workflowRow?.appealCase ?? null;
 
   async function startAppeal(row: AppealsPriorAuthRow, button: HTMLButtonElement) {
     setStartingUmRequestId(row.umRequestId);
@@ -198,7 +197,12 @@ export function AppealsConsole() {
       </section>
 
       {workflowCase ? (
-        <AppealsWorkflowModal appealCase={workflowCase} onClose={closeWorkflowModal} onUpdated={handleUpdated} />
+        <AppealsWorkflowModal
+          appealCase={workflowCase}
+          priorAuthRow={workflowRow ?? undefined}
+          onClose={closeWorkflowModal}
+          onUpdated={handleUpdated}
+        />
       ) : null}
     </LabsPageShell>
   );
