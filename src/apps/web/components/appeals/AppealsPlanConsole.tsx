@@ -13,10 +13,8 @@ import {
   formatAppealState,
   formatBusinessPolicyStatus,
   formatPaymentPolicyStatus,
-  formatPaymentStatus,
   formatSlaStatus,
   paymentPolicyStatusBadgeVariant,
-  paymentStatusBadgeVariant,
   slaBadgeVariant
 } from "./appeals-formatters";
 
@@ -75,20 +73,18 @@ export function AppealsPlanConsole({ initialAppealId = null }: { initialAppealId
             <thead>
               <tr>
                 <th>Appeal ID</th>
-                <th>Linked PA</th>
                 <th>Submitter</th>
                 <th>State</th>
                 <th className="badge-cell">Packet SLA</th>
                 <th className="badge-cell">Business Policy</th>
                 <th className="badge-cell">Payment Policy</th>
-                <th className="badge-cell">Settlement</th>
                 <th>Action</th>
               </tr>
             </thead>
             <tbody>
               {initialLoading ? (
                 <tr className="loading-row">
-                  <td colSpan={9}>
+                  <td colSpan={7}>
                     <div className="loading-indicator" role="status" aria-live="polite">
                       <span className="loading-dot" aria-hidden="true" />
                       <span>Loading appeals plan audit rows</span>
@@ -99,7 +95,6 @@ export function AppealsPlanConsole({ initialAppealId = null }: { initialAppealId
               {rows.map((row) => (
                 <tr key={row.appealId} className={row.appealId === selectedAppealId ? "selected" : ""}>
                   <td className="mono-cell">{row.appealId}</td>
-                  <td className="mono-cell">{row.umRequestId}</td>
                   <td>{row.submitterId}</td>
                   <td className="badge-cell">
                     <LabsBadge variant={appealStateBadgeVariant(row.state)}>{formatAppealState(row.state)}</LabsBadge>
@@ -119,11 +114,6 @@ export function AppealsPlanConsole({ initialAppealId = null }: { initialAppealId
                       {formatPaymentPolicyStatus(row.paymentPolicyStatus)}
                     </LabsBadge>
                   </td>
-                  <td className="badge-cell">
-                    <LabsBadge variant={paymentStatusBadgeVariant(row.paymentStatus)}>
-                      {formatPaymentStatus(row.paymentStatus)}
-                    </LabsBadge>
-                  </td>
                   <td>
                     <LabsButton
                       variant="row"
@@ -139,7 +129,7 @@ export function AppealsPlanConsole({ initialAppealId = null }: { initialAppealId
               ))}
               {!initialLoading && rows.length === 0 ? (
                 <tr>
-                  <td className="empty-state" colSpan={9}>
+                  <td className="empty-state" colSpan={7}>
                     No appeal packet events have been submitted to the plan audit log.
                   </td>
                 </tr>

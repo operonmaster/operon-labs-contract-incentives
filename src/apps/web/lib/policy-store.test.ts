@@ -24,9 +24,15 @@ describe("policy store", () => {
 
     expect(policies).toHaveLength(4);
     expect(delegatePolicies).toHaveLength(4);
-    expect(specialtyRxPolicies).toHaveLength(1);
-    expect(appealsPolicies).toHaveLength(1);
-    expect(appealsPolicies).toEqual([
+    expect(specialtyRxPolicies).toHaveLength(2);
+    expect(appealsPolicies).toHaveLength(4);
+    expect(appealsPolicies.map((policy) => policy.policyId)).toEqual([
+      "appeals-packet-quality-v1",
+      "appeals-acme-riverside-packet-quality-v1",
+      "appeals-summit-packet-quality-v1",
+      "appeals-summit-riverside-packet-quality-v1"
+    ]);
+    expect(appealsPolicies).toEqual(expect.arrayContaining([
       expect.objectContaining({
         policyId: "appeals-packet-quality-v1",
         evaluationType: "appeals_packet_quality",
@@ -49,33 +55,87 @@ describe("policy store", () => {
           recipientWalletId: "0.0.9049549",
           requiresHumanApproval: false
         }
-      })
-    ]);
-    expect(specialtyRxPolicies).toEqual([
+      }),
       expect.objectContaining({
-        policyId: "specialty-rx-fulfillment-sla-v1",
-        evaluationType: "specialty_rx_fulfillment_sla",
+        policyId: "appeals-acme-riverside-packet-quality-v1",
+        evaluationType: "appeals_packet_quality",
         contractPair: {
           planId: "acme-health-ppo",
           planName: "Acme Health PPO",
-          providerId: "atlas-specialty-rx",
-          providerName: "Atlas Specialty Rx"
-        },
-        incentiveScope: {
-          eligibleRequestTypes: ["pharmacy_benefit"]
-        },
-        payout: {
-          token: "HBAR",
-          amountPerEligibleRequest: 5,
-          monthlyCap: 700
-        },
-        settlement: {
-          mode: "auto",
-          recipientWalletId: "0.0.9049549",
-          requiresHumanApproval: false
+          providerId: "riverside-provider-admin",
+          providerName: "Riverside Provider Admin"
+        }
+      }),
+      expect.objectContaining({
+        policyId: "appeals-summit-packet-quality-v1",
+        evaluationType: "appeals_packet_quality",
+        contractPair: {
+          planId: "summit-health-hmo",
+          planName: "Summit Health HMO",
+          providerId: "lakeside-provider-admin",
+          providerName: "Lakeside Provider Admin"
+        }
+      }),
+      expect.objectContaining({
+        policyId: "appeals-summit-riverside-packet-quality-v1",
+        evaluationType: "appeals_packet_quality",
+        contractPair: {
+          planId: "summit-health-hmo",
+          planName: "Summit Health HMO",
+          providerId: "riverside-provider-admin",
+          providerName: "Riverside Provider Admin"
         }
       })
+    ]));
+    expect(specialtyRxPolicies.map((policy) => policy.policyId).sort()).toEqual([
+      "specialty-rx-fulfillment-sla-v1",
+      "specialty-rx-summit-fulfillment-sla-v1"
     ]);
+    expect(specialtyRxPolicies).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          policyId: "specialty-rx-fulfillment-sla-v1",
+          evaluationType: "specialty_rx_fulfillment_sla",
+          contractPair: {
+            planId: "acme-health-ppo",
+            planName: "Acme Health PPO",
+            providerId: "atlas-specialty-rx",
+            providerName: "Atlas Specialty Rx"
+          },
+          incentiveScope: {
+            eligibleRequestTypes: ["pharmacy_benefit"]
+          },
+          payout: {
+            token: "HBAR",
+            amountPerEligibleRequest: 5,
+            monthlyCap: 700
+          },
+          settlement: {
+            mode: "auto",
+            recipientWalletId: "0.0.9049549",
+            requiresHumanApproval: false
+          }
+        }),
+        expect.objectContaining({
+          policyId: "specialty-rx-summit-fulfillment-sla-v1",
+          evaluationType: "specialty_rx_fulfillment_sla",
+          contractPair: {
+            planId: "summit-health-hmo",
+            planName: "Summit Health HMO",
+            providerId: "atlas-specialty-rx",
+            providerName: "Atlas Specialty Rx"
+          },
+          incentiveScope: {
+            eligibleRequestTypes: ["pharmacy_benefit"]
+          },
+          payout: {
+            token: "HBAR",
+            amountPerEligibleRequest: 5,
+            monthlyCap: 700
+          }
+        })
+      ])
+    );
     expect(delegatePolicies.map((policy) => policy.policyId).sort()).toEqual([
       "delegate-um-acme-outpatient-sla-bonus-v1",
       "delegate-um-sla-bonus-v1",
@@ -176,7 +236,7 @@ describe("policy store", () => {
       ])
     );
     expect(policies.every((policy) => !("displayName" in policy))).toBe(true);
-    expect((await firestore.collection("incentivePolicies").get()).docs).toHaveLength(10);
+    expect((await firestore.collection("incentivePolicies").get()).docs).toHaveLength(14);
     expect(firestore.collectionNames()).toEqual(expect.arrayContaining(["incentivePolicies"]));
     expect(firestore.collectionNames()).not.toEqual(expect.arrayContaining(["policies", "policyYaml"]));
   });
@@ -252,6 +312,13 @@ describe("policy store", () => {
       requestType: "pharmacy_benefit",
       submittedAt: "2026-05-25T12:00:00.000Z"
     });
+    const summitSpecialtyRx = await store.findPolicy({
+      evaluationType: "specialty_rx_fulfillment_sla",
+      planId: "summit-health-hmo",
+      providerId: "atlas-specialty-rx",
+      requestType: "pharmacy_benefit",
+      submittedAt: "2026-05-25T12:00:00.000Z"
+    });
     const appealsPharmacy = await store.findPolicies({
       evaluationType: "appeals_packet_quality",
       planId: "acme-health-ppo",
@@ -264,11 +331,23 @@ describe("policy store", () => {
       providerId: "lakeside-provider-admin",
       requestType: "outpatient_service"
     });
-    const appealsUnsupportedPlan = await store.findPolicies({
+    const appealsSummitPharmacy = await store.findPolicies({
       evaluationType: "appeals_packet_quality",
       planId: "summit-health-hmo",
       providerId: "lakeside-provider-admin",
       requestType: "pharmacy_benefit"
+    });
+    const appealsAcmeRiverside = await store.findPolicies({
+      evaluationType: "appeals_packet_quality",
+      planId: "acme-health-ppo",
+      providerId: "riverside-provider-admin",
+      requestType: "pharmacy_benefit"
+    });
+    const appealsSummitRiversideOutpatient = await store.findPolicies({
+      evaluationType: "appeals_packet_quality",
+      planId: "summit-health-hmo",
+      providerId: "riverside-provider-admin",
+      requestType: "outpatient_service"
     });
     const appealsUnsupportedProvider = await store.findPolicies({
       evaluationType: "appeals_packet_quality",
@@ -294,9 +373,14 @@ describe("policy store", () => {
     expect(summitPharmacyDelegate?.policyId).toBe("delegate-um-summit-pharmacy-sla-bonus-v1");
     expect(summitOutpatientDelegate?.policyId).toBe("delegate-um-summit-outpatient-sla-bonus-v1");
     expect(specialtyRx?.policyId).toBe("specialty-rx-fulfillment-sla-v1");
+    expect(summitSpecialtyRx?.policyId).toBe("specialty-rx-summit-fulfillment-sla-v1");
     expect(appealsPharmacy.map((policy) => policy.policyId)).toEqual(["appeals-packet-quality-v1"]);
     expect(appealsOutpatient.map((policy) => policy.policyId)).toEqual(["appeals-packet-quality-v1"]);
-    expect(appealsUnsupportedPlan).toEqual([]);
+    expect(appealsSummitPharmacy.map((policy) => policy.policyId)).toEqual(["appeals-summit-packet-quality-v1"]);
+    expect(appealsAcmeRiverside.map((policy) => policy.policyId)).toEqual(["appeals-acme-riverside-packet-quality-v1"]);
+    expect(appealsSummitRiversideOutpatient.map((policy) => policy.policyId)).toEqual([
+      "appeals-summit-riverside-packet-quality-v1"
+    ]);
     expect(appealsUnsupportedProvider).toEqual([]);
     expect(appealsUnsupportedRequestType).toEqual([]);
     expect(missing).toBeNull();
@@ -513,7 +597,7 @@ describe("policy store", () => {
         }
       })
     ]));
-    expect(docs).toHaveLength(10);
+    expect(docs).toHaveLength(14);
   });
 
   it("stores either included or excluded scope lists, not both, for request types and service codes", async () => {

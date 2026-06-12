@@ -18,12 +18,22 @@ import {
 } from "./specialty-rx-formatters";
 import { useIncentiveWorklist } from "../use-incentive-worklist";
 
-export function SpecialtyRxPlanConsole({
-  initialFulfillmentCaseId = null
-}: {
-  initialFulfillmentCaseId?: string | null;
-}) {
-  const requestedFulfillmentCaseId = initialFulfillmentCaseId;
+export function formatBusinessPolicyTableStatus(status: SpecialtyRxPlanAuditRow["businessPolicyStatus"]): string | null {
+  return status === null ? null : formatBusinessPolicyStatus(status);
+}
+
+export function formatPaymentPolicyTableStatus(status: SpecialtyRxPlanAuditRow["paymentPolicyStatus"]): string | null {
+  return status === null ? null : formatPaymentPolicyStatus(status);
+}
+
+export function canViewSpecialtyRxPlanDetails({
+  businessPolicyStatus,
+  paymentPolicyStatus
+}: Pick<SpecialtyRxPlanAuditRow, "businessPolicyStatus" | "paymentPolicyStatus">): boolean {
+  return businessPolicyStatus !== null && paymentPolicyStatus !== null;
+}
+
+export function SpecialtyRxPlanConsole() {
   const [detailsFulfillmentCaseId, setDetailsFulfillmentCaseId] = useState<string | null>(null);
   const {
     rows,
@@ -36,8 +46,7 @@ export function SpecialtyRxPlanConsole({
   } = useIncentiveWorklist<SpecialtyRxPlanAuditRow>({
     endpoint: "/api/specialty-rx/plan",
     getRowId: (row) => row.fulfillmentCaseId,
-    errorMessage: "Unable to load specialty fulfillment plan rows",
-    requestedId: requestedFulfillmentCaseId
+    errorMessage: "Unable to load specialty fulfillment plan rows"
   });
 
   const detailsRow = rows.find((row) => row.fulfillmentCaseId === detailsFulfillmentCaseId) ?? null;
@@ -48,10 +57,7 @@ export function SpecialtyRxPlanConsole({
         <Link className="back" href="/">
           Back to demos
         </Link>
-        <SpecialtyRxUseCaseNavigation
-          activeView="plan"
-          fulfillmentCaseId={selectedFulfillmentCaseId ?? requestedFulfillmentCaseId}
-        />
+        <SpecialtyRxUseCaseNavigation activeView="plan" />
       </div>
 
       <LabsHero compact eyebrow="Health plan specialty fulfillment audit" title="Specialty fulfillment SLA events">
@@ -80,7 +86,6 @@ export function SpecialtyRxPlanConsole({
             <thead>
               <tr>
                 <th>Fulfillment case ID</th>
-                <th>Linked PA</th>
                 <th>Pharmacy</th>
                 <th>State</th>
                 <th className="badge-cell">Fulfillment SLA</th>
@@ -92,7 +97,7 @@ export function SpecialtyRxPlanConsole({
             <tbody>
               {initialLoading ? (
                 <tr className="loading-row">
-                  <td colSpan={8}>
+                  <td colSpan={7}>
                     <div className="loading-indicator" role="status" aria-live="polite">
                       <span className="loading-dot" aria-hidden="true" />
                       <span>Loading specialty fulfillment plan audit rows</span>
@@ -106,7 +111,6 @@ export function SpecialtyRxPlanConsole({
                   className={row.fulfillmentCaseId === selectedFulfillmentCaseId ? "selected" : ""}
                 >
                   <td className="mono-cell">{row.fulfillmentCaseId}</td>
-                  <td className="mono-cell">{row.umRequestId}</td>
                   <td>{row.pharmacyDisplay}</td>
                   <td className="badge-cell">
                     <LabsBadge variant={fulfillmentStateBadgeVariant(row.state)}>
@@ -118,32 +122,26 @@ export function SpecialtyRxPlanConsole({
                       {formatSlaStatus(row.fulfillmentSlaStatus)}
                     </LabsBadge>
                   </td>
-                  <td className="badge-cell">
-                    <LabsBadge variant={businessPolicyStatusBadgeVariant(row.businessPolicyStatus)}>
-                      {formatBusinessPolicyStatus(row.businessPolicyStatus)}
-                    </LabsBadge>
-                  </td>
-                  <td className="badge-cell">
-                    <LabsBadge variant={paymentPolicyStatusBadgeVariant(row.paymentPolicyStatus)}>
-                      {formatPaymentPolicyStatus(row.paymentPolicyStatus)}
-                    </LabsBadge>
-                  </td>
+                  <BusinessPolicyStatusCell status={row.businessPolicyStatus} />
+                  <PaymentPolicyStatusCell status={row.paymentPolicyStatus} />
                   <td>
-                    <LabsButton
-                      variant="row"
-                      onClick={() => {
-                        setSelectedFulfillmentCaseId(row.fulfillmentCaseId);
-                        setDetailsFulfillmentCaseId(row.fulfillmentCaseId);
-                      }}
-                    >
-                      View details
-                    </LabsButton>
+                    {canViewSpecialtyRxPlanDetails(row) ? (
+                      <LabsButton
+                        variant="row"
+                        onClick={() => {
+                          setSelectedFulfillmentCaseId(row.fulfillmentCaseId);
+                          setDetailsFulfillmentCaseId(row.fulfillmentCaseId);
+                        }}
+                      >
+                        View details
+                      </LabsButton>
+                    ) : null}
                   </td>
                 </tr>
               ))}
               {!initialLoading && rows.length === 0 ? (
                 <tr>
-                  <td className="empty-state" colSpan={8}>
+                  <td className="empty-state" colSpan={7}>
                     No specialty fulfillment events have been submitted to the plan audit log.
                   </td>
                 </tr>
@@ -155,5 +153,25 @@ export function SpecialtyRxPlanConsole({
 
       {detailsRow ? <SpecialtyRxPlanDetailsModal row={detailsRow} onClose={() => setDetailsFulfillmentCaseId(null)} /> : null}
     </LabsPageShell>
+  );
+}
+
+function BusinessPolicyStatusCell({ status }: { status: SpecialtyRxPlanAuditRow["businessPolicyStatus"] }) {
+  const label = formatBusinessPolicyTableStatus(status);
+
+  return (
+    <td className="badge-cell">
+      {label ? <LabsBadge variant={businessPolicyStatusBadgeVariant(status)}>{label}</LabsBadge> : null}
+    </td>
+  );
+}
+
+function PaymentPolicyStatusCell({ status }: { status: SpecialtyRxPlanAuditRow["paymentPolicyStatus"] }) {
+  const label = formatPaymentPolicyTableStatus(status);
+
+  return (
+    <td className="badge-cell">
+      {label ? <LabsBadge variant={paymentPolicyStatusBadgeVariant(status)}>{label}</LabsBadge> : null}
+    </td>
   );
 }

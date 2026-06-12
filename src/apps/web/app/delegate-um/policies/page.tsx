@@ -16,13 +16,7 @@ export const metadata: Metadata = {
   description: "Read-only delegate UM SLA bonus and Hedera Agent Kit policy catalog for delegated UM determinations."
 };
 
-export default async function DelegateUmPoliciesPage({
-  searchParams
-}: {
-  searchParams?: Promise<{ umRequestId?: string }>;
-}) {
-  const params = await searchParams;
-  const initialUmRequestId = params?.umRequestId ?? null;
+export default async function DelegateUmPoliciesPage() {
   const businessPolicies = await policyStore.listPolicies(delegateUmSlaBonusBusinessPolicyType);
   const paymentPolicies = await paymentPolicyStore.listPolicies();
 
@@ -34,9 +28,8 @@ export default async function DelegateUmPoliciesPage({
       eyebrow="Delegate policy catalog"
       paymentPolicies={paymentPolicies.map(buildHederaAgentKitPlanPolicyCards)}
       paymentPolicyDescription="Payment policies remain plan-level Hedera Agent Kit settlement controls selected from centrally maintained payment policy blocks."
-      initialUmRequestId={initialUmRequestId}
       title="Delegate UM SLA Bonus Policies"
-      useCaseNavigation={<DelegateUseCaseNavigation activeView="policies" umRequestId={initialUmRequestId} />}
+      useCaseNavigation={<DelegateUseCaseNavigation activeView="policies" />}
     />
   );
 }

@@ -190,8 +190,28 @@ describe("policy view model", () => {
       .filter((policy) => policy.evaluationType === specialtyRxFulfillmentBusinessPolicyType)
       .flatMap(buildBusinessPolicyCards);
 
-    expect(cards).toHaveLength(1);
-    expect(cards[0]?.title).toBe("Specialty Rx Fulfillment SLA");
+    expect(cards).toHaveLength(2);
+    expect(cards.map((card) => card.id).sort()).toEqual([
+      "specialty-rx-fulfillment-sla-v1",
+      "specialty-rx-summit-fulfillment-sla-v1"
+    ]);
+    expect(cards.map((card) => card.title)).toEqual([
+      "Specialty Rx Fulfillment SLA",
+      "Specialty Rx Fulfillment SLA"
+    ]);
+    expect(cards).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "specialty-rx-summit-fulfillment-sla-v1",
+          previewItems: expect.arrayContaining([
+            { label: "Plan", value: "Summit Health HMO" },
+            { label: "Pharmacy", value: "Atlas Specialty Rx" },
+            { label: "Eligible request types", value: "Pharmacy Benefit" },
+            { label: "Payout", value: "5 HBAR" }
+          ])
+        })
+      ])
+    );
     expect(cards[0]?.detailSections.flatMap((section) => section.items).join(" ")).toContain("Cold-chain evidence");
     expect(cards[0]?.detailSections.flatMap((section) => section.items)).toContain(
       "Delivery closure evidence recorded: Yes"

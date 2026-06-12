@@ -12,8 +12,6 @@ import {
   appealStateBadgeVariant,
   formatAppealEligibility,
   formatAppealState,
-  formatPriorAuthOutcome,
-  formatPriorAuthState,
   formatRequestType
 } from "./appeals-formatters";
 
@@ -129,8 +127,6 @@ export function AppealsConsole() {
                 <th>Plan</th>
                 <th>Request type</th>
                 <th>Drug/service</th>
-                <th>PA state</th>
-                <th>PA outcome</th>
                 <th>Appeal status</th>
                 <th>Action</th>
               </tr>
@@ -138,7 +134,7 @@ export function AppealsConsole() {
             <tbody>
               {initialLoading ? (
                 <tr className="loading-row">
-                  <td colSpan={8}>
+                  <td colSpan={6}>
                     <div className="loading-indicator" role="status" aria-live="polite">
                       <span className="loading-dot" aria-hidden="true" />
                       <span>Loading appeal prior authorization rows</span>
@@ -152,8 +148,6 @@ export function AppealsConsole() {
                   <td>{row.planDisplay}</td>
                   <td>{formatRequestType(row.requestType)}</td>
                   <td>{row.serviceLabel}</td>
-                  <td>{formatPriorAuthState(row.state)}</td>
-                  <td>{formatPriorAuthOutcome(row.outcomeStatus)}</td>
                   <td className="badge-cell">
                     {row.appealCase ? (
                       <LabsBadge variant={appealStateBadgeVariant(row.appealCase.state)}>
@@ -193,7 +187,7 @@ export function AppealsConsole() {
               ))}
               {!initialLoading && rows.length === 0 ? (
                 <tr>
-                  <td className="empty-state" colSpan={8}>
+                  <td className="empty-state" colSpan={6}>
                     No prior authorizations are available for appeals.
                   </td>
                 </tr>

@@ -14,6 +14,10 @@ export function formatRequestType(requestType: UMRequest["requestType"]) {
   }
 }
 
+export function formatDelegateVendorDisplay(delegateVendorId: string) {
+  return delegateVendorId === "northstar-um" ? "Northstar UM" : delegateVendorId;
+}
+
 export function formatUmState(state: UMRequest["state"]) {
   switch (state) {
     case "pend":
@@ -31,6 +35,18 @@ export function formatOutcomeStatus(outcomeStatus: UMRequest["outcomeStatus"]) {
   }
 
   return outcomeStatus === "approved" ? "Approved" : "Denied";
+}
+
+export function outcomeStatusBadgeVariant(outcomeStatus: UMRequest["outcomeStatus"]): "success" | "warning" | "neutral" {
+  if (outcomeStatus === "approved") {
+    return "success";
+  }
+
+  if (outcomeStatus === "denied") {
+    return "warning";
+  }
+
+  return "neutral";
 }
 
 export function formatSlaStatus(row: Pick<DelegatePlanAuditRow, "slaStatus" | "timeRemainingMs">) {

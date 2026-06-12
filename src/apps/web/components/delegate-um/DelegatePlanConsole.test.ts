@@ -6,7 +6,14 @@ import { describe, expect, it } from "vitest";
 import type { DelegatePlanAuditRow } from "../../lib/delegate-um-workflow";
 import type { PaymentPolicyControlEvidence } from "../../lib/payment-policy-evidence-store";
 import { DelegatePlanAuditDetailsModal } from "./DelegatePlanAuditDetailsModal";
-import { DelegatePlanConsole } from "./DelegatePlanConsole";
+import {
+  canViewDelegatePlanDetails,
+  DelegatePlanConsole,
+  formatDelegateBusinessPolicyTableStatus,
+  formatDelegatePaymentPolicyTableStatus
+} from "./DelegatePlanConsole";
+import { DelegateUseCaseNavigation } from "./DelegateUseCaseNavigation";
+import { formatDelegateVendorDisplay, outcomeStatusBadgeVariant } from "./delegate-formatters";
 
 describe("DelegatePlanConsole source", () => {
   it("shows plan SLA and outcome status fields from the delegate plan API", () => {
@@ -21,9 +28,15 @@ describe("DelegatePlanConsole source", () => {
     expect(source).toContain("<th>Action</th>");
     expect(source).toContain('<th className="badge-cell">Business Policy</th>');
     expect(source).toContain('<th className="badge-cell">Payment Policy</th>');
-    expect(source).toContain("formatBusinessPolicyStatus(row.businessPolicyStatus)");
-    expect(source).toContain("businessPolicyStatusBadgeVariant(row.businessPolicyStatus)");
-    expect(source).toContain("paymentStatusBadgeVariant(row.paymentPolicyStatus)");
+    expect(source).toContain("formatDelegateVendorDisplay(row.delegateVendorId)");
+    expect(source).toContain("outcomeStatusBadgeVariant(row.outcomeStatus)");
+    expect(source).toContain("formatDelegateBusinessPolicyTableStatus");
+    expect(source).toContain("businessPolicyStatusBadgeVariant(status)");
+    expect(source).toContain("paymentStatusBadgeVariant(status)");
+    expect(source).toContain("colSpan={7}");
+    expect(source).not.toContain("colSpan={8}");
+    expect(source).not.toContain("<th>Request type</th>");
+    expect(source).not.toContain("formatRequestType(row.requestType)");
     expect(source).not.toContain("<th>State</th>");
     expect(source).not.toContain("<td>{formatUmState(row.state)}</td>");
     expect(source).not.toContain('className="panel detail-panel"');
@@ -36,7 +49,44 @@ describe("DelegatePlanConsole source", () => {
     expect(source).toContain("useIncentiveWorklist");
     expect(source).toContain('endpoint: "/api/delegate-um/plan"');
     expect(source).toContain("getRowId: (row) => row.umRequestId");
-    expect(source).toContain("requestedId: requestedUmRequestId");
+    expect(source).not.toContain("requestedId:");
+  });
+
+  it("keeps request ids out of Delegate UM plan navigation URLs", () => {
+    const navSource = readFileSync(path.join(process.cwd(), "src/apps/web/components/delegate-um/DelegateUseCaseNavigation.tsx"), "utf8");
+    const planPageSource = readFileSync(path.join(process.cwd(), "src/apps/web/app/delegate-um/plan/page.tsx"), "utf8");
+    const markup = renderToStaticMarkup(createElement(DelegateUseCaseNavigation, { activeView: "vendor" }));
+
+    expect(navSource).not.toContain('param: "umRequestId"');
+    expect(navSource).not.toContain("contextId=");
+    expect(planPageSource).not.toContain("searchParams");
+    expect(planPageSource).not.toContain("initialUmRequestId");
+    expect(markup).toContain('href="/delegate-um/plan"');
+    expect(markup).not.toContain("umRequestId=");
+  });
+
+  it("leaves unevaluated business and payment policy cells empty in the plan table", () => {
+    expect(formatDelegateBusinessPolicyTableStatus(null)).toBeNull();
+    expect(formatDelegatePaymentPolicyTableStatus(null)).toBeNull();
+    expect(formatDelegateBusinessPolicyTableStatus("approved")).toBe("Approved");
+    expect(formatDelegateBusinessPolicyTableStatus("rejected")).toBe("Rejected");
+    expect(formatDelegatePaymentPolicyTableStatus("paid")).toBe("Paid");
+    expect(formatDelegatePaymentPolicyTableStatus("blocked")).toBe("Blocked");
+  });
+
+  it("formats delegate plan table vendor and outcome values for display", () => {
+    expect(formatDelegateVendorDisplay("northstar-um")).toBe("Northstar UM");
+    expect(formatDelegateVendorDisplay("other-delegate")).toBe("other-delegate");
+    expect(outcomeStatusBadgeVariant("approved")).toBe("success");
+    expect(outcomeStatusBadgeVariant("denied")).toBe("warning");
+    expect(outcomeStatusBadgeVariant(null)).toBe("neutral");
+  });
+
+  it("shows delegate plan details only after both policies have executed", () => {
+    expect(canViewDelegatePlanDetails({ businessPolicyStatus: null, paymentPolicyStatus: null })).toBe(false);
+    expect(canViewDelegatePlanDetails({ businessPolicyStatus: "approved", paymentPolicyStatus: null })).toBe(false);
+    expect(canViewDelegatePlanDetails({ businessPolicyStatus: "approved", paymentPolicyStatus: "paid" })).toBe(true);
+    expect(canViewDelegatePlanDetails({ businessPolicyStatus: "rejected", paymentPolicyStatus: "blocked" })).toBe(true);
   });
 
   it("renders delegate policy details with the shared plan audit modal treatment", () => {
@@ -157,13 +207,14 @@ describe("DelegatePlanConsole source", () => {
   });
 
   it("renders the plan view shell with loading state and delegate navigation", () => {
-    const markup = renderToStaticMarkup(createElement(DelegatePlanConsole, { initialUmRequestId: "PA-260526-0900-REVIEW1" }));
+    const markup = renderToStaticMarkup(createElement(DelegatePlanConsole));
 
     expect(markup).toContain("Delegate determination log");
     expect(markup).toContain("Refresh plan view");
     expect(markup).toContain("Loading delegate plan audit rows");
     expect(markup).toContain("/delegate-um/policies");
-    expect(markup).toContain("/delegate-um/plan?umRequestId=PA-260526-0900-REVIEW1");
+    expect(markup).toContain("/delegate-um/plan");
+    expect(markup).not.toContain("umRequestId=");
   });
 
   it("separates business policy and payment policy outcomes in the policy event modal", () => {

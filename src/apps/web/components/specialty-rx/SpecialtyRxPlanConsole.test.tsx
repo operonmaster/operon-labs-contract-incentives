@@ -4,7 +4,13 @@ import path from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { SpecialtyRxPlanAuditRow } from "../../lib/specialty-rx-workflow";
+import {
+  canViewSpecialtyRxPlanDetails,
+  formatBusinessPolicyTableStatus,
+  formatPaymentPolicyTableStatus
+} from "./SpecialtyRxPlanConsole";
 import { SpecialtyRxPlanDetailsModal } from "./SpecialtyRxPlanDetailsModal";
+import { SpecialtyRxUseCaseNavigation } from "./SpecialtyRxUseCaseNavigation";
 
 describe("SpecialtyRxPlanConsole", () => {
   it("loads specialty fulfillment plan rows through the shared incentive worklist hook", () => {
@@ -16,33 +22,104 @@ describe("SpecialtyRxPlanConsole", () => {
     expect(source).toContain("useIncentiveWorklist");
     expect(source).toContain('endpoint: "/api/specialty-rx/plan"');
     expect(source).toContain("getRowId: (row) => row.fulfillmentCaseId");
-    expect(source).toContain("requestedId: requestedFulfillmentCaseId");
   });
 
-  it("renders specialty fulfillment plan audit details with separated policy sections", () => {
+  it("keeps fulfillment case ids out of Specialty Rx top navigation URLs", () => {
+    const source = readFileSync(
+      path.join(process.cwd(), "src/apps/web/components/specialty-rx/SpecialtyRxUseCaseNavigation.tsx"),
+      "utf8"
+    );
+    const markup = renderToStaticMarkup(
+      createElement(SpecialtyRxUseCaseNavigation, {
+        activeView: "pharmacy"
+      })
+    );
+
+    expect(source).not.toContain('param: "fulfillmentCaseId"');
+    expect(source).not.toContain("contextId");
+    expect(markup).toContain('href="/specialty-rx/plan"');
+    expect(markup).not.toContain("fulfillmentCaseId=");
+  });
+
+  it("keeps the health plan table compact by omitting the linked PA column", () => {
+    const source = readFileSync(
+      path.join(process.cwd(), "src/apps/web/components/specialty-rx/SpecialtyRxPlanConsole.tsx"),
+      "utf8"
+    );
+
+    expect(source).not.toContain("<th>Linked PA</th>");
+    expect(source).not.toContain('<td className="mono-cell">{row.umRequestId}</td>');
+    expect(source).toContain("colSpan={7}");
+    expect(source).not.toContain("colSpan={8}");
+  });
+
+  it("leaves unevaluated business and payment policy cells empty in the health plan table", () => {
+    expect(formatBusinessPolicyTableStatus(null)).toBeNull();
+    expect(formatPaymentPolicyTableStatus(null)).toBeNull();
+    expect(formatBusinessPolicyTableStatus("approved")).toBe("Approved");
+    expect(formatBusinessPolicyTableStatus("rejected")).toBe("Rejected");
+    expect(formatPaymentPolicyTableStatus("paid")).toBe("Paid");
+    expect(formatPaymentPolicyTableStatus("blocked")).toBe("Blocked");
+  });
+
+  it("shows plan details only after both policies have executed", () => {
+    expect(canViewSpecialtyRxPlanDetails({ businessPolicyStatus: null, paymentPolicyStatus: null })).toBe(false);
+    expect(canViewSpecialtyRxPlanDetails({ businessPolicyStatus: "approved", paymentPolicyStatus: null })).toBe(false);
+    expect(canViewSpecialtyRxPlanDetails({ businessPolicyStatus: "approved", paymentPolicyStatus: "paid" })).toBe(true);
+    expect(canViewSpecialtyRxPlanDetails({ businessPolicyStatus: "rejected", paymentPolicyStatus: "blocked" })).toBe(true);
+  });
+
+  it("renders specialty fulfillment plan audit details as a normalized policy event", () => {
     const markup = renderToStaticMarkup(
       createElement(SpecialtyRxPlanDetailsModal, {
-        row: buildSpecialtyRxPlanAuditRow(),
+        row: buildSpecialtyRxPlanAuditRow({
+          policyCriteria: [
+            {
+              id: "shipmentScheduledWithinSla",
+              label: "Fulfillment SLA met",
+              expected: "Yes",
+              actual: "Yes",
+              passed: true,
+              reasonCode: "SHIPMENT_SLA_EXCEEDED"
+            }
+          ],
+          paymentPolicyControls: [
+            {
+              id: "business-attestation",
+              label: "Business evaluation attestation",
+              expected: "Approved business evaluation",
+              actual: "Verified",
+              status: "passed"
+            }
+          ]
+        }),
         onClose: () => undefined
       })
     );
 
     expect(markup).toContain("RXF-260526-0900-DELEGATE");
     expect(markup).toContain("PA-260526-0900-DELEGATE");
-    expect(markup).toContain("Fulfillment SLA");
-    expect(markup).toContain("Fulfillment SLA started");
-    expect(markup).not.toContain("Schedule SLA");
-    expect(markup).not.toContain("Delivery SLA");
-    expect(markup).toContain("Clear To Fill");
-    expect(markup).toContain("Delegate determination");
-    expect(markup).toContain("Checklist evidence");
-    expect(markup).toContain("Prescription present");
-    expect(markup).toContain("Shipment scheduled within SLA");
-    expect(markup).toContain("Exception classification");
-    expect(markup).toContain("External blocker");
-    expect(markup).toContain("Avoidable exception");
+    expect(markup).toContain("Policy Event Audit Details");
+    expect(markup).toContain("Business policy status");
+    expect(markup).toContain("Payment policy status");
+    expect(markup).toContain("Amount");
+    expect(markup).toContain("Wallet");
+    expect(markup).toContain("Transaction");
     expect(markup).toContain("Business policy");
     expect(markup).toContain("Payment policy");
+    expect(markup).toContain("Fulfillment SLA met");
+    expect(markup).toContain("Business evaluation attestation");
+    expect(markup).not.toContain("Specialty Fulfillment Audit Details");
+    expect(markup).not.toContain("Case identity");
+    expect(markup).not.toContain("Linked UM request");
+    expect(markup).not.toContain("Delegate determination");
+    expect(markup).not.toContain("Fulfillment timestamps");
+    expect(markup).not.toContain("Checklist evidence");
+    expect(markup).not.toContain("Exception classification");
+    expect(markup).not.toContain("Fulfillment evidence");
+    expect(markup).not.toContain("Closure evidence");
+    expect(markup).not.toContain("Schedule SLA");
+    expect(markup).not.toContain("Delivery SLA");
   });
 
   it("uses Fulfillment SLA language instead of schedule or delivery SLA columns", () => {
@@ -57,8 +134,8 @@ describe("SpecialtyRxPlanConsole", () => {
   });
 });
 
-function buildSpecialtyRxPlanAuditRow(): SpecialtyRxPlanAuditRow {
-  return {
+function buildSpecialtyRxPlanAuditRow(overrides: Partial<SpecialtyRxPlanAuditRow> = {}): SpecialtyRxPlanAuditRow {
+  const row: SpecialtyRxPlanAuditRow = {
     evaluationType: "specialty_rx_fulfillment_sla",
     fulfillmentCase: {
       id: "RXF-260526-0900-DELEGATE",
@@ -149,5 +226,10 @@ function buildSpecialtyRxPlanAuditRow(): SpecialtyRxPlanAuditRow {
     walletId: "0.0.9049549",
     paymentIntentId: "pi_specialty",
     transactionId: "0.0.123@1.2"
+  };
+
+  return {
+    ...row,
+    ...overrides
   };
 }

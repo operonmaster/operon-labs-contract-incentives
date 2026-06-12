@@ -82,7 +82,7 @@ export function SpecialtyRxConsole() {
         <Link className="back" href="/">
           Back to demos
         </Link>
-        <SpecialtyRxUseCaseNavigation activeView="pharmacy" fulfillmentCaseId={selectedFulfillmentCaseId} />
+        <SpecialtyRxUseCaseNavigation activeView="pharmacy" />
       </div>
 
       <LabsHero compact eyebrow="Specialty pharmacy" title="Specialty fulfillment workqueue">
@@ -111,7 +111,6 @@ export function SpecialtyRxConsole() {
             <thead>
               <tr>
                 <th>Fulfillment case ID</th>
-                <th>Linked PA</th>
                 <th>Pharmacy</th>
                 <th>Drug/service</th>
                 <th>State</th>
@@ -122,7 +121,7 @@ export function SpecialtyRxConsole() {
             <tbody>
               {initialLoading ? (
                 <tr className="loading-row">
-                  <td colSpan={7}>
+                  <td colSpan={6}>
                     <div className="loading-indicator" role="status" aria-live="polite">
                       <span className="loading-dot" aria-hidden="true" />
                       <span>Loading specialty fulfillment cases</span>
@@ -133,7 +132,6 @@ export function SpecialtyRxConsole() {
               {rows.map((row) => (
                 <tr key={row.id} className={row.id === selectedFulfillmentCaseId ? "selected" : ""}>
                   <td className="mono-cell">{row.id}</td>
-                  <td className="mono-cell">{row.umRequestId}</td>
                   <td>{row.pharmacyDisplay}</td>
                   <td>{row.serviceLabel}</td>
                   <td className="badge-cell">
@@ -160,7 +158,7 @@ export function SpecialtyRxConsole() {
               ))}
               {!initialLoading && rows.length === 0 ? (
                 <tr>
-                  <td className="empty-state" colSpan={7}>
+                  <td className="empty-state" colSpan={6}>
                     No specialty fulfillment cases waiting.
                   </td>
                 </tr>

@@ -154,6 +154,18 @@ describe("SpecialtyRxWorkflowModal", () => {
     expect(source).not.toContain("<th>Shipment</th>");
   });
 
+  it("keeps the pharmacy workqueue table compact by omitting the linked PA column", () => {
+    const source = readFileSync(
+      path.join(process.cwd(), "src/apps/web/components/specialty-rx/SpecialtyRxConsole.tsx"),
+      "utf8"
+    );
+
+    expect(source).not.toContain("<th>Linked PA</th>");
+    expect(source).not.toContain('<td className="mono-cell">{row.umRequestId}</td>');
+    expect(source).toContain("colSpan={6}");
+    expect(source).not.toContain("colSpan={7}");
+  });
+
   it("marks the active workflow step for assistive technology", () => {
     const markup = renderToStaticMarkup(
       createElement(SpecialtyRxWorkflowModal, {

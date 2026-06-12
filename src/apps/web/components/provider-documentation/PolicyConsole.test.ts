@@ -266,8 +266,7 @@ describe("provider documentation policy console", () => {
         initialUmRequestId: "PA-260526-0900-DELEGATE",
         title: "Delegate UM SLA Bonus Policies",
         useCaseNavigation: createElement(DelegateUseCaseNavigation, {
-          activeView: "policies",
-          umRequestId: "PA-260526-0900-DELEGATE"
+          activeView: "policies"
         })
       })
     );
@@ -276,7 +275,8 @@ describe("provider documentation policy console", () => {
     expect(markup).toContain("Delegate Vendor View");
     expect(markup).toContain("Health Plan View");
     expect(markup).toContain("Policies View");
-    expect(markup).toContain("/delegate-um/plan?umRequestId=PA-260526-0900-DELEGATE");
+    expect(markup).toContain("/delegate-um/plan");
+    expect(markup).not.toContain("umRequestId=");
     expect(markup).toContain("/delegate-um/policies");
     expect(markup).toContain("Pharmacy Benefit");
     expect(markup).toContain("Outpatient Service");

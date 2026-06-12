@@ -52,7 +52,7 @@ export function DelegateVendorConsole() {
         <Link className="back" href="/">
           Back to demos
         </Link>
-        <DelegateUseCaseNavigation activeView="vendor" umRequestId={selectedUmRequestId} />
+        <DelegateUseCaseNavigation activeView="vendor" />
       </div>
 
       <LabsHero compact eyebrow="Delegated UM vendor" title="Pharmacy prior authorization workqueue">

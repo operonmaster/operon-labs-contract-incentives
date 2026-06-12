@@ -75,6 +75,7 @@ const POLICY_SEED_ACTOR = "operon-labs-contract-incentives";
 const PROVIDER_ID = "lakeside-provider-admin";
 const PROVIDER_WALLET_ID = "0.0.9049549";
 const APPEALS_SUBMITTER_ID = "lakeside-provider-admin";
+const SECONDARY_APPEALS_SUBMITTER_ID = "riverside-provider-admin";
 const APPEALS_SUBMITTER_WALLET_ID = "0.0.9049549";
 const DELEGATE_VENDOR_ID = "northstar-um";
 const DELEGATE_VENDOR_WALLET_ID = "0.0.9049549";
@@ -147,9 +148,27 @@ export const defaultIncentivePolicies: Record<string, IncentivePolicy> = {
     policyId: "specialty-rx-fulfillment-sla-v1",
     planId: "acme-health-ppo"
   }),
+  specialty_rx_summit_fulfillment_sla: specialtyRxFulfillmentSlaPolicy({
+    policyId: "specialty-rx-summit-fulfillment-sla-v1",
+    planId: "summit-health-hmo"
+  }),
   appeals_acme_packet_quality: appealsPacketQualityPolicy({
     policyId: "appeals-packet-quality-v1",
     planId: "acme-health-ppo"
+  }),
+  appeals_acme_riverside_packet_quality: appealsPacketQualityPolicy({
+    policyId: "appeals-acme-riverside-packet-quality-v1",
+    planId: "acme-health-ppo",
+    submitterId: SECONDARY_APPEALS_SUBMITTER_ID
+  }),
+  appeals_summit_packet_quality: appealsPacketQualityPolicy({
+    policyId: "appeals-summit-packet-quality-v1",
+    planId: "summit-health-hmo"
+  }),
+  appeals_summit_riverside_packet_quality: appealsPacketQualityPolicy({
+    policyId: "appeals-summit-riverside-packet-quality-v1",
+    planId: "summit-health-hmo",
+    submitterId: SECONDARY_APPEALS_SUBMITTER_ID
   })
 };
 
@@ -697,7 +716,15 @@ function specialtyRxFulfillmentSlaPolicy({
   };
 }
 
-function appealsPacketQualityPolicy({ policyId, planId }: { policyId: string; planId: string }): IncentivePolicy {
+function appealsPacketQualityPolicy({
+  planId,
+  policyId,
+  submitterId = APPEALS_SUBMITTER_ID
+}: {
+  policyId: string;
+  planId: string;
+  submitterId?: string;
+}): IncentivePolicy {
   return {
     policyId,
     version: "v1",
@@ -706,8 +733,8 @@ function appealsPacketQualityPolicy({ policyId, planId }: { policyId: string; pl
     contractPair: {
       planId,
       planName: planNameForId(planId),
-      providerId: APPEALS_SUBMITTER_ID,
-      providerName: providerNameForId(APPEALS_SUBMITTER_ID)
+      providerId: submitterId,
+      providerName: providerNameForId(submitterId)
     },
     effectivePeriod: { startsOn: "2026-05-01", endsOn: null },
     incentiveScope: { eligibleRequestTypes: ["pharmacy_benefit", "outpatient_service"] },
@@ -803,6 +830,8 @@ function providerNameForId(providerId: string): string {
       return "Northstar UM";
     case SPECIALTY_PHARMACY_ID:
       return "Atlas Specialty Rx";
+    case SECONDARY_APPEALS_SUBMITTER_ID:
+      return "Riverside Provider Admin";
     default:
       return providerId;
   }

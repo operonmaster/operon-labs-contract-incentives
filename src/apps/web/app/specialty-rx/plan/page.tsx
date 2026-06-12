@@ -8,12 +8,6 @@ export const metadata: Metadata = {
   description: "Plan-side audit view for specialty fulfillment SLA events and settlement outcomes."
 };
 
-export default async function SpecialtyRxPlanPage({
-  searchParams
-}: {
-  searchParams?: Promise<{ fulfillmentCaseId?: string }>;
-}) {
-  const params = await searchParams;
-
-  return <SpecialtyRxPlanConsole initialFulfillmentCaseId={params?.fulfillmentCaseId ?? null} />;
+export default function SpecialtyRxPlanPage() {
+  return <SpecialtyRxPlanConsole />;
 }

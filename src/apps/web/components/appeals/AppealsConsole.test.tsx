@@ -132,6 +132,23 @@ describe("AppealsConsole", () => {
     expect(startAppealButtons[0]?.disabled).toBe(false);
   });
 
+  it("renders the appeals worklist without duplicate prior authorization state columns", async () => {
+    stubAppealsFetch([buildPriorAuthRow({ appealCase: null, canStartAppeal: true })]);
+    const container = await renderAppealsConsole();
+
+    await waitForText(container, "1 prior authorization loaded");
+
+    const headers = Array.from(container.querySelectorAll<HTMLTableCellElement>("thead th")).map(
+      (header) => header.textContent
+    );
+    const firstRowCells = container.querySelectorAll<HTMLTableCellElement>("tbody tr:not(.loading-row):first-child td");
+
+    expect(headers).toEqual(["PA ID", "Plan", "Request type", "Drug/service", "Appeal status", "Action"]);
+    expect(headers).not.toContain("PA state");
+    expect(headers).not.toContain("PA outcome");
+    expect(firstRowCells).toHaveLength(6);
+  });
+
   it("keeps terminal packet-ready summary open with a health plan handoff link", async () => {
     const inReview = buildAppealCase({ state: "evidence_indexed" });
     const packetReady = buildAppealCase({
