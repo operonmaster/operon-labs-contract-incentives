@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { LabsBadge, LabsButton, LabsModal } from "../labs-ui";
 import type { AppealCase } from "../../lib/appeals-store";
 import type { AppealsPriorAuthRow } from "../../lib/appeals-workflow";
@@ -29,6 +29,8 @@ type WorkflowStepId =
   | "packageSubmit";
 
 type StepFormValues = Record<string, boolean>;
+// eslint-disable-next-line no-unused-vars -- Tuple parameters document the form field update callback contract.
+type FormValueChangeHandler = (...args: [string, boolean]) => void;
 
 const workflowSteps: Array<{ id: WorkflowStepId; label: string }> = [
   { id: "acknowledge", label: "Acknowledge Receipt" },
@@ -40,23 +42,34 @@ const workflowSteps: Array<{ id: WorkflowStepId; label: string }> = [
 ];
 
 export function AppealsWorkflowModal({ appealCase, priorAuthRow, onClose, onUpdated }: AppealsWorkflowModalProps) {
+  const activeStepId = getActiveStepId(appealCase);
+
+  return (
+    <AppealsWorkflowModalContent
+      activeStepId={activeStepId}
+      appealCase={appealCase}
+      key={`${appealCase.id}:${appealCase.state}`}
+      onClose={onClose}
+      onUpdated={onUpdated}
+      priorAuthRow={priorAuthRow}
+    />
+  );
+}
+
+function AppealsWorkflowModalContent({
+  activeStepId,
+  appealCase,
+  priorAuthRow,
+  onClose,
+  onUpdated
+}: AppealsWorkflowModalProps & { activeStepId: WorkflowStepId }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const activeStepId = getActiveStepId(appealCase);
   const activeStepIndex = workflowSteps.findIndex((step) => step.id === activeStepId);
   const [viewStepId, setViewStepId] = useState<WorkflowStepId>(activeStepId);
   const [formValues, setFormValues] = useState<StepFormValues>(() => getInitialFormValues(appealCase));
   const terminal = appealCase.state === "packet_ready";
   const linkedRequest = priorAuthRow?.umRequest;
-
-  useEffect(() => {
-    setViewStepId(activeStepId);
-  }, [activeStepId, appealCase.id]);
-
-  useEffect(() => {
-    setFormValues(getInitialFormValues(appealCase));
-    setError(null);
-  }, [appealCase.id, appealCase.state]);
 
   function updateFormValue(name: string, value: boolean) {
     setFormValues((current) => ({
@@ -229,7 +242,7 @@ function renderViewedSection(
   activeStepId: WorkflowStepId,
   submitting: boolean,
   formValues: StepFormValues,
-  onFormValueChange: (name: string, value: boolean) => void,
+  onFormValueChange: FormValueChangeHandler,
   submitActiveStep: () => Promise<void>
 ) {
   if (viewStepId !== activeStepId) {
@@ -243,7 +256,7 @@ function renderActiveSection(
   appealCase: AppealCase,
   submitting: boolean,
   formValues: StepFormValues,
-  onFormValueChange: (name: string, value: boolean) => void,
+  onFormValueChange: FormValueChangeHandler,
   submitActiveStep: () => Promise<void>
 ) {
   if (appealCase.state === "packet_ready") {

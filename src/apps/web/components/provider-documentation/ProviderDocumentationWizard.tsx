@@ -35,7 +35,7 @@ type ViewedStep = PortalStep | "submission";
 
 export function ProviderDocumentationWizard() {
   const [step, setStep] = useState<PortalStep>("setup");
-  const [viewStep, setViewStep] = useState<ViewedStep>("setup");
+  const [viewStepOverride, setViewStepOverride] = useState<PortalStep | null>(null);
   const [patientCoverageContexts, setPatientCoverageContexts] = useState<PatientCoverageContext[]>([]);
   const [patientId, setPatientId] = useState<PatientId | null>(null);
   const [planId, setPlanId] = useState<PlanId | null>(null);
@@ -62,6 +62,7 @@ export function ProviderDocumentationWizard() {
   const selectedPath = `${patientId ?? ""}:${planId ?? ""}:${requestType ?? ""}:${serviceCode ?? ""}`;
   const currentStepIndex = wizardSteps.findIndex((candidate) => candidate.id === step);
   const viewableStepIndex = submitted ? wizardSteps.length - 1 : currentStepIndex;
+  const viewStep = viewStepOverride ?? (submitted ? "submission" : step);
   const selectedPatientCoverage = patientId
     ? patientCoverageContexts.find((patient) => patient.patientId === patientId) ?? null
     : null;
@@ -88,10 +89,6 @@ export function ProviderDocumentationWizard() {
   useEffect(() => {
     selectedPathRef.current = selectedPath;
   }, [selectedPath]);
-
-  useEffect(() => {
-    setViewStep(submitted ? "submission" : step);
-  }, [step, submitted]);
 
   useEffect(() => {
     let cancelled = false;
@@ -193,6 +190,14 @@ export function ProviderDocumentationWizard() {
     submitRequestRef.current += 1;
   }
 
+  function viewWizardStep(nextStep: PortalStep) {
+    setViewStepOverride(!submitted && nextStep === step ? null : nextStep);
+  }
+
+  function returnToWorkflowView() {
+    setViewStepOverride(null);
+  }
+
   function selectPatient(nextPatientId: string) {
     const nextPatientCoverage = patientCoverageContexts.find((patient) => patient.patientId === nextPatientId) ?? null;
     setPatientId(nextPatientCoverage?.patientId ?? null);
@@ -228,6 +233,7 @@ export function ProviderDocumentationWizard() {
 
   function continueToService() {
     if (patientId && planId) {
+      returnToWorkflowView();
       setStep("service");
     }
   }
@@ -290,6 +296,7 @@ export function ProviderDocumentationWizard() {
       setDtrQuestionnaire(nextQuestionnaire);
       setAssessmentStatus(requirements.documentationTemplateId ? "not_started" : "not_required");
       setRequirementsChecked(true);
+      returnToWorkflowView();
       setStep("coverage");
     } catch {
       if (coverageRequestRef.current === requestId && selectedPathRef.current === requestPath) {
@@ -330,6 +337,7 @@ export function ProviderDocumentationWizard() {
 
   function continueToReview() {
     if (canContinueToReview()) {
+      returnToWorkflowView();
       setStep("review");
     }
   }
@@ -352,6 +360,7 @@ export function ProviderDocumentationWizard() {
 
   function submitAnotherRequest() {
     cancelPendingRequests();
+    returnToWorkflowView();
     setStep("setup");
     setPatientId(null);
     setPlanId(null);
@@ -419,6 +428,7 @@ export function ProviderDocumentationWizard() {
         return;
       }
 
+      returnToWorkflowView();
       setSubmitted(payload as UMRequest);
     } catch {
       if (submitRequestRef.current !== requestId || selectedPathRef.current !== requestPath) {
@@ -474,7 +484,7 @@ export function ProviderDocumentationWizard() {
                   className="stepper-step-button"
                   disabled={!canViewStep}
                   type="button"
-                  onClick={() => setViewStep(candidate.id)}
+                  onClick={() => viewWizardStep(candidate.id)}
                 >
                   <strong aria-hidden="true">{index + 1}</strong>
                   <span>{candidate.label}</span>
@@ -499,7 +509,7 @@ export function ProviderDocumentationWizard() {
                 service={service}
                 stepId={viewStep}
                 submitted={submitted}
-                onReturnToSubmission={submitted ? () => setViewStep("submission") : undefined}
+                onReturnToSubmission={submitted ? returnToWorkflowView : undefined}
               />
             ) : (
               <>

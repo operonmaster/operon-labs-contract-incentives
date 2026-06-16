@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { getDtrQuestionnaire, type DtrAnswerValue, type UMRequest } from "@operon-labs/um-platform";
 import { LabsBadge, LabsButton, LabsModal, LabsSelect, type LabsSelectOption } from "../labs-ui";
 import { formatRequestType, formatUmRequestSlaStatus, formatUmState } from "./delegate-formatters";
@@ -58,6 +58,11 @@ interface ChecklistValues {
   decisionRationaleDocumented: boolean;
 }
 
+interface ViewStepSelection {
+  progressKey: string;
+  stepId: DelegateReviewStepId;
+}
+
 const reviewSteps: Array<{ id: DelegateReviewStepId; label: string }> = [
   { id: "startReview", label: "Start Review" },
   { id: "clinicalChecklist", label: "Clinical Checklist" },
@@ -109,11 +114,12 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, requ
   const currentState = request.state === "determined" ? request.state : reviewStarted ? "in_clinical_review" : request.state;
   const activeStepId = getActiveReviewStepId(request, reviewStarted, clinicalChecklistSubmitted);
   const activeStepIndex = reviewSteps.findIndex((step) => step.id === activeStepId);
-  const [viewStepId, setViewStepId] = useState<DelegateReviewStepId>(activeStepId);
-
-  useEffect(() => {
-    setViewStepId(activeStepId);
-  }, [activeStepId, request.id]);
+  const progressKey = getReviewProgressKey(request, activeStepId, reviewStarted, clinicalChecklistSubmitted);
+  const [viewStepSelection, setViewStepSelection] = useState<ViewStepSelection | null>(null);
+  const selectedViewStepId = viewStepSelection?.progressKey === progressKey ? viewStepSelection.stepId : activeStepId;
+  const selectedViewStepIndex = reviewSteps.findIndex((step) => step.id === selectedViewStepId);
+  const viewStepId =
+    selectedViewStepIndex >= 0 && selectedViewStepIndex <= activeStepIndex ? selectedViewStepId : activeStepId;
 
   async function ensureReviewStarted(): Promise<boolean> {
     if (reviewStarted) {
@@ -313,7 +319,7 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, requ
                   className="stepper-step-button"
                   disabled={!canViewStep}
                   type="button"
-                  onClick={() => setViewStepId(step.id)}
+                  onClick={() => setViewStepSelection({ progressKey, stepId: step.id })}
                 >
                   <strong aria-hidden="true">{index + 1}</strong>
                   <span>{step.label}</span>
@@ -456,6 +462,24 @@ function getActiveReviewStepId(
   }
 
   return "submitDetermination";
+}
+
+function getReviewProgressKey(
+  request: UMRequest,
+  activeStepId: DelegateReviewStepId,
+  reviewStarted: boolean,
+  clinicalChecklistSubmitted: boolean
+): string {
+  return [
+    request.id,
+    request.state,
+    request.reviewStartedAt ?? "no-review-start",
+    request.outcomeStatus ?? "no-outcome",
+    request.determinedAt ?? "no-determination",
+    activeStepId,
+    reviewStarted ? "review-started" : "review-not-started",
+    clinicalChecklistSubmitted ? "checklist-submitted" : "checklist-open"
+  ].join(":");
 }
 
 function renderCompletedReviewStep(
