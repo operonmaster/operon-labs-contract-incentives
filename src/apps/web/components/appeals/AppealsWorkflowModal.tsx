@@ -276,7 +276,7 @@ function renderActiveSection(
     <section className="delegate-review-section">
       <h3>{section.title}</h3>
       <p>{section.body}</p>
-      <div className="appeals-step-checklist" aria-label={`${section.title} assertions`}>
+      <div className="workflow-checklist appeals-step-checklist" aria-label={`${section.title} assertions`}>
         {section.controls.map((control) => (
           <label className="appeals-step-checkbox" key={control.name}>
             <input

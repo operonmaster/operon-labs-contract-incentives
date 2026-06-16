@@ -15,6 +15,7 @@ let root: Root | null = null;
 describe("SpecialtyRxWorkflowModal", () => {
   afterEach(async () => {
     vi.useRealTimers();
+    vi.unstubAllGlobals();
     if (root) {
       await act(async () => {
         root?.unmount();
@@ -192,6 +193,161 @@ describe("SpecialtyRxWorkflowModal", () => {
     expect(root.querySelector('li[aria-current="step"]')?.classList.contains("active")).toBe(true);
   });
 
+  it("renders the active operator checklist inside the shared workflow checklist layout", () => {
+    const markup = renderToStaticMarkup(
+      createElement(SpecialtyRxWorkflowModal, {
+        caseRecord: buildSpecialtyFulfillmentCase(),
+        onClose: () => undefined,
+        onUpdated: () => undefined
+      })
+    );
+
+    expect(markup).toContain('class="workflow-checklist"');
+    expect(markup).toMatch(/class="workflow-checklist"[\s\S]*Prescription present/);
+    expect(markup).toMatch(/class="workflow-checklist"[\s\S]*Handoff packet\/data complete/);
+  });
+
+  it.each([
+    {
+      caseRecord: buildSpecialtyFulfillmentCase(),
+      cta: "Complete intake",
+      expectedPath: "/api/specialty-rx/cases/RXF-260528-0900-SPECIAL1/intake",
+      labels: [
+        "Prescription present",
+        "Assigned pharmacy confirmed",
+        "Therapy metadata present",
+        "Handoff packet/data complete"
+      ],
+      expectedPayload: {
+        prescriptionPresent: true,
+        assignedPharmacyConfirmed: true,
+        therapyMetadataPresent: true,
+        handoffDataComplete: true
+      }
+    },
+    {
+      caseRecord: {
+        ...buildSpecialtyFulfillmentCase(),
+        state: "clear_to_fill",
+        fulfillmentSlaStartedAt: "2026-05-28T15:00:00.000Z"
+      } satisfies SpecialtyFulfillmentCase,
+      cta: "Mark clear to fill",
+      expectedPath: "/api/specialty-rx/cases/RXF-260528-0900-SPECIAL1/clear-to-fill",
+      labels: [
+        "Benefits/claim check completed",
+        "Prescription valid",
+        "Inventory available",
+        "Copay/payment ready"
+      ],
+      expectedPayload: {
+        benefitsOrClaimCheckCompleted: true,
+        prescriptionValid: true,
+        prescriberClarificationRequired: false,
+        prescriberClarificationResolved: true,
+        remsRequired: false,
+        remsAuthorizationConfirmed: true,
+        inventoryAvailable: true,
+        copayOrPaymentReady: true
+      }
+    },
+    {
+      caseRecord: {
+        ...buildSpecialtyFulfillmentCase(),
+        state: "shipment_scheduled",
+        fulfillmentSlaStartedAt: "2026-05-28T15:00:00.000Z",
+        clearToFillAt: "2026-05-28T15:30:00.000Z",
+        shipmentScheduledAt: null
+      } satisfies SpecialtyFulfillmentCase,
+      cta: "Schedule shipment",
+      expectedPath: "/api/specialty-rx/cases/RXF-260528-0900-SPECIAL1/shipment",
+      labels: [
+        "Patient contact attempt documented",
+        "Address confirmed",
+        "Delivery window confirmed",
+        "Cold-chain packout validated",
+        "Courier scheduled"
+      ],
+      expectedPayload: {
+        patientContactAttemptDocumented: true,
+        addressConfirmed: true,
+        deliveryWindowConfirmed: true,
+        coldChainPackoutValidated: true,
+        courierScheduled: true
+      }
+    },
+    {
+      caseRecord: {
+        ...buildSpecialtyFulfillmentCase(),
+        state: "shipment_scheduled",
+        fulfillmentSlaStartedAt: "2026-05-28T15:00:00.000Z",
+        clearToFillAt: "2026-05-28T15:30:00.000Z",
+        shipmentScheduledAt: "2026-05-28T16:00:00.000Z"
+      } satisfies SpecialtyFulfillmentCase,
+      cta: "Confirm fulfillment",
+      expectedPath: "/api/specialty-rx/cases/RXF-260528-0900-SPECIAL1/fulfillment",
+      labels: ["Shipped", "Delivery confirmed", "Delivery attempt documented", "Temperature log valid"],
+      expectedPayload: {
+        shipped: true,
+        deliveryConfirmed: true,
+        deliveryAttemptDocumented: true,
+        temperatureLogValid: true,
+        avoidableFulfillmentException: false,
+        externalBlockerDocumented: false,
+        exceptionReasonCode: null
+      }
+    }
+  ])("requires every checklist item before submitting $cta", async (scenario) => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => scenario.caseRecord
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await act(async () => {
+      root?.render(
+        createElement(SpecialtyRxWorkflowModal, {
+          caseRecord: scenario.caseRecord,
+          onClose: () => undefined,
+          onUpdated: () => undefined
+        })
+      );
+    });
+
+    const cta = findButton(document.body, scenario.cta);
+    expect(cta.disabled).toBe(true);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    for (const label of scenario.labels.slice(0, -1)) {
+      await act(async () => {
+        findCheckboxByLabel(document.body, label).click();
+      });
+      expect(cta.disabled).toBe(true);
+    }
+
+    await act(async () => {
+      findCheckboxByLabel(document.body, scenario.labels.at(-1) ?? "").click();
+    });
+    expect(cta.disabled).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(findButton(document.body, scenario.cta).disabled).toBe(false);
+    expect(findCheckboxByLabel(document.body, scenario.labels.at(-1) ?? "").checked).toBe(true);
+
+    await act(async () => {
+      cta.click();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      scenario.expectedPath,
+      expect.objectContaining({
+        body: JSON.stringify(scenario.expectedPayload),
+        method: "POST"
+      })
+    );
+  });
+
   it("lets operators inspect completed fulfillment steps and resets to a newer active step", async () => {
     const container = document.createElement("div");
     document.body.append(container);
@@ -232,6 +388,15 @@ describe("SpecialtyRxWorkflowModal", () => {
     });
 
     expect(findButtonByLabel(document.body, "Confirm Fulfillment").disabled).toBe(true);
+    expect(findButton(document.body, "Schedule shipment").disabled).toBe(true);
+
+    await checkWorkflowItems([
+      "Patient contact attempt documented",
+      "Address confirmed",
+      "Delivery window confirmed",
+      "Cold-chain packout validated",
+      "Courier scheduled"
+    ]);
     expect(findButton(document.body, "Schedule shipment").disabled).toBe(false);
 
     await act(async () => {
@@ -266,8 +431,11 @@ describe("SpecialtyRxWorkflowModal", () => {
       );
     });
 
-    expect(findButton(document.body, "Confirm fulfillment").disabled).toBe(false);
+    expect(findButton(document.body, "Confirm fulfillment").disabled).toBe(true);
     expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Completed step");
+
+    await checkWorkflowItems(["Shipped", "Delivery confirmed", "Delivery attempt documented", "Temperature log valid"]);
+    expect(findButton(document.body, "Confirm fulfillment").disabled).toBe(false);
 
     await act(async () => {
       root?.render(
@@ -413,4 +581,24 @@ function findButtonByLabel(container: HTMLElement, label: string): HTMLButtonEle
   }
 
   return button;
+}
+
+function findCheckboxByLabel(container: HTMLElement, label: string): HTMLInputElement {
+  const checkbox = Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')).find(
+    (candidate) => candidate.closest("label")?.textContent?.trim() === label
+  );
+
+  if (!checkbox) {
+    throw new Error(`Checkbox not found: ${label}`);
+  }
+
+  return checkbox;
+}
+
+async function checkWorkflowItems(labels: string[]): Promise<void> {
+  for (const label of labels) {
+    await act(async () => {
+      findCheckboxByLabel(document.body, label).click();
+    });
+  }
 }

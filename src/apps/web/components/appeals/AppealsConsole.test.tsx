@@ -56,6 +56,19 @@ describe("AppealsConsole", () => {
     expect(markup).not.toContain("Reviewer conflict check complete");
   });
 
+  it("renders appeal step assertions inside the shared workflow checklist layout", () => {
+    const markup = renderToStaticMarkup(
+      createElement(AppealsWorkflowModal, {
+        appealCase: buildAppealCase(),
+        onClose: () => undefined,
+        onUpdated: () => undefined
+      })
+    );
+
+    expect(markup).toContain('class="workflow-checklist appeals-step-checklist"');
+    expect(markup).toMatch(/class="workflow-checklist appeals-step-checklist"[\s\S]*Appeal request acknowledged/);
+  });
+
   it("closes an opened existing appeal without reopening from row selection", async () => {
     const row = buildPriorAuthRow({ appealCase: buildAppealCase() });
     stubAppealsFetch([row]);
@@ -222,6 +235,10 @@ describe("AppealsConsole", () => {
     }
 
     expect(findButton(document.body, "Validate intake").disabled).toBe(false);
+    expect(countPostCalls(fetchMock)).toBe(0);
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Validate Intake");
+    expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Resolve missing info");
+
     await act(async () => {
       findButton(document.body, "Validate intake").click();
     });
@@ -274,6 +291,10 @@ describe("AppealsConsole", () => {
     });
 
     expect(findButton(document.body, "Index evidence").disabled).toBe(false);
+    expect(countPostCalls(fetchMock)).toBe(0);
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Index Evidence");
+    expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Submit package");
+
     await act(async () => {
       findButton(document.body, "Index evidence").click();
     });
@@ -344,7 +365,7 @@ describe("AppealsConsole", () => {
       state: "packet_ready",
       packetReadyAt: "2026-06-19T15:00:00.000Z"
     });
-    stubAppealsFetch([buildPriorAuthRow({ appealCase: inReview })], {
+    const fetchMock = stubAppealsFetch([buildPriorAuthRow({ appealCase: inReview })], {
       [`/api/appeals/cases/${encodeURIComponent(inReview.id)}/route-reviewer`]: packetReady
     });
     const container = await renderAppealsConsole();
@@ -366,6 +387,11 @@ describe("AppealsConsole", () => {
         findCheckboxByLabel(document.body, label).click();
       });
     }
+    expect(findButton(document.body, "Submit package").disabled).toBe(false);
+    expect(countPostCalls(fetchMock)).toBe(0);
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Submit Appeal Package");
+    expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Appeal packet ready");
+
     await act(async () => {
       findButton(document.body, "Submit package").click();
     });
@@ -488,6 +514,10 @@ function stubAppealsFetch(
 
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
+}
+
+function countPostCalls(fetchMock: ReturnType<typeof vi.fn>): number {
+  return fetchMock.mock.calls.filter(([, init]) => init?.method === "POST").length;
 }
 
 async function renderAppealsConsole(): Promise<HTMLElement> {

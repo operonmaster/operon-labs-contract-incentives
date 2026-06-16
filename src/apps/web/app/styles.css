@@ -274,6 +274,29 @@ main {
   gap: 8px;
 }
 
+.workflow-checklist {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.workflow-checklist .checkbox-row {
+  background: rgba(15, 23, 42, 0.48);
+  border: 1px solid var(--op-line);
+  border-radius: 8px;
+  color: var(--op-ink);
+  cursor: pointer;
+  min-height: 46px;
+  padding: 10px 12px;
+}
+
+.workflow-checklist .checkbox-row input {
+  accent-color: var(--op-blue);
+  flex: 0 0 auto;
+  height: 16px;
+  width: 16px;
+}
+
 .result-box {
   background: #eef4ff;
   border: 1px solid #c9d8ff;
@@ -2637,9 +2660,7 @@ body {
 }
 
 .appeals-step-checklist {
-  display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 0;
 }
 
 .appeals-step-checkbox {
@@ -2686,7 +2707,7 @@ body {
     grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   }
 
-  .appeals-step-checklist {
+  .workflow-checklist {
     grid-template-columns: 1fr;
   }
 }

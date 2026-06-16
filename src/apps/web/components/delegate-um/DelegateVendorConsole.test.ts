@@ -24,7 +24,7 @@ describe("DelegateVendorConsole source", () => {
     expect(modalSource).toContain("LabsModal");
     expect(modalSource).toContain("useState(false)");
     expect(modalSource).toContain("request.outcomeStatus ?? null");
-    expect(modalSource).toContain("const canChooseOutcome = checklistComplete");
+    expect(modalSource).toContain("const canChooseOutcome = clinicalChecklistSubmitted");
     expect(modalSource).toContain("const canSubmit = canChooseOutcome && outcomeStatus !== null && !submitting");
     expect(modalSource).toContain("disabled={!canChooseOutcome}");
     expect(modalSource).toContain("const started = await ensureReviewStarted()");
@@ -137,7 +137,22 @@ describe("DelegateVendorConsole source", () => {
     expect(markup).not.toContain("Denial reason");
   });
 
-  it("unlocks outcome selection after all checklist items are checked", async () => {
+  it("renders the clinical checklist inside the shared workflow checklist layout", () => {
+    const markup = renderToStaticMarkup(
+      createElement(DelegateReviewModal, {
+        requestApiBase: "/api/delegate-um/requests/",
+        request: buildDelegateRequest("in_clinical_review"),
+        onClose: () => undefined,
+        onCompleted: () => undefined
+      })
+    );
+
+    expect(markup).toContain('class="workflow-checklist"');
+    expect(markup).toMatch(/class="workflow-checklist"[\s\S]*Clinical documentation reviewed/);
+    expect(markup).toMatch(/class="workflow-checklist"[\s\S]*Decision rationale documented/);
+  });
+
+  it("keeps clinical checklist active until the operator clicks complete checklist", async () => {
     const container = document.createElement("div");
     document.body.append(container);
     let root: Root | null = createRoot(container);
@@ -159,6 +174,7 @@ describe("DelegateVendorConsole source", () => {
       expect(checklistInputs).toHaveLength(4);
       expect(container.querySelectorAll<HTMLInputElement>('input[name="delegate-outcome"]')).toHaveLength(0);
       expect(container.textContent).not.toContain("Complete the clinical checklist before choosing an outcome");
+      expect(findButton(container, "Complete checklist").disabled).toBe(true);
 
       for (const input of checklistInputs) {
         await act(async () => {
@@ -166,8 +182,18 @@ describe("DelegateVendorConsole source", () => {
         });
       }
 
+      expect(container.querySelector('li[aria-current="step"]')?.textContent).toContain("Clinical Checklist");
+      expect(container.querySelectorAll<HTMLInputElement>('input[name="delegate-outcome"]')).toHaveLength(0);
+      expect(container.textContent).not.toContain("Outcome");
+      expect(findButton(container, "Complete checklist").disabled).toBe(false);
+
+      await act(async () => {
+        findButton(container, "Complete checklist").click();
+      });
+
       const outcomeInputs = Array.from(container.querySelectorAll<HTMLInputElement>('input[name="delegate-outcome"]'));
 
+      expect(container.querySelector('li[aria-current="step"]')?.textContent).toContain("Submit Determination");
       expect(container.textContent).toContain("Outcome");
       expect(outcomeInputs).toHaveLength(2);
       expect(outcomeInputs.every((input) => input.disabled)).toBe(false);
@@ -223,6 +249,12 @@ describe("DelegateVendorConsole source", () => {
           input.click();
         });
       }
+
+      expect(container.querySelectorAll<HTMLInputElement>('input[name="delegate-outcome"]')).toHaveLength(0);
+
+      await act(async () => {
+        findButton(container, "Complete checklist").click();
+      });
 
       const outcomeInputs = Array.from(container.querySelectorAll<HTMLInputElement>('input[name="delegate-outcome"]'));
       expect(outcomeInputs).toHaveLength(2);
@@ -299,6 +331,13 @@ describe("DelegateVendorConsole source", () => {
         });
       }
 
+      expect(stepButton("Submit Determination")?.disabled).toBe(true);
+      expect(findButton(container, "Complete checklist").disabled).toBe(false);
+
+      await act(async () => {
+        findButton(container, "Complete checklist").click();
+      });
+
       expect(stepButton("Submit Determination")?.disabled).toBe(false);
 
       await act(async () => {
@@ -373,6 +412,10 @@ describe("DelegateVendorConsole source", () => {
       }
 
       await act(async () => {
+        findButton(container, "Complete checklist").click();
+      });
+
+      await act(async () => {
         container.querySelector<HTMLInputElement>('input[value="approved"]')?.click();
       });
       await act(async () => {
@@ -431,6 +474,18 @@ describe("DelegateVendorConsole source", () => {
     expect(markup).not.toContain('input name="delegate-outcome"');
   });
 });
+
+function findButton(container: HTMLElement, text: string): HTMLButtonElement {
+  const button = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
+    (candidate) => candidate.textContent === text
+  );
+
+  if (!button) {
+    throw new Error(`Button not found: ${text}`);
+  }
+
+  return button;
+}
 
 function buildDelegateRequest(
   state: UMRequest["state"] = "pend",

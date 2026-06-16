@@ -82,6 +82,9 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, requ
   const [approvalReasonCode, setApprovalReasonCode] = useState(request.clinicalReview.approvalReasonCode ?? "POLICY_CRITERIA_MET");
   const [denialReasonCode, setDenialReasonCode] = useState(request.clinicalReview.denialReasonCode ?? "NOT_MEDICALLY_NECESSARY");
   const [submitting, setSubmitting] = useState(false);
+  const [clinicalChecklistSubmitted, setClinicalChecklistSubmitted] = useState(
+    request.state === "determined" || request.outcomeStatus !== null
+  );
   const [actionStatus, setActionStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -96,7 +99,7 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, requ
     medicalNecessityCriteriaMet &&
     planPolicyRequirementsChecked &&
     decisionRationaleDocumented;
-  const canChooseOutcome = checklistComplete;
+  const canChooseOutcome = clinicalChecklistSubmitted;
   const canSubmit = canChooseOutcome && outcomeStatus !== null && !submitting;
   const activeReasonOptions = outcomeStatus === "denied" ? denialReasonOptions : approvalReasonOptions;
   const activeReasonCode = outcomeStatus === "denied" ? denialReasonCode : approvalReasonCode;
@@ -104,7 +107,7 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, requ
   const outcomeGuidanceId = "delegate-outcome-guidance";
   const assessment = buildAssessmentView(request);
   const currentState = request.state === "determined" ? request.state : reviewStarted ? "in_clinical_review" : request.state;
-  const activeStepId = getActiveReviewStepId(request, reviewStarted, checklistComplete);
+  const activeStepId = getActiveReviewStepId(request, reviewStarted, clinicalChecklistSubmitted);
   const activeStepIndex = reviewSteps.findIndex((step) => step.id === activeStepId);
   const [viewStepId, setViewStepId] = useState<DelegateReviewStepId>(activeStepId);
 
@@ -147,6 +150,16 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, requ
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function completeClinicalChecklist() {
+    if (!checklistComplete) {
+      return;
+    }
+
+    setClinicalChecklistSubmitted(true);
+    setActionStatus("Clinical checklist complete");
+    setError(null);
   }
 
   async function submitDetermination() {
@@ -330,38 +343,43 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, requ
         ) : viewStepId === "clinicalChecklist" ? (
           <section className="delegate-review-section">
             <h3>Clinical checklist</h3>
-            <label className="checkbox-row">
-              <input
-                checked={clinicalDocumentationReviewed}
-                type="checkbox"
-                onChange={(event) => setClinicalDocumentationReviewed(event.currentTarget.checked)}
-              />
-              Clinical documentation reviewed
-            </label>
-            <label className="checkbox-row">
-              <input
-                checked={medicalNecessityCriteriaMet}
-                type="checkbox"
-                onChange={(event) => setMedicalNecessityCriteriaMet(event.currentTarget.checked)}
-              />
-              Medical necessity criteria met
-            </label>
-            <label className="checkbox-row">
-              <input
-                checked={planPolicyRequirementsChecked}
-                type="checkbox"
-                onChange={(event) => setPlanPolicyRequirementsChecked(event.currentTarget.checked)}
-              />
-              Plan policy requirements checked
-            </label>
-            <label className="checkbox-row">
-              <input
-                checked={decisionRationaleDocumented}
-                type="checkbox"
-                onChange={(event) => setDecisionRationaleDocumented(event.currentTarget.checked)}
-              />
-              Decision rationale documented
-            </label>
+            <div className="workflow-checklist" aria-label="Clinical checklist assertions">
+              <label className="checkbox-row">
+                <input
+                  checked={clinicalDocumentationReviewed}
+                  type="checkbox"
+                  onChange={(event) => setClinicalDocumentationReviewed(event.currentTarget.checked)}
+                />
+                Clinical documentation reviewed
+              </label>
+              <label className="checkbox-row">
+                <input
+                  checked={medicalNecessityCriteriaMet}
+                  type="checkbox"
+                  onChange={(event) => setMedicalNecessityCriteriaMet(event.currentTarget.checked)}
+                />
+                Medical necessity criteria met
+              </label>
+              <label className="checkbox-row">
+                <input
+                  checked={planPolicyRequirementsChecked}
+                  type="checkbox"
+                  onChange={(event) => setPlanPolicyRequirementsChecked(event.currentTarget.checked)}
+                />
+                Plan policy requirements checked
+              </label>
+              <label className="checkbox-row">
+                <input
+                  checked={decisionRationaleDocumented}
+                  type="checkbox"
+                  onChange={(event) => setDecisionRationaleDocumented(event.currentTarget.checked)}
+                />
+                Decision rationale documented
+              </label>
+            </div>
+            <LabsButton disabled={submitting || !checklistComplete} onClick={completeClinicalChecklist}>
+              Complete checklist
+            </LabsButton>
           </section>
         ) : (
           <>
@@ -427,13 +445,13 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, requ
 function getActiveReviewStepId(
   request: UMRequest,
   reviewStarted: boolean,
-  checklistComplete: boolean
+  clinicalChecklistSubmitted: boolean
 ): DelegateReviewStepId {
   if (!reviewStarted) {
     return "startReview";
   }
 
-  if (!checklistComplete && request.state !== "determined") {
+  if (!clinicalChecklistSubmitted && request.state !== "determined") {
     return "clinicalChecklist";
   }
 

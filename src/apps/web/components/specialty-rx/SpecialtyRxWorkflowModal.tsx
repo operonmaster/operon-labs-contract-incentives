@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { LabsBadge, LabsButton, LabsModal } from "../labs-ui";
 import type { SpecialtyFulfillmentCase } from "../../lib/specialty-rx-store";
 import {
@@ -27,20 +27,99 @@ const workflowSteps: Array<{ id: WorkflowStepId; label: string }> = [
   { id: "fulfillment", label: "Confirm Fulfillment" }
 ];
 
+type ChecklistField =
+  | "prescriptionPresent"
+  | "assignedPharmacyConfirmed"
+  | "therapyMetadataPresent"
+  | "handoffDataComplete"
+  | "benefitsOrClaimCheckCompleted"
+  | "prescriptionValid"
+  | "inventoryAvailable"
+  | "copayOrPaymentReady"
+  | "patientContactAttemptDocumented"
+  | "addressConfirmed"
+  | "deliveryWindowConfirmed"
+  | "coldChainPackoutValidated"
+  | "courierScheduled"
+  | "shipped"
+  | "deliveryConfirmed"
+  | "deliveryAttemptDocumented"
+  | "temperatureLogValid";
+
+type ChecklistState = Record<ChecklistField, boolean>;
+// eslint-disable-next-line no-unused-vars -- Tuple parameters document the checklist field update callback contract.
+type ChecklistFieldSetter = (...args: [ChecklistField, boolean]) => void;
+
+interface ChecklistItem {
+  field: ChecklistField;
+  label: string;
+}
+
+const intakeChecklistItems: ChecklistItem[] = [
+  { field: "prescriptionPresent", label: "Prescription present" },
+  { field: "assignedPharmacyConfirmed", label: "Assigned pharmacy confirmed" },
+  { field: "therapyMetadataPresent", label: "Therapy metadata present" },
+  { field: "handoffDataComplete", label: "Handoff packet/data complete" }
+];
+
+const clearToFillChecklistItems: ChecklistItem[] = [
+  { field: "benefitsOrClaimCheckCompleted", label: "Benefits/claim check completed" },
+  { field: "prescriptionValid", label: "Prescription valid" },
+  { field: "inventoryAvailable", label: "Inventory available" },
+  { field: "copayOrPaymentReady", label: "Copay/payment ready" }
+];
+
+const shipmentChecklistItems: ChecklistItem[] = [
+  { field: "patientContactAttemptDocumented", label: "Patient contact attempt documented" },
+  { field: "addressConfirmed", label: "Address confirmed" },
+  { field: "deliveryWindowConfirmed", label: "Delivery window confirmed" },
+  { field: "coldChainPackoutValidated", label: "Cold-chain packout validated" },
+  { field: "courierScheduled", label: "Courier scheduled" }
+];
+
+const fulfillmentChecklistItems: ChecklistItem[] = [
+  { field: "shipped", label: "Shipped" },
+  { field: "deliveryConfirmed", label: "Delivery confirmed" },
+  { field: "deliveryAttemptDocumented", label: "Delivery attempt documented" },
+  { field: "temperatureLogValid", label: "Temperature log valid" }
+];
+
 export function SpecialtyRxWorkflowModal({ caseRecord, onClose, onUpdated }: SpecialtyRxWorkflowModalProps) {
+  const activeStepId = getActiveStepId(caseRecord);
+
+  return (
+    <SpecialtyRxWorkflowModalContent
+      activeStepId={activeStepId}
+      caseRecord={caseRecord}
+      key={`${caseRecord.id}:${activeStepId}`}
+      onClose={onClose}
+      onUpdated={onUpdated}
+    />
+  );
+}
+
+function SpecialtyRxWorkflowModalContent({
+  activeStepId,
+  caseRecord,
+  onClose,
+  onUpdated
+}: SpecialtyRxWorkflowModalProps & { activeStepId: WorkflowStepId }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const activeStepId = getActiveStepId(caseRecord);
   const activeStepIndex = workflowSteps.findIndex((step) => step.id === activeStepId);
   const [viewStepId, setViewStepId] = useState<WorkflowStepId>(activeStepId);
+  const [checklist, setChecklist] = useState<ChecklistState>(() => buildChecklistState(caseRecord));
   const terminal = caseRecord.state === "fulfilled" || caseRecord.state === "exception";
 
-  useEffect(() => {
-    setViewStepId(activeStepId);
-  }, [activeStepId, caseRecord.id]);
+  function setChecklistField(field: ChecklistField, checked: boolean) {
+    setChecklist((current) => ({
+      ...current,
+      [field]: checked
+    }));
+  }
 
   async function submitActiveStep() {
-    if (terminal) {
+    if (terminal || !isActiveChecklistComplete(caseRecord, checklist)) {
       return;
     }
 
@@ -51,7 +130,7 @@ export function SpecialtyRxWorkflowModal({ caseRecord, onClose, onUpdated }: Spe
       const response = await fetch(buildActionUrl(caseRecord), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(buildActionPayload(caseRecord))
+        body: JSON.stringify(buildActionPayload(caseRecord, checklist))
       });
       const payload = (await response.json()) as SpecialtyFulfillmentCase | { error?: string };
 
@@ -154,7 +233,7 @@ export function SpecialtyRxWorkflowModal({ caseRecord, onClose, onUpdated }: Spe
         </p>
       ) : null}
 
-      {renderViewedSection(caseRecord, viewStepId, activeStepId, submitting, submitActiveStep)}
+      {renderViewedSection(caseRecord, viewStepId, activeStepId, checklist, setChecklistField, submitting, submitActiveStep)}
     </LabsModal>
   );
 }
@@ -163,6 +242,8 @@ function renderViewedSection(
   caseRecord: SpecialtyFulfillmentCase,
   viewStepId: WorkflowStepId,
   activeStepId: WorkflowStepId,
+  checklist: ChecklistState,
+  setChecklistField: ChecklistFieldSetter,
   submitting: boolean,
   submitActiveStep: () => Promise<void>
 ) {
@@ -170,11 +251,13 @@ function renderViewedSection(
     return renderCompletedStepSection(caseRecord, viewStepId);
   }
 
-  return renderActiveSection(caseRecord, submitting, submitActiveStep);
+  return renderActiveSection(caseRecord, checklist, setChecklistField, submitting, submitActiveStep);
 }
 
 function renderActiveSection(
   caseRecord: SpecialtyFulfillmentCase,
+  checklist: ChecklistState,
+  setChecklistField: ChecklistFieldSetter,
   submitting: boolean,
   submitActiveStep: () => Promise<void>
 ) {
@@ -187,7 +270,8 @@ function renderActiveSection(
       <section className="delegate-review-section">
         <h3>Intake & Triage</h3>
         <p>Approved PA, prescription, assigned pharmacy, therapy metadata, and handoff packet are ready for fulfillment.</p>
-        <LabsButton disabled={submitting} onClick={() => void submitActiveStep()}>
+        {renderChecklist(intakeChecklistItems, checklist, setChecklistField)}
+        <LabsButton disabled={submitting || !isChecklistComplete(intakeChecklistItems, checklist)} onClick={() => void submitActiveStep()}>
           {submitting ? "Completing..." : "Complete intake"}
         </LabsButton>
       </section>
@@ -199,7 +283,8 @@ function renderActiveSection(
       <section className="delegate-review-section">
         <h3>Clear To Fill</h3>
         <p>Benefits check, valid prescription, REMS disposition, inventory, and copay readiness are confirmed.</p>
-        <LabsButton disabled={submitting} onClick={() => void submitActiveStep()}>
+        {renderChecklist(clearToFillChecklistItems, checklist, setChecklistField)}
+        <LabsButton disabled={submitting || !isChecklistComplete(clearToFillChecklistItems, checklist)} onClick={() => void submitActiveStep()}>
           {submitting ? "Clearing..." : "Mark clear to fill"}
         </LabsButton>
       </section>
@@ -211,7 +296,8 @@ function renderActiveSection(
       <section className="delegate-review-section">
         <h3>Schedule Shipment</h3>
         <p>Patient contact, delivery address, delivery window, cold-chain packout, and courier scheduling are documented.</p>
-        <LabsButton disabled={submitting} onClick={() => void submitActiveStep()}>
+        {renderChecklist(shipmentChecklistItems, checklist, setChecklistField)}
+        <LabsButton disabled={submitting || !isChecklistComplete(shipmentChecklistItems, checklist)} onClick={() => void submitActiveStep()}>
           {submitting ? "Scheduling..." : "Schedule shipment"}
         </LabsButton>
       </section>
@@ -222,10 +308,32 @@ function renderActiveSection(
     <section className="delegate-review-section">
       <h3>Confirm Fulfillment</h3>
       <p>Shipment, delivery confirmation, delivery attempt record, and temperature log are complete without avoidable exception.</p>
-      <LabsButton disabled={submitting} onClick={() => void submitActiveStep()}>
+      {renderChecklist(fulfillmentChecklistItems, checklist, setChecklistField)}
+      <LabsButton disabled={submitting || !isChecklistComplete(fulfillmentChecklistItems, checklist)} onClick={() => void submitActiveStep()}>
         {submitting ? "Confirming..." : "Confirm fulfillment"}
       </LabsButton>
     </section>
+  );
+}
+
+function renderChecklist(
+  items: ChecklistItem[],
+  checklist: ChecklistState,
+  setChecklistField: ChecklistFieldSetter
+) {
+  return (
+    <div className="workflow-checklist" aria-label="Operator checklist">
+      {items.map((item) => (
+        <label className="checkbox-row" key={item.field}>
+          <input
+            checked={checklist[item.field]}
+            type="checkbox"
+            onChange={(event) => setChecklistField(item.field, event.currentTarget.checked)}
+          />
+          {item.label}
+        </label>
+      ))}
+    </div>
   );
 }
 
@@ -377,44 +485,86 @@ function buildActionUrl(caseRecord: SpecialtyFulfillmentCase): string {
   return `/api/specialty-rx/cases/${encodedId}/fulfillment`;
 }
 
-function buildActionPayload(caseRecord: SpecialtyFulfillmentCase) {
+function buildChecklistState(caseRecord: SpecialtyFulfillmentCase): ChecklistState {
+  return {
+    prescriptionPresent: caseRecord.intake.prescriptionPresent,
+    assignedPharmacyConfirmed: caseRecord.intake.assignedPharmacyConfirmed,
+    therapyMetadataPresent: caseRecord.intake.therapyMetadataPresent,
+    handoffDataComplete: caseRecord.intake.handoffDataComplete,
+    benefitsOrClaimCheckCompleted: caseRecord.clearToFill.benefitsOrClaimCheckCompleted,
+    prescriptionValid: caseRecord.clearToFill.prescriptionValid,
+    inventoryAvailable: caseRecord.clearToFill.inventoryAvailable,
+    copayOrPaymentReady: caseRecord.clearToFill.copayOrPaymentReady,
+    patientContactAttemptDocumented: caseRecord.shipment.patientContactAttemptDocumented,
+    addressConfirmed: caseRecord.shipment.addressConfirmed,
+    deliveryWindowConfirmed: caseRecord.shipment.deliveryWindowConfirmed,
+    coldChainPackoutValidated: caseRecord.shipment.coldChainPackoutValidated,
+    courierScheduled: caseRecord.shipment.courierScheduled,
+    shipped: caseRecord.fulfillment.shipped,
+    deliveryConfirmed: caseRecord.fulfillment.deliveryConfirmed,
+    deliveryAttemptDocumented: caseRecord.fulfillment.deliveryAttemptDocumented,
+    temperatureLogValid: caseRecord.fulfillment.temperatureLogValid
+  };
+}
+
+function isActiveChecklistComplete(caseRecord: SpecialtyFulfillmentCase, checklist: ChecklistState): boolean {
+  if (caseRecord.state === "intake_triage") {
+    return isChecklistComplete(intakeChecklistItems, checklist);
+  }
+
+  if (caseRecord.state === "clear_to_fill") {
+    return isChecklistComplete(clearToFillChecklistItems, checklist);
+  }
+
+  if (caseRecord.state === "shipment_scheduled" && !caseRecord.shipmentScheduledAt) {
+    return isChecklistComplete(shipmentChecklistItems, checklist);
+  }
+
+  return isChecklistComplete(fulfillmentChecklistItems, checklist);
+}
+
+function isChecklistComplete(items: ChecklistItem[], checklist: ChecklistState): boolean {
+  return items.every((item) => checklist[item.field]);
+}
+
+function buildActionPayload(caseRecord: SpecialtyFulfillmentCase, checklist: ChecklistState) {
   if (caseRecord.state === "intake_triage") {
     return {
-      prescriptionPresent: true,
-      assignedPharmacyConfirmed: true,
-      therapyMetadataPresent: true,
-      handoffDataComplete: true
+      prescriptionPresent: checklist.prescriptionPresent,
+      assignedPharmacyConfirmed: checklist.assignedPharmacyConfirmed,
+      therapyMetadataPresent: checklist.therapyMetadataPresent,
+      handoffDataComplete: checklist.handoffDataComplete
     };
   }
 
   if (caseRecord.state === "clear_to_fill") {
     return {
-      benefitsOrClaimCheckCompleted: true,
-      prescriptionValid: true,
+      benefitsOrClaimCheckCompleted: checklist.benefitsOrClaimCheckCompleted,
+      prescriptionValid: checklist.prescriptionValid,
       prescriberClarificationRequired: false,
       prescriberClarificationResolved: true,
       remsRequired: false,
       remsAuthorizationConfirmed: true,
-      inventoryAvailable: true,
-      copayOrPaymentReady: true
+      inventoryAvailable: checklist.inventoryAvailable,
+      copayOrPaymentReady: checklist.copayOrPaymentReady
     };
   }
 
   if (caseRecord.state === "shipment_scheduled" && !caseRecord.shipmentScheduledAt) {
     return {
-      patientContactAttemptDocumented: true,
-      addressConfirmed: true,
-      deliveryWindowConfirmed: true,
-      coldChainPackoutValidated: true,
-      courierScheduled: true
+      patientContactAttemptDocumented: checklist.patientContactAttemptDocumented,
+      addressConfirmed: checklist.addressConfirmed,
+      deliveryWindowConfirmed: checklist.deliveryWindowConfirmed,
+      coldChainPackoutValidated: checklist.coldChainPackoutValidated,
+      courierScheduled: checklist.courierScheduled
     };
   }
 
   return {
-    shipped: true,
-    deliveryConfirmed: true,
-    deliveryAttemptDocumented: true,
-    temperatureLogValid: true,
+    shipped: checklist.shipped,
+    deliveryConfirmed: checklist.deliveryConfirmed,
+    deliveryAttemptDocumented: checklist.deliveryAttemptDocumented,
+    temperatureLogValid: checklist.temperatureLogValid,
     avoidableFulfillmentException: false,
     externalBlockerDocumented: false,
     exceptionReasonCode: null
