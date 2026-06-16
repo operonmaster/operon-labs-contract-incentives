@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { getDtrQuestionnaire, type DtrAnswerValue, type UMRequest } from "@operon-labs/um-platform";
 import { LabsBadge, LabsButton, LabsModal, LabsSelect, type LabsSelectOption } from "../labs-ui";
 import { formatRequestType, formatUmRequestSlaStatus, formatUmState } from "./delegate-formatters";
@@ -49,19 +49,48 @@ const denialReasonOptions: LabsSelectOption[] = [
   }
 ];
 
+type DelegateReviewStepId = "startReview" | "clinicalChecklist" | "submitDetermination";
+
+interface ChecklistValues {
+  clinicalDocumentationReviewed: boolean;
+  medicalNecessityCriteriaMet: boolean;
+  planPolicyRequirementsChecked: boolean;
+  decisionRationaleDocumented: boolean;
+}
+
+const reviewSteps: Array<{ id: DelegateReviewStepId; label: string }> = [
+  { id: "startReview", label: "Start Review" },
+  { id: "clinicalChecklist", label: "Clinical Checklist" },
+  { id: "submitDetermination", label: "Submit Determination" }
+];
+
 export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, request }: DelegateReviewModalProps) {
-  const [reviewStarted, setReviewStarted] = useState(request.state === "in_clinical_review");
+  const [reviewStarted, setReviewStarted] = useState(
+    request.state === "in_clinical_review" || request.state === "determined" || Boolean(request.reviewStartedAt)
+  );
   const [outcomeStatus, setOutcomeStatus] = useState<"approved" | "denied" | null>(request.outcomeStatus ?? null);
-  const [clinicalDocumentationReviewed, setClinicalDocumentationReviewed] = useState(false);
-  const [medicalNecessityCriteriaMet, setMedicalNecessityCriteriaMet] = useState(false);
-  const [planPolicyRequirementsChecked, setPlanPolicyRequirementsChecked] = useState(false);
-  const [decisionRationaleDocumented, setDecisionRationaleDocumented] = useState(false);
-  const [approvalReasonCode, setApprovalReasonCode] = useState("POLICY_CRITERIA_MET");
-  const [denialReasonCode, setDenialReasonCode] = useState("NOT_MEDICALLY_NECESSARY");
+  const [clinicalDocumentationReviewed, setClinicalDocumentationReviewed] = useState(
+    request.clinicalReview.clinicalDocumentationReviewed
+  );
+  const [medicalNecessityCriteriaMet, setMedicalNecessityCriteriaMet] = useState(request.clinicalReview.medicalNecessityCriteriaMet);
+  const [planPolicyRequirementsChecked, setPlanPolicyRequirementsChecked] = useState(
+    request.clinicalReview.planPolicyRequirementsChecked
+  );
+  const [decisionRationaleDocumented, setDecisionRationaleDocumented] = useState(
+    request.clinicalReview.decisionRationaleDocumented
+  );
+  const [approvalReasonCode, setApprovalReasonCode] = useState(request.clinicalReview.approvalReasonCode ?? "POLICY_CRITERIA_MET");
+  const [denialReasonCode, setDenialReasonCode] = useState(request.clinicalReview.denialReasonCode ?? "NOT_MEDICALLY_NECESSARY");
   const [submitting, setSubmitting] = useState(false);
   const [actionStatus, setActionStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const checklistValues: ChecklistValues = {
+    clinicalDocumentationReviewed,
+    medicalNecessityCriteriaMet,
+    planPolicyRequirementsChecked,
+    decisionRationaleDocumented
+  };
   const checklistComplete =
     clinicalDocumentationReviewed &&
     medicalNecessityCriteriaMet &&
@@ -74,7 +103,14 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, requ
   const activeReasonLabel = outcomeStatus === "denied" ? "Denial reason" : "Approval reason";
   const outcomeGuidanceId = "delegate-outcome-guidance";
   const assessment = buildAssessmentView(request);
-  const currentState = reviewStarted ? "in_clinical_review" : request.state;
+  const currentState = request.state === "determined" ? request.state : reviewStarted ? "in_clinical_review" : request.state;
+  const activeStepId = getActiveReviewStepId(request, reviewStarted, checklistComplete);
+  const activeStepIndex = reviewSteps.findIndex((step) => step.id === activeStepId);
+  const [viewStepId, setViewStepId] = useState<DelegateReviewStepId>(activeStepId);
+
+  useEffect(() => {
+    setViewStepId(activeStepId);
+  }, [activeStepId, request.id]);
 
   async function ensureReviewStarted(): Promise<boolean> {
     if (reviewStarted) {
@@ -240,6 +276,40 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, requ
           )}
         </section>
 
+        <ol className="stepper compact-stepper" aria-label="Delegate UM review steps">
+          {reviewSteps.map((step, index) => {
+            const canViewStep = index <= activeStepIndex;
+            const classes = [
+              index < activeStepIndex ? "done" : "",
+              index === activeStepIndex ? "active" : "",
+              step.id === viewStepId ? "viewing" : "",
+              canViewStep ? "stepper-clickable" : "stepper-disabled"
+            ]
+              .filter(Boolean)
+              .join(" ");
+
+            return (
+              <li
+                className={classes}
+                aria-current={index === activeStepIndex ? "step" : undefined}
+                key={step.id}
+              >
+                <button
+                  aria-label={step.label}
+                  aria-pressed={step.id === viewStepId}
+                  className="stepper-step-button"
+                  disabled={!canViewStep}
+                  type="button"
+                  onClick={() => setViewStepId(step.id)}
+                >
+                  <strong aria-hidden="true">{index + 1}</strong>
+                  <span>{step.label}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ol>
+
         {actionStatus ? <p className="action-status">{actionStatus}</p> : null}
         {error ? (
           <p className="error-text" role="alert">
@@ -247,13 +317,17 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, requ
           </p>
         ) : null}
 
-        {!reviewStarted ? (
-          <LabsButton disabled={submitting} onClick={() => void startReview()}>
-            {submitting ? "Starting..." : "Start review"}
-          </LabsButton>
-        ) : null}
-
-        <div className="delegate-review-grid">
+        {viewStepId !== activeStepId || (request.state === "determined" && viewStepId === "submitDetermination") ? (
+          renderCompletedReviewStep(request, viewStepId, checklistValues, reviewStarted, currentState)
+        ) : viewStepId === "startReview" ? (
+          <section className="delegate-review-section">
+            <h3>Start Review</h3>
+            <p>Start the delegated clinical review before completing checklist and determination steps.</p>
+            <LabsButton disabled={submitting} onClick={() => void startReview()}>
+              {submitting ? "Starting..." : "Start review"}
+            </LabsButton>
+          </section>
+        ) : viewStepId === "clinicalChecklist" ? (
           <section className="delegate-review-section">
             <h3>Clinical checklist</h3>
             <label className="checkbox-row">
@@ -289,61 +363,177 @@ export function DelegateReviewModal({ onClose, onCompleted, requestApiBase, requ
               Decision rationale documented
             </label>
           </section>
-
-          <section className="delegate-review-section">
-            <h3>Outcome</h3>
-            <div
-              aria-describedby={!canChooseOutcome ? outcomeGuidanceId : undefined}
-              className="radio-group"
-              role="radiogroup"
-              aria-label="Outcome status"
-            >
-              {(["approved", "denied"] as const).map((outcome) => (
-                <label
-                  className={`radio-card ${outcomeStatus === outcome ? "selected" : ""} ${canChooseOutcome ? "" : "disabled"}`}
-                  key={outcome}
+        ) : (
+          <>
+            <div className="delegate-review-grid">
+              <section className="delegate-review-section">
+                <h3>Outcome</h3>
+                <div
+                  aria-describedby={!canChooseOutcome ? outcomeGuidanceId : undefined}
+                  className="radio-group"
+                  role="radiogroup"
+                  aria-label="Outcome status"
                 >
-                  <input
-                    checked={outcomeStatus === outcome}
-                    disabled={!canChooseOutcome}
-                    name="delegate-outcome"
-                    type="radio"
-                    value={outcome}
-                    onChange={() => setOutcomeStatus(outcome)}
-                  />
-                  {outcome === "approved" ? "Approve" : "Deny"}
-                </label>
-              ))}
+                  {(["approved", "denied"] as const).map((outcome) => (
+                    <label
+                      className={`radio-card ${outcomeStatus === outcome ? "selected" : ""} ${canChooseOutcome ? "" : "disabled"}`}
+                      key={outcome}
+                    >
+                      <input
+                        checked={outcomeStatus === outcome}
+                        disabled={!canChooseOutcome}
+                        name="delegate-outcome"
+                        type="radio"
+                        value={outcome}
+                        onChange={() => setOutcomeStatus(outcome)}
+                      />
+                      {outcome === "approved" ? "Approve" : "Deny"}
+                    </label>
+                  ))}
+                </div>
+                {!canChooseOutcome ? (
+                  <LabsBadge className="delegate-guidance" id={outcomeGuidanceId} variant="warning">
+                    Complete the clinical checklist before choosing an outcome
+                  </LabsBadge>
+                ) : null}
+                {outcomeStatus ? (
+                  <div className="form-row delegate-field">
+                    <span>{activeReasonLabel}</span>
+                    <LabsSelect
+                      id={`delegate-${outcomeStatus}-reason`}
+                      ariaLabel={activeReasonLabel}
+                      disabled={!canChooseOutcome}
+                      options={activeReasonOptions}
+                      placeholder={`Select ${outcomeStatus} reason`}
+                      value={activeReasonCode}
+                      onChange={outcomeStatus === "approved" ? setApprovalReasonCode : setDenialReasonCode}
+                    />
+                  </div>
+                ) : null}
+              </section>
             </div>
-            {!canChooseOutcome ? (
-              <LabsBadge className="delegate-guidance" id={outcomeGuidanceId} variant="warning">
-                Complete the clinical checklist before choosing an outcome
-              </LabsBadge>
-            ) : null}
-            {outcomeStatus ? (
-              <div className="form-row delegate-field">
-                <span>{activeReasonLabel}</span>
-                <LabsSelect
-                  id={`delegate-${outcomeStatus}-reason`}
-                  ariaLabel={activeReasonLabel}
-                  disabled={!canChooseOutcome}
-                  options={activeReasonOptions}
-                  placeholder={`Select ${outcomeStatus} reason`}
-                  value={activeReasonCode}
-                  onChange={outcomeStatus === "approved" ? setApprovalReasonCode : setDenialReasonCode}
-                />
-              </div>
-            ) : null}
-          </section>
-        </div>
 
-        <div className="delegate-modal-actions">
-          <LabsButton disabled={!canSubmit} onClick={() => void submitDetermination()}>
-            {submitting ? "Submitting..." : "Submit determination"}
-          </LabsButton>
-        </div>
+            <div className="delegate-modal-actions">
+              <LabsButton disabled={!canSubmit} onClick={() => void submitDetermination()}>
+                {submitting ? "Submitting..." : "Submit determination"}
+              </LabsButton>
+            </div>
+          </>
+        )}
     </LabsModal>
   );
+}
+
+function getActiveReviewStepId(
+  request: UMRequest,
+  reviewStarted: boolean,
+  checklistComplete: boolean
+): DelegateReviewStepId {
+  if (!reviewStarted) {
+    return "startReview";
+  }
+
+  if (!checklistComplete && request.state !== "determined") {
+    return "clinicalChecklist";
+  }
+
+  return "submitDetermination";
+}
+
+function renderCompletedReviewStep(
+  request: UMRequest,
+  viewStepId: DelegateReviewStepId,
+  checklistValues: ChecklistValues,
+  reviewStarted: boolean,
+  currentState: UMRequest["state"]
+) {
+  const section = getCompletedReviewStepView(request, viewStepId, checklistValues, reviewStarted, currentState);
+
+  return (
+    <section className="delegate-review-section appeals-step-review-section">
+      <div>
+        <h3>{section.title}</h3>
+        <p>{section.body}</p>
+      </div>
+      <dl className="detail-grid delegate-service-grid">
+        {section.fields.map((field) => (
+          <div key={field.label}>
+            <dt>{field.label}</dt>
+            <dd>{field.value}</dd>
+          </div>
+        ))}
+      </dl>
+      <p className="action-status">Completed step</p>
+    </section>
+  );
+}
+
+function getCompletedReviewStepView(
+  request: UMRequest,
+  viewStepId: DelegateReviewStepId,
+  checklistValues: ChecklistValues,
+  reviewStarted: boolean,
+  currentState: UMRequest["state"]
+) {
+  switch (viewStepId) {
+    case "startReview":
+      return {
+        title: "Start Review",
+        body: "Delegate clinical review has been started for this request.",
+        fields: [
+          { label: "Review status", value: reviewStarted ? "Started" : "Not started" },
+          { label: "Current state", value: formatUmState(currentState) }
+        ]
+      };
+    case "clinicalChecklist":
+      return {
+        title: "Clinical Checklist",
+        body: "Clinical checklist values captured before determination.",
+        fields: [
+          { label: "Clinical documentation reviewed", value: formatBoolean(checklistValues.clinicalDocumentationReviewed) },
+          { label: "Medical necessity criteria met", value: formatBoolean(checklistValues.medicalNecessityCriteriaMet) },
+          { label: "Plan policy requirements checked", value: formatBoolean(checklistValues.planPolicyRequirementsChecked) },
+          { label: "Decision rationale documented", value: formatBoolean(checklistValues.decisionRationaleDocumented) }
+        ]
+      };
+    case "submitDetermination": {
+      const reasonCode =
+        request.outcomeStatus === "denied" ? request.clinicalReview.denialReasonCode : request.clinicalReview.approvalReasonCode;
+
+      return {
+        title: "Submit Determination",
+        body: "Final delegate determination captured for this request.",
+        fields: [
+          { label: "Outcome", value: formatOutcomeStatus(request.outcomeStatus) },
+          { label: "Reason", value: formatReasonLabel(request.outcomeStatus, reasonCode) }
+        ]
+      };
+    }
+  }
+}
+
+function formatBoolean(value: boolean): string {
+  return value ? "Yes" : "No";
+}
+
+function formatOutcomeStatus(value: UMRequest["outcomeStatus"]): string {
+  switch (value) {
+    case "approved":
+      return "Approved";
+    case "denied":
+      return "Denied";
+    case null:
+      return "Not recorded";
+  }
+}
+
+function formatReasonLabel(outcomeStatus: UMRequest["outcomeStatus"], reasonCode: string | null): string {
+  if (!outcomeStatus || !reasonCode) {
+    return "Not recorded";
+  }
+
+  const options = outcomeStatus === "denied" ? denialReasonOptions : approvalReasonOptions;
+  return options.find((option) => option.value === reasonCode)?.label ?? reasonCode;
 }
 
 interface AssessmentAnswerView {

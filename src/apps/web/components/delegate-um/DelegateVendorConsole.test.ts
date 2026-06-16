@@ -45,7 +45,7 @@ describe("DelegateVendorConsole source", () => {
     expect(stylesSource).toMatch(/\.delegate-guidance\s*\{[^}]*font-size:\s*14px;/s);
   });
 
-  it("renders review modal with shared checklist, radio, and dropdown primitives", () => {
+  it("renders review modal with shared stepper, radio, and dropdown primitives", () => {
     const markup = renderToStaticMarkup(
       createElement(DelegateReviewModal, {
         requestApiBase: "/api/delegate-um/requests/",
@@ -55,10 +55,9 @@ describe("DelegateVendorConsole source", () => {
       })
     );
 
-    expect(markup).toContain("Clinical documentation reviewed");
-    expect(markup).toContain("Medical necessity criteria met");
-    expect(markup).toContain("Plan policy requirements checked");
-    expect(markup).toContain("Decision rationale documented");
+    expect(markup).toContain("Start Review");
+    expect(markup).toContain("Clinical Checklist");
+    expect(markup).toContain("Submit Determination");
     expect(markup).toContain("Outcome status");
     expect(markup).toContain("labs-select");
     expect(markup).toContain("Approval reason");
@@ -68,7 +67,7 @@ describe("DelegateVendorConsole source", () => {
     expect(markup).toContain("Submit determination");
     // Rendered through the shared LabsButton primitive (attribute order is incidental).
     expect(markup).toMatch(/<button[^>]*class="primary-button"[^>]*>Submit determination<\/button>/);
-    expect(markup).toMatch(/<button[^>]*disabled=""[^>]*>Submit determination<\/button>/);
+    expect(markup).not.toMatch(/<button[^>]*disabled=""[^>]*>Submit determination<\/button>/);
     expect(markup).not.toContain("<select");
   });
 
@@ -118,7 +117,7 @@ describe("DelegateVendorConsole source", () => {
     expect(markup).not.toContain("View assessment");
   });
 
-  it("locks outcome selection until clinical checklist is complete", () => {
+  it("keeps submit determination disabled until clinical checklist is complete", () => {
     const markup = renderToStaticMarkup(
       createElement(DelegateReviewModal, {
         requestApiBase: "/api/delegate-um/requests/",
@@ -128,12 +127,12 @@ describe("DelegateVendorConsole source", () => {
       })
     );
 
-    expect(markup).toContain("Complete the clinical checklist before choosing an outcome");
-    expect(markup).toContain('class="op-badge op-badge-warning delegate-guidance"');
-    expect(markup).toContain('aria-describedby="delegate-outcome-guidance"');
-    expect(markup).toContain('id="delegate-outcome-guidance"');
-    expect(markup).toMatch(/<input[^>]*(disabled=""[^>]*value="approved"|value="approved"[^>]*disabled="")[^>]*\/>Approve/);
-    expect(markup).toMatch(/<input[^>]*(disabled=""[^>]*value="denied"|value="denied"[^>]*disabled="")[^>]*\/>Deny/);
+    expect(markup).toContain("Clinical checklist");
+    expect(markup).toContain('aria-label="Submit Determination"');
+    expect(markup).toMatch(/<button[^>]*aria-label="Submit Determination"[^>]*disabled=""/);
+    expect(markup).toContain("Clinical documentation reviewed");
+    expect(markup).not.toContain("Outcome status");
+    expect(markup).not.toContain("Complete the clinical checklist before choosing an outcome");
     expect(markup).not.toContain("Approval reason");
     expect(markup).not.toContain("Denial reason");
   });
@@ -156,12 +155,10 @@ describe("DelegateVendorConsole source", () => {
       });
 
       const checklistInputs = Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'));
-      const outcomeInputs = Array.from(container.querySelectorAll<HTMLInputElement>('input[name="delegate-outcome"]'));
 
       expect(checklistInputs).toHaveLength(4);
-      expect(outcomeInputs).toHaveLength(2);
-      expect(outcomeInputs.every((input) => input.disabled)).toBe(true);
-      expect(container.textContent).toContain("Complete the clinical checklist before choosing an outcome");
+      expect(container.querySelectorAll<HTMLInputElement>('input[name="delegate-outcome"]')).toHaveLength(0);
+      expect(container.textContent).not.toContain("Complete the clinical checklist before choosing an outcome");
 
       for (const input of checklistInputs) {
         await act(async () => {
@@ -169,8 +166,11 @@ describe("DelegateVendorConsole source", () => {
         });
       }
 
+      const outcomeInputs = Array.from(container.querySelectorAll<HTMLInputElement>('input[name="delegate-outcome"]'));
+
+      expect(container.textContent).toContain("Outcome");
+      expect(outcomeInputs).toHaveLength(2);
       expect(outcomeInputs.every((input) => input.disabled)).toBe(false);
-      expect(container.textContent).not.toContain("Complete the clinical checklist before choosing an outcome.");
 
       await act(async () => {
         outcomeInputs[0]?.click();
@@ -190,8 +190,10 @@ describe("DelegateVendorConsole source", () => {
   it("unlocks outcome selection from a pended row after all checklist items are checked", async () => {
     const container = document.createElement("div");
     document.body.append(container);
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ state: "in_clinical_review" }), { status: 200 }));
     let root: Root | null = createRoot(container);
 
+    vi.stubGlobal("fetch", fetchMock);
     try {
       await act(async () => {
         root?.render(
@@ -204,21 +206,120 @@ describe("DelegateVendorConsole source", () => {
         );
       });
 
+      expect(container.textContent).toContain("Start Review");
+      expect(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')).toHaveLength(0);
+      expect(container.querySelectorAll<HTMLInputElement>('input[name="delegate-outcome"]')).toHaveLength(0);
+
+      await act(async () => {
+        Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
+          .find((button) => button.textContent === "Start review")
+          ?.click();
+      });
+
       const checklistInputs = Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'));
-      const outcomeInputs = Array.from(container.querySelectorAll<HTMLInputElement>('input[name="delegate-outcome"]'));
-
-      expect(container.textContent).toContain("Complete the clinical checklist before choosing an outcome");
-      expect(outcomeInputs.every((input) => input.disabled)).toBe(true);
-
+      expect(checklistInputs).toHaveLength(4);
       for (const input of checklistInputs) {
         await act(async () => {
           input.click();
         });
       }
 
-      expect(container.textContent).not.toContain("Complete the clinical checklist before choosing an outcome");
+      const outcomeInputs = Array.from(container.querySelectorAll<HTMLInputElement>('input[name="delegate-outcome"]'));
+      expect(outcomeInputs).toHaveLength(2);
       expect(outcomeInputs.every((input) => input.disabled)).toBe(false);
     } finally {
+      vi.unstubAllGlobals();
+      await act(async () => {
+        root?.unmount();
+      });
+      root = null;
+      container.remove();
+    }
+  });
+
+  it("lets operators review completed delegate steps without editing them", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ state: "in_clinical_review" }), { status: 200 }));
+    let root: Root | null = createRoot(container);
+
+    const stepButton = (label: string) =>
+      Array.from(container.querySelectorAll<HTMLButtonElement>(".stepper-step-button")).find(
+        (button) => button.getAttribute("aria-label") === label
+      );
+
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      await act(async () => {
+        root?.render(
+          createElement(DelegateReviewModal, {
+            requestApiBase: "/api/delegate-um/requests/",
+            request: buildDelegateRequest("pend"),
+            onClose: () => undefined,
+            onCompleted: () => undefined
+          })
+        );
+      });
+
+      expect(stepButton("Start Review")).toBeDefined();
+      expect(stepButton("Clinical Checklist")?.disabled).toBe(true);
+      expect(stepButton("Submit Determination")?.disabled).toBe(true);
+
+      await act(async () => {
+        Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
+          .find((button) => button.textContent === "Start review")
+          ?.click();
+      });
+
+      expect(fetchMock).toHaveBeenCalledWith("/api/delegate-um/requests/PA-260526-0900-REVIEW1/start-review", expect.any(Object));
+      expect(stepButton("Start Review")?.disabled).toBe(false);
+      expect(stepButton("Clinical Checklist")?.disabled).toBe(false);
+      expect(stepButton("Submit Determination")?.disabled).toBe(true);
+
+      await act(async () => {
+        stepButton("Start Review")?.click();
+      });
+
+      expect(container.textContent).toContain("Completed step");
+      expect(container.textContent).toContain("Review status");
+      expect(container.textContent).toContain("In clinical review");
+      expect(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')).toHaveLength(0);
+
+      await act(async () => {
+        stepButton("Clinical Checklist")?.click();
+      });
+
+      expect(container.textContent).toContain("Clinical checklist");
+      expect(container.textContent).not.toContain("Completed step");
+      expect(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')).toHaveLength(4);
+
+      for (const input of Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'))) {
+        await act(async () => {
+          input.click();
+        });
+      }
+
+      expect(stepButton("Submit Determination")?.disabled).toBe(false);
+
+      await act(async () => {
+        stepButton("Clinical Checklist")?.click();
+      });
+
+      expect(container.textContent).toContain("Completed step");
+      expect(container.textContent).toContain("Clinical documentation reviewed");
+      expect(container.textContent).toContain("Medical necessity criteria met");
+      expect(container.textContent).toContain("Plan policy requirements checked");
+      expect(container.textContent).toContain("Decision rationale documented");
+      expect(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')).toHaveLength(0);
+
+      await act(async () => {
+        stepButton("Submit Determination")?.click();
+      });
+
+      expect(container.textContent).not.toContain("Completed step");
+      expect(container.querySelectorAll<HTMLInputElement>('input[name="delegate-outcome"]')).toHaveLength(2);
+    } finally {
+      vi.unstubAllGlobals();
       await act(async () => {
         root?.unmount();
       });
@@ -257,6 +358,12 @@ describe("DelegateVendorConsole source", () => {
             onCompleted
           })
         );
+      });
+
+      await act(async () => {
+        Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
+          .find((button) => button.textContent === "Start review")
+          ?.click();
       });
 
       for (const input of Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'))) {
@@ -305,6 +412,24 @@ describe("DelegateVendorConsole source", () => {
     expect(markup).toContain("Submit determination");
     expect(markup).not.toContain("<select");
   });
+
+  it("renders determined requests as a completed submit determination summary", () => {
+    const markup = renderToStaticMarkup(
+      createElement(DelegateReviewModal, {
+        requestApiBase: "/api/delegate-um/requests/",
+        request: buildDelegateRequest("determined", "approved"),
+        onClose: () => undefined,
+        onCompleted: () => undefined
+      })
+    );
+
+    expect(markup).toContain("Submit Determination");
+    expect(markup).toContain("Completed step");
+    expect(markup).toContain("<dt>Outcome</dt><dd>Approved</dd>");
+    expect(markup).toContain("<dt>Reason</dt><dd>Policy criteria met</dd>");
+    expect(markup).not.toContain("Submit determination");
+    expect(markup).not.toContain('input name="delegate-outcome"');
+  });
 });
 
 function buildDelegateRequest(
@@ -313,6 +438,7 @@ function buildDelegateRequest(
   assessmentStatus: "complete" | "not_provided" = "not_provided"
 ): UMRequest {
   const assessmentProvided = assessmentStatus === "complete";
+  const clinicalReviewComplete = outcomeStatus !== null || state === "determined";
 
   return {
     id: "PA-260526-0900-REVIEW1",
@@ -380,12 +506,12 @@ function buildDelegateRequest(
     },
     clinicalReview: {
       reviewerId: state === "pend" ? null : "delegate-reviewer",
-      clinicalDocumentationReviewed: false,
-      medicalNecessityCriteriaMet: false,
-      planPolicyRequirementsChecked: false,
-      decisionRationaleDocumented: false,
-      approvalReasonCode: null,
-      denialReasonCode: null
+      clinicalDocumentationReviewed: clinicalReviewComplete,
+      medicalNecessityCriteriaMet: clinicalReviewComplete,
+      planPolicyRequirementsChecked: clinicalReviewComplete,
+      decisionRationaleDocumented: clinicalReviewComplete,
+      approvalReasonCode: outcomeStatus === "approved" ? "POLICY_CRITERIA_MET" : null,
+      denialReasonCode: outcomeStatus === "denied" ? "NOT_MEDICALLY_NECESSARY" : null
     },
     auditRefs: {
       pasClaimBundleId: "PA-260526-0900-REVIEW1",

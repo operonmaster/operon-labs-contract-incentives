@@ -31,9 +31,11 @@ import {
 type PatientId = string;
 type PlanId = string;
 type AssessmentStatus = "not_required" | "not_started" | "complete" | "skipped";
+type ViewedStep = PortalStep | "submission";
 
 export function ProviderDocumentationWizard() {
   const [step, setStep] = useState<PortalStep>("setup");
+  const [viewStep, setViewStep] = useState<ViewedStep>("setup");
   const [patientCoverageContexts, setPatientCoverageContexts] = useState<PatientCoverageContext[]>([]);
   const [patientId, setPatientId] = useState<PatientId | null>(null);
   const [planId, setPlanId] = useState<PlanId | null>(null);
@@ -59,6 +61,7 @@ export function ProviderDocumentationWizard() {
 
   const selectedPath = `${patientId ?? ""}:${planId ?? ""}:${requestType ?? ""}:${serviceCode ?? ""}`;
   const currentStepIndex = wizardSteps.findIndex((candidate) => candidate.id === step);
+  const viewableStepIndex = submitted ? wizardSteps.length - 1 : currentStepIndex;
   const selectedPatientCoverage = patientId
     ? patientCoverageContexts.find((patient) => patient.patientId === patientId) ?? null
     : null;
@@ -85,6 +88,10 @@ export function ProviderDocumentationWizard() {
   useEffect(() => {
     selectedPathRef.current = selectedPath;
   }, [selectedPath]);
+
+  useEffect(() => {
+    setViewStep(submitted ? "submission" : step);
+  }, [step, submitted]);
 
   useEffect(() => {
     let cancelled = false;
@@ -444,24 +451,59 @@ export function ProviderDocumentationWizard() {
 
       <section className="wizard-shell provider-shell">
         <ol className="stepper compact-stepper" aria-label="Prior authorization steps">
-          {wizardSteps.map((candidate, index) => (
-            <li
-              key={candidate.id}
-              className={`${index < currentStepIndex || submitted ? "done" : ""} ${index === currentStepIndex && !submitted ? "active" : ""}`}
-            >
-              <strong>{index + 1}</strong>
-              <span>{candidate.label}</span>
-            </li>
-          ))}
+          {wizardSteps.map((candidate, index) => {
+            const canViewStep = index <= viewableStepIndex;
+            const classes = [
+              index < currentStepIndex || submitted ? "done" : "",
+              index === currentStepIndex && !submitted ? "active" : "",
+              viewStep === candidate.id ? "viewing" : "",
+              canViewStep ? "stepper-clickable" : "stepper-disabled"
+            ]
+              .filter(Boolean)
+              .join(" ");
+
+            return (
+              <li
+                key={candidate.id}
+                aria-current={index === currentStepIndex && !submitted ? "step" : undefined}
+                className={classes}
+              >
+                <button
+                  aria-label={candidate.label}
+                  aria-pressed={viewStep === candidate.id}
+                  className="stepper-step-button"
+                  disabled={!canViewStep}
+                  type="button"
+                  onClick={() => setViewStep(candidate.id)}
+                >
+                  <strong aria-hidden="true">{index + 1}</strong>
+                  <span>{candidate.label}</span>
+                </button>
+              </li>
+            );
+          })}
         </ol>
 
         <div className="wizard-grid provider-stage-grid">
           <section className="wizard-stage panel" aria-busy={submitting || checkingRequirements}>
-            {submitted ? (
+            {submitted && viewStep === "submission" ? (
               <SubmissionConfirmation submitted={submitted} onSubmitAnother={submitAnotherRequest} />
+            ) : viewStep !== "submission" && (submitted || viewStep !== step) ? (
+              <CompletedStepSummary
+                acknowledgedNotCovered={acknowledgedNotCovered}
+                assessmentStatus={assessmentStatus}
+                coverageRequirements={coverageRequirements}
+                patientDisplay={patientDisplay}
+                planDisplay={planDisplay}
+                requestType={requestType}
+                service={service}
+                stepId={viewStep}
+                submitted={submitted}
+                onReturnToSubmission={submitted ? () => setViewStep("submission") : undefined}
+              />
             ) : (
               <>
-                {step === "setup" ? (
+                {viewStep === "setup" ? (
                   <SetupStep
                     patientLoadError={patientLoadError}
                     patientCoverageContexts={patientCoverageContexts}
@@ -475,7 +517,7 @@ export function ProviderDocumentationWizard() {
                   />
                 ) : null}
 
-                {step === "service" ? (
+                {viewStep === "service" ? (
                   <ServiceStep
                     checkingRequirements={checkingRequirements}
                     crdLoadError={crdLoadError}
@@ -492,7 +534,7 @@ export function ProviderDocumentationWizard() {
                   />
                 ) : null}
 
-                {step === "coverage" ? (
+                {viewStep === "coverage" ? (
                   <CoverageStep
                     acknowledgedNotCovered={acknowledgedNotCovered}
                     assessmentStatus={assessmentStatus}
@@ -507,7 +549,7 @@ export function ProviderDocumentationWizard() {
                   />
                 ) : null}
 
-                {step === "review" ? (
+                {viewStep === "review" ? (
                   <ReviewStep
                     acknowledgedNotCovered={acknowledgedNotCovered}
                     assessmentStatus={assessmentStatus}
@@ -944,6 +986,60 @@ function ReviewStep({
   );
 }
 
+function CompletedStepSummary({
+  acknowledgedNotCovered,
+  assessmentStatus,
+  coverageRequirements,
+  patientDisplay,
+  planDisplay,
+  requestType,
+  service,
+  stepId,
+  submitted,
+  onReturnToSubmission
+}: {
+  acknowledgedNotCovered: boolean;
+  assessmentStatus: AssessmentStatus;
+  coverageRequirements: CoverageRequirements | null;
+  patientDisplay: string;
+  planDisplay: string;
+  requestType: RequestType | null;
+  service: CrdServiceOption | null;
+  stepId: PortalStep;
+  submitted: UMRequest | null;
+  onReturnToSubmission?: () => void;
+}) {
+  const summary = getCompletedStepSummary({
+    acknowledgedNotCovered,
+    assessmentStatus,
+    coverageRequirements,
+    patientDisplay,
+    planDisplay,
+    requestType,
+    service,
+    stepId,
+    submitted
+  });
+
+  return (
+    <section className="provider-completed-step-review">
+      <div>
+        <h2>{summary.title}</h2>
+        <p className="stage-copy">{summary.body}</p>
+      </div>
+      <ReadOnlyFields fields={summary.fields} />
+      <p className="action-status">Completed step</p>
+      {onReturnToSubmission ? (
+        <div className="button-row">
+          <LabsButton variant="secondary" onClick={onReturnToSubmission}>
+            Submission confirmation
+          </LabsButton>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function SubmissionConfirmation({ submitted, onSubmitAnother }: { submitted: UMRequest; onSubmitAnother: () => void }) {
   return (
     <div className="confirmation-panel" aria-live="polite" role="status">
@@ -982,6 +1078,88 @@ function SubmissionConfirmation({ submitted, onSubmitAnother }: { submitted: UMR
       </div>
     </div>
   );
+}
+
+function getCompletedStepSummary({
+  acknowledgedNotCovered,
+  assessmentStatus,
+  coverageRequirements,
+  patientDisplay,
+  planDisplay,
+  requestType,
+  service,
+  stepId,
+  submitted
+}: {
+  acknowledgedNotCovered: boolean;
+  assessmentStatus: AssessmentStatus;
+  coverageRequirements: CoverageRequirements | null;
+  patientDisplay: string;
+  planDisplay: string;
+  requestType: RequestType | null;
+  service: CrdServiceOption | null;
+  stepId: PortalStep;
+  submitted: UMRequest | null;
+}): { title: string; body: string; fields: Array<[string, string]> } {
+  const requestTypeLabel = formatRequestType(requestType);
+  const serviceLabel = service?.serviceLabel ?? "Not selected";
+  const codeLabel = service ? `${service.procedureCode} · ${service.procedureSummary}` : "Not selected";
+  const coverageResult = formatCoverageResult(coverageRequirements);
+  const assessmentResult =
+    coverageRequirements?.coveredBenefit === false ? "Not required" : formatAssessmentStatus(assessmentStatus);
+
+  switch (stepId) {
+    case "setup":
+      return {
+        title: "Patient & Plan",
+        body: "Selected patient and health plan for this prior authorization request.",
+        fields: [
+          ["Patient", patientDisplay],
+          ["Health plan", planDisplay]
+        ]
+      };
+    case "service":
+      return {
+        title: "Service",
+        body: "Selected request type and requested item.",
+        fields: [
+          ["Patient", patientDisplay],
+          ["Health plan", planDisplay],
+          ["Request type", requestTypeLabel],
+          ["Service", serviceLabel],
+          [service?.codingSystem === "NDC" ? "Medication code" : "Procedure", codeLabel]
+        ]
+      };
+    case "coverage":
+      return {
+        title: "Coverage",
+        body: "Coverage and documentation requirements returned by the health plan.",
+        fields: [
+          ["Patient", patientDisplay],
+          ["Health plan", planDisplay],
+          ["Request type", requestTypeLabel],
+          ["Service", serviceLabel],
+          ["Coverage result", coverageResult],
+          ["Assessment", assessmentResult],
+          ["Not-covered acknowledgement", coverageRequirements?.coveredBenefit === false ? formatBoolean(acknowledgedNotCovered) : "Not required"]
+        ]
+      };
+    case "review":
+      return {
+        title: "Review",
+        body: "Final request details reviewed before prior authorization submission.",
+        fields: [
+          ["Patient", patientDisplay],
+          ["Health plan", planDisplay],
+          ["Request type", requestTypeLabel],
+          ["Requested item", serviceLabel],
+          [service?.codingSystem === "NDC" ? "Medication code" : "Procedure", codeLabel],
+          ["Coverage result", coverageResult],
+          ["Assessment", assessmentResult],
+          ["Submission status", submitted ? formatSubmissionStatus(submitted) : "Not submitted"]
+        ]
+      };
+  }
 }
 
 function ServiceCard({ service }: { service: CrdServiceOption }) {
@@ -1041,6 +1219,22 @@ function formatSubmissionStatus(submitted: UMRequest) {
     case "determined":
       return "Determined";
   }
+}
+
+function formatCoverageResult(coverageRequirements: CoverageRequirements | null) {
+  if (!coverageRequirements) {
+    return "Not checked";
+  }
+
+  if (coverageRequirements.coveredBenefit === false) {
+    return "Not covered benefit";
+  }
+
+  return coverageRequirements.priorAuthRequired ? "Coverage confirmed; PA required" : "Coverage confirmed";
+}
+
+function formatBoolean(value: boolean): string {
+  return value ? "Yes" : "No";
 }
 
 function assessmentBadgeVariant(status: AssessmentStatus): "success" | "warning" | "info" | "neutral" {

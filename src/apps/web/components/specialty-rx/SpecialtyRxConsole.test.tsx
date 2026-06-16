@@ -1,17 +1,27 @@
 // @vitest-environment happy-dom
 
-import { createElement } from "react";
+import { act, createElement } from "react";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SpecialtyFulfillmentCase } from "../../lib/specialty-rx-store";
 import { formatNullableDateTime } from "./specialty-rx-formatters";
 import { SpecialtyRxWorkflowModal } from "./SpecialtyRxWorkflowModal";
 
+let root: Root | null = null;
+
 describe("SpecialtyRxWorkflowModal", () => {
-  afterEach(() => {
+  afterEach(async () => {
     vi.useRealTimers();
+    if (root) {
+      await act(async () => {
+        root?.unmount();
+      });
+      root = null;
+    }
+    document.body.innerHTML = "";
   });
 
   it("renders the fulfillment workflow steps", () => {
@@ -177,7 +187,119 @@ describe("SpecialtyRxWorkflowModal", () => {
 
     expect(markup).toContain('aria-label="Specialty fulfillment workflow steps"');
     expect(markup.match(/aria-current="step"/g)).toHaveLength(1);
-    expect(markup).toContain('class="active" aria-current="step"');
+    const root = document.createElement("div");
+    root.innerHTML = markup;
+    expect(root.querySelector('li[aria-current="step"]')?.classList.contains("active")).toBe(true);
+  });
+
+  it("lets operators inspect completed fulfillment steps and resets to a newer active step", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    const scheduledCase = {
+      ...buildSpecialtyFulfillmentCase(),
+      state: "shipment_scheduled",
+      fulfillmentSlaStartedAt: "2026-05-28T15:00:00.000Z",
+      clearToFillAt: "2026-05-28T15:30:00.000Z",
+      shipmentScheduledAt: null,
+      intake: {
+        approvedPaLinked: true,
+        prescriptionPresent: true,
+        assignedPharmacyConfirmed: true,
+        therapyMetadataPresent: true,
+        handoffDataComplete: true
+      },
+      clearToFill: {
+        benefitsOrClaimCheckCompleted: true,
+        prescriptionValid: true,
+        prescriberClarificationRequired: false,
+        prescriberClarificationResolved: true,
+        remsRequired: true,
+        remsAuthorizationConfirmed: true,
+        inventoryAvailable: true,
+        copayOrPaymentReady: true
+      }
+    } satisfies SpecialtyFulfillmentCase;
+
+    await act(async () => {
+      root?.render(
+        createElement(SpecialtyRxWorkflowModal, {
+          caseRecord: scheduledCase,
+          onClose: () => undefined,
+          onUpdated: () => undefined
+        })
+      );
+    });
+
+    expect(findButtonByLabel(document.body, "Confirm Fulfillment").disabled).toBe(true);
+    expect(findButton(document.body, "Schedule shipment").disabled).toBe(false);
+
+    await act(async () => {
+      findButtonByLabel(document.body, "Clear To Fill").click();
+    });
+
+    const reviewedText = document.querySelector('[role="dialog"]')?.textContent ?? "";
+    expect(reviewedText).toContain("Clear To Fill");
+    expect(reviewedText).toContain("Benefits check");
+    expect(reviewedText).toContain("Prescription valid");
+    expect(reviewedText).toContain("Completed step");
+    expect(Array.from(document.querySelectorAll("button")).some((button) => button.textContent === "Mark clear to fill")).toBe(
+      false
+    );
+
+    await act(async () => {
+      findButtonByLabel(document.body, "Schedule Shipment").click();
+    });
+
+    expect(findButton(document.body, "Schedule shipment").disabled).toBe(false);
+
+    await act(async () => {
+      root?.render(
+        createElement(SpecialtyRxWorkflowModal, {
+          caseRecord: {
+            ...scheduledCase,
+            shipmentScheduledAt: "2026-05-28T16:00:00.000Z"
+          },
+          onClose: () => undefined,
+          onUpdated: () => undefined
+        })
+      );
+    });
+
+    expect(findButton(document.body, "Confirm fulfillment").disabled).toBe(false);
+    expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Completed step");
+
+    await act(async () => {
+      root?.render(
+        createElement(SpecialtyRxWorkflowModal, {
+          caseRecord: {
+            ...scheduledCase,
+            state: "fulfilled",
+            shipmentScheduledAt: "2026-05-28T16:00:00.000Z",
+            deliveryConfirmedAt: "2026-05-28T18:00:00.000Z",
+            fulfillment: {
+              shipped: true,
+              deliveryConfirmed: true,
+              deliveryAttemptDocumented: true,
+              temperatureLogValid: true,
+              avoidableFulfillmentException: false,
+              externalBlockerDocumented: false,
+              exceptionReasonCode: null
+            }
+          },
+          onClose: () => undefined,
+          onUpdated: () => undefined
+        })
+      );
+    });
+
+    const terminalText = document.querySelector('[role="dialog"]')?.textContent ?? "";
+    expect(terminalText).toContain("Confirm Fulfillment");
+    expect(terminalText).toContain("Temperature log valid");
+    expect(terminalText).toContain("Completed step");
+    expect(Array.from(document.querySelectorAll("button")).some((button) => button.textContent === "Confirm fulfillment")).toBe(
+      false
+    );
   });
 });
 
@@ -267,4 +389,28 @@ function getWorkflowStateBadgeText(markup: string): string | null | undefined {
   const root = document.createElement("div");
   root.innerHTML = markup;
   return root.querySelector(".delegate-review-id-line .op-badge")?.textContent;
+}
+
+function findButton(container: HTMLElement, text: string): HTMLButtonElement {
+  const button = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
+    (candidate) => candidate.textContent === text
+  );
+
+  if (!button) {
+    throw new Error(`Button not found: ${text}`);
+  }
+
+  return button;
+}
+
+function findButtonByLabel(container: HTMLElement, label: string): HTMLButtonElement {
+  const button = Array.from(container.querySelectorAll<HTMLButtonElement>("button")).find(
+    (candidate) => candidate.getAttribute("aria-label") === label
+  );
+
+  if (!button) {
+    throw new Error(`Button not found by label: ${label}`);
+  }
+
+  return button;
 }
