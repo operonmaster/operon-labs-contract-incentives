@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "allowJs": false,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "ignoreDeprecations": "6.0",
+    "baseUrl": ".",
+    "paths": {
+      "@operon-labs/policy-engine": ["src/packages/policy-engine/src/index.ts"],
+      "@operon-labs/incentive-agent": ["src/packages/incentive-agent/src/index.ts"],
+      "@operon-labs/um-platform": ["src/packages/um-platform/src/index.ts"],
+      "@operon-labs/hedera-executor": ["src/packages/hedera-executor/src/index.ts"],
+      "@operon-labs/audit-log": ["src/packages/audit-log/src/index.ts"]
+    }
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "vitest.config.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    ".next"
+  ]
+}

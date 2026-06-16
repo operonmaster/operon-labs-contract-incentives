@@ -1,0 +1,38 @@
+# Cloud Build deploy pipeline for contract-incentives-web.
+# Substitutions:
+#   $_ENV, $_PROJECT_ID, $_REGISTRY_PROJECT, $_ARTIFACT_REPO, $_SERVICE_NAME, $_REGION
+
+timeout: 600s
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: "deploy"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        set -euo pipefail
+        IMAGE="us-central1-docker.pkg.dev/${_REGISTRY_PROJECT}/${_ARTIFACT_REPO}/${_SERVICE_NAME}:latest"
+        LABELS="environment=${_ENV},managed_by=terraform,project=operon-labs,app=contract-incentives"
+        LABEL_REMOVALS="commit,deployed-by,deployed-at,deployment-time"
+        REGION="${_REGION}" bash scripts/ci/deploy.sh \
+          "${_SERVICE_NAME}" \
+          "${_ENV}" \
+          "${IMAGE}" \
+          "${BUILD_ID}" \
+          "${_PROJECT_ID}" \
+          "${LABELS}" \
+          "${LABEL_REMOVALS}"
+    env:
+      - "CLOUDSDK_CORE_PROJECT=${_PROJECT_ID}"
+
+substitutions:
+  _ENV: "nonprod"
+  _PROJECT_ID: "operon-labs-nonprod"
+  _REGISTRY_PROJECT: "operon-labs-nonprod"
+  _ARTIFACT_REPO: "operon-labs-docker"
+  _SERVICE_NAME: "contract-incentives-web"
+  _REGION: "us-central1"

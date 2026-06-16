@@ -1,0 +1,14 @@
+{
+  "evaluationType": "delegate_um_sla_bonus",
+  "submitter": {
+    "type": "delegate_vendor",
+    "id": "northstar-um"
+  },
+  "requestObject": {
+    "caseId": "PA-260524-2102-DELEGATE",
+    "completedWithinSla": true,
+    "documentationComplete": true,
+    "qualityAuditPassed": true,
+    "denialOutcomeUsed": false
+  }
+}

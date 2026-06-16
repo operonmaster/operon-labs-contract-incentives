@@ -1,0 +1,47 @@
+{
+  "name": "operon-labs-contract-incentives",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Policy-gated healthcare operations incentives demo using Hedera Agent Kit.",
+  "type": "module",
+  "workspaces": [
+    "src/apps/web",
+    "src/packages/*"
+  ],
+  "scripts": {
+    "dev": "npm --workspace @operon-labs/web run dev",
+    "dev:real": "./run-local-server.sh",
+    "dev:simulated": "HEDERA_SETTLEMENT_MODE=simulated npm run dev",
+    "build": "npm --workspace @operon-labs/web run build",
+    "lint": "npm --workspace @operon-labs/web run lint",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit -p tsconfig.json && npm --workspace @operon-labs/web run typecheck"
+  },
+  "overrides": {
+    "@hiero-ledger/proto": {
+      "protobufjs": "8.4.2"
+    },
+    "@hiero-ledger/sdk": {
+      "protobufjs": "8.4.2"
+    },
+    "ethers": {
+      "ws": "8.21.0"
+    }
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@types/node": "24.12.4",
+    "@types/react": "19.2.15",
+    "@types/react-dom": "19.2.3",
+    "eslint": "^9.39.4",
+    "eslint-config-next": "16.2.6",
+    "happy-dom": "^20.9.0",
+    "typescript": "6.0.3",
+    "vitest": "4.1.7"
+  },
+  "engines": {
+    "node": ">=24.0.0 <25.0.0",
+    "npm": ">=10.8.0"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "evaluationType": "provider_documentation_completeness",
+  "submitter": {
+    "type": "provider_admin_team",
+    "id": "lakeside-provider-admin"
+  },
+  "requestObject": {
+    "caseId": "PA-260524-2102-AAAA1111",
+    "attachmentChecklistComplete": true,
+    "submittedBeforeInitialDecision": true,
+    "fhirFieldsPresent": true,
+    "approvalOutcomeUsed": false,
+    "referralVolumeMetricUsed": false,
+    "containsPhi": false
+  }
+}
