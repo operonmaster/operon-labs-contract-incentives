@@ -2160,6 +2160,73 @@ body {
   max-width: 780px;
 }
 
+.labs-corporate-footer {
+  background: #0f1318;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  color: var(--op-ink);
+}
+
+.labs-corporate-footer__content {
+  margin: 0 auto;
+  max-width: 1132px;
+  width: calc(100% - 48px);
+}
+
+.labs-corporate-footer__bottom {
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.labs-corporate-footer__bottom-inner {
+  padding-bottom: 1.5rem;
+  padding-top: 1.5rem;
+}
+
+.labs-corporate-footer__bottom-row {
+  margin: 0;
+}
+
+.labs-corporate-footer__bottom-content {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.labs-corporate-footer__copyright {
+  align-items: center;
+  color: #9ca3af;
+  display: flex;
+  font-size: 0.875rem;
+  gap: 1rem;
+  line-height: 1.25rem;
+}
+
+.labs-corporate-footer__links {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.labs-corporate-footer__links a {
+  color: #9ca3af;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  transition: color 0.16s ease;
+}
+
+.labs-corporate-footer__links a:hover,
+.labs-corporate-footer__links a:focus-visible {
+  color: #fff;
+}
+
+.labs-corporate-footer__links a:focus-visible {
+  outline: 2px solid #60a5fa;
+  outline-offset: 3px;
+}
+
 .op-deck-rail {
   align-content: start;
   background: rgba(0, 0, 0, 0.52);
@@ -2716,6 +2783,12 @@ body {
   color: #fca5a5;
 }
 
+@media (min-width: 1024px) {
+  .labs-corporate-footer__bottom-content {
+    flex-direction: row;
+  }
+}
+
 @media (max-width: 860px) {
   .op-page-shell {
     padding: 24px 16px 48px;
@@ -2744,6 +2817,10 @@ body {
 }
 
 @media (max-width: 560px) {
+  .labs-corporate-footer__content {
+    width: calc(100% - 32px);
+  }
+
   .op-hero h1,
   .hero h1 {
     font-size: 38px;

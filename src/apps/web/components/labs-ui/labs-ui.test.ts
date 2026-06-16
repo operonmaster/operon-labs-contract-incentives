@@ -1,6 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { LabsPageShell } from "./index";
 
 function repoFile(path: string) {
   return resolve(process.cwd(), path);
@@ -135,5 +137,20 @@ describe("Operon Labs design system", () => {
     expect(demoPage).toContain("LabsPageShell");
     expect(providerPortal).toContain("LabsPageShell");
     expect(planConsole).toContain("LabsPageShell");
+  });
+
+  it("renders the Labs-style bottom footer on shared demo shells", () => {
+    const markup = renderToStaticMarkup(LabsPageShell({ children: "Demo content" }));
+
+    expect(markup).toContain("© 2026 Operon, LLC. All rights reserved.");
+    expect(markup).toContain('href="https://www.operon.cloud"');
+    expect(markup).toContain(">Company</a>");
+    expect(markup).toContain('href="https://labs.operon.cloud"');
+    expect(markup).toContain(">Operon Labs</a>");
+    expect(markup).toContain('href="https://www.operon.cloud/book-a-call"');
+    expect(markup).toContain(">Contact</a>");
+    expect(markup).not.toContain("labs-corporate-footer__main");
+    expect(markup).not.toContain("LinkedIn");
+    expect(markup).not.toContain("Google Cloud Partner");
   });
 });

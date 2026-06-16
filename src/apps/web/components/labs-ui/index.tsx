@@ -81,7 +81,35 @@ export function LabsPageShell({
   className?: string;
   variant?: "app" | "deck" | "document";
 }>) {
-  return <main className={cx("op-page-shell", `op-page-shell-${variant}`, className)}>{children}</main>;
+  return (
+    <>
+      <main className={cx("op-page-shell", `op-page-shell-${variant}`, className)}>{children}</main>
+      <LabsFooter />
+    </>
+  );
+}
+
+function LabsFooter() {
+  return (
+    <footer className="labs-corporate-footer">
+      <div className="labs-corporate-footer__bottom">
+        <div className="labs-corporate-footer__bottom-inner">
+          <div className="labs-corporate-footer__bottom-row">
+            <div className="labs-corporate-footer__bottom-content labs-corporate-footer__content">
+              <div className="labs-corporate-footer__copyright">
+                <span>© 2026 Operon, LLC. All rights reserved.</span>
+              </div>
+              <nav className="labs-corporate-footer__links" aria-label="Operon links">
+                <a href="https://www.operon.cloud">Company</a>
+                <a href="https://labs.operon.cloud">Operon Labs</a>
+                <a href="https://www.operon.cloud/book-a-call">Contact</a>
+              </nav>
+            </div>
+          </div>
+        </div>
+      </div>
+    </footer>
+  );
 }
 
 export function LabsHero({
