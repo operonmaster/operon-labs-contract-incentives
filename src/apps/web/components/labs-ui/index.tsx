@@ -1,10 +1,4 @@
-import type {
-  ButtonHTMLAttributes,
-  FormHTMLAttributes,
-  InputHTMLAttributes,
-  ReactNode,
-  TextareaHTMLAttributes
-} from "react";
+import type { ButtonHTMLAttributes, ReactNode } from "react";
 import Link from "next/link";
 
 export { LabsSelect } from "./LabsSelect";
@@ -36,47 +30,6 @@ export function LabsButton({
   ...props
 }: Readonly<{ variant?: LabsButtonVariant } & ButtonHTMLAttributes<HTMLButtonElement>>) {
   return <button className={cx(LABS_BUTTON_VARIANT_CLASS[variant], className)} type={type} {...props} />;
-}
-
-export function LabsForm({
-  className,
-  ...props
-}: Readonly<FormHTMLAttributes<HTMLFormElement>>) {
-  return <form className={cx("op-panel", "labs-form", className)} {...props} />;
-}
-
-type LabsFieldProps = Readonly<{
-  className?: string;
-  controlClassName?: string;
-  label: ReactNode;
-}>;
-
-export function LabsTextField({
-  className,
-  controlClassName,
-  label,
-  ...props
-}: LabsFieldProps & Omit<InputHTMLAttributes<HTMLInputElement>, "className">) {
-  return (
-    <label className={cx("labs-form-field", className)}>
-      <span>{label}</span>
-      <input className={cx("labs-form-control", controlClassName)} {...props} />
-    </label>
-  );
-}
-
-export function LabsTextareaField({
-  className,
-  controlClassName,
-  label,
-  ...props
-}: LabsFieldProps & Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "className">) {
-  return (
-    <label className={cx("labs-form-field", className)}>
-      <span>{label}</span>
-      <textarea className={cx("labs-form-control", controlClassName)} {...props} />
-    </label>
-  );
 }
 
 export interface LabsUseCaseNavItem {

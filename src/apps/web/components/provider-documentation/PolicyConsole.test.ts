@@ -77,7 +77,7 @@ describe("provider documentation policy console", () => {
     const model = buildBusinessPolicyExplainerModel(providerDocumentationPolicy);
 
     expect(model.configuredOutcome).toBe(
-      "Pays 5 HBAR when an eligible PA request has the required DTR documentation and passes covered-benefit checks."
+      "Pays 4 HBAR when an eligible PA request has the required DTR documentation and passes covered-benefit checks."
     );
     expect(model.configuredOutcome).not.toContain("policy-detail-value-badge");
     expect(model.contextItems).toEqual([
@@ -106,7 +106,7 @@ describe("provider documentation policy console", () => {
       {
         title: "Payment",
         items: [
-          { label: "Payout rule", values: ["5 HBAR"], variant: "success" },
+          { label: "Payout rule", values: ["4 HBAR"], variant: "success" },
           { label: "Monthly control", values: ["500 HBAR"], variant: "success" }
         ]
       },
@@ -129,7 +129,7 @@ describe("provider documentation policy console", () => {
     const model = buildBusinessPolicyExplainerModel(policy);
 
     expect(model.configuredOutcome).toBe(
-      "Pays 5 HBAR when a delegated UM determination is completed within the configured SLA with audit-ready clinical review evidence."
+      "Pays 3 HBAR when a delegated UM determination is completed within the configured SLA with audit-ready clinical review evidence."
     );
     expect(model.contextItems).toEqual([
       { label: "Plan", value: "Acme Health PPO", variant: "success" },
@@ -162,7 +162,7 @@ describe("provider documentation policy console", () => {
     const model = buildBusinessPolicyExplainerModel(policy);
 
     expect(model.configuredOutcome).toBe(
-      "Pays 5 HBAR when an approved pharmacy PA is fulfilled without avoidable exceptions and the shipment is scheduled within the fulfillment SLA."
+      "Pays 4 HBAR when an approved pharmacy PA is fulfilled without avoidable exceptions and the shipment is scheduled within the fulfillment SLA."
     );
     expect(model.contextItems).toEqual([
       { label: "Plan", value: "Acme Health PPO", variant: "success" },
@@ -193,7 +193,7 @@ describe("provider documentation policy console", () => {
     expect(model.bottomCards[0]).toEqual({
       title: "Payment",
       items: [
-        { label: "Payout rule", values: ["5 HBAR"], variant: "success" },
+        { label: "Payout rule", values: ["4 HBAR"], variant: "success" },
         { label: "Monthly control", values: ["700 HBAR"], variant: "success" }
       ]
     });
@@ -204,7 +204,7 @@ describe("provider documentation policy console", () => {
     const model = buildBusinessPolicyExplainerModel(policy);
 
     expect(model.configuredOutcome).toBe(
-      "Pays 6 HBAR when an appeal packet is ready within the packet-readiness SLA and passes quality controls, without rewarding appeal outcome."
+      "Pays 3 HBAR when an appeal packet is ready within the packet-readiness SLA and passes quality controls, without rewarding appeal outcome."
     );
     expect(model.contextItems).toEqual([
       { label: "Plan", value: "Acme Health PPO", variant: "success" },
@@ -379,7 +379,7 @@ const delegateBusinessPolicy: PolicySummary = {
   category: "business",
   source: "Plan/delegate contract policy",
   appliesTo: "Delegate UM SLA Bonus",
-  payoutOrControl: "5 HBAR per eligible UM request",
+  payoutOrControl: "3 HBAR per eligible UM request",
   status: "Active",
   summary: "Delegate UM SLA bonus incentive for eligible determinations completed within the configured review window.",
   previewItems: [
@@ -388,7 +388,7 @@ const delegateBusinessPolicy: PolicySummary = {
     { label: "Delegate", value: "Northstar UM" },
     { label: "Eligible request types", value: "Pharmacy Benefit" },
     { label: "SLA", value: "24 hours" },
-    { label: "Payout", value: "5 HBAR" }
+    { label: "Payout", value: "3 HBAR" }
   ],
   detailSections: []
 };
@@ -399,7 +399,7 @@ const providerDocumentationPolicy: PolicySummary = {
   category: "business",
   source: "Plan/provider contract policy",
   appliesTo: "Provider Documentation Completeness",
-  payoutOrControl: "5 HBAR per eligible PA request",
+  payoutOrControl: "4 HBAR per eligible PA request",
   status: "Active",
   summary: "Provider Documentation Completeness DTR completion incentive for the contracted plan/provider pair.",
   previewItems: [],
@@ -439,7 +439,7 @@ const providerDocumentationPolicy: PolicySummary = {
     {
       title: "Payout",
       items: [
-        "Amount per eligible request: 5 HBAR",
+        "Amount per eligible request: 4 HBAR",
         "Monthly cap: 500 HBAR",
         "Token: HBAR"
       ]
@@ -461,7 +461,7 @@ const delegateOutpatientBusinessPolicy: PolicySummary = {
   category: "business",
   source: "Plan/delegate contract policy",
   appliesTo: "Delegate UM SLA Bonus",
-  payoutOrControl: "5 HBAR per eligible UM request",
+  payoutOrControl: "4 HBAR per eligible UM request",
   status: "Active",
   summary: "Delegate UM SLA bonus incentive for eligible determinations completed within the configured review window.",
   previewItems: [
@@ -470,7 +470,7 @@ const delegateOutpatientBusinessPolicy: PolicySummary = {
     { label: "Delegate", value: "Northstar UM" },
     { label: "Eligible request types", value: "Outpatient Service" },
     { label: "SLA", value: "24 hours" },
-    { label: "Payout", value: "5 HBAR" }
+    { label: "Payout", value: "4 HBAR" }
   ],
   detailSections: []
 };

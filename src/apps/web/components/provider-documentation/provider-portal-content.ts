@@ -81,7 +81,7 @@ export const requestTypeOptions: RequestTypeOptionContent[] = [
 export const stepContextByStep: Record<PortalStep, StepContextContent> = {
   setup: {
     title: "Select patient and plan",
-    body: "Please select a patient and the active health plan for the new prior authorization request.",
+    body: "Select the patient and active health plan for this prior authorization request.",
     bullets: ["The plan list is tied to the selected patient.", "The selected values become read-only in later steps."]
   },
   service: {
@@ -91,13 +91,13 @@ export const stepContextByStep: Record<PortalStep, StepContextContent> = {
   },
   coverage: {
     title: "Check coverage and requirements",
-    body: "Review the plan response. Covered services may require an assessment before submission.",
-    bullets: ["Covered services may require a short medical-necessity assessment.", "Not-covered services require acknowledgement before review."]
+    body: "Review the plan response and complete any required documentation assessment before moving to review.",
+    bullets: ["Covered requests may require additional documentation before submission.", "Not-covered requests require acknowledgement before review."]
   },
   review: {
     title: "Review and submit",
-    body: "Confirm the completed request details before submitting the prior authorization.",
-    bullets: ["Submission creates a PA ID.", "The plan-side incentive workflow evaluates the submitted request separately."]
+    body: "Confirm the request details before submitting the prior authorization to the health plan.",
+    bullets: ["Submission creates a PA ID.", "The request will be pending health plan review after submission."]
   }
 };
 

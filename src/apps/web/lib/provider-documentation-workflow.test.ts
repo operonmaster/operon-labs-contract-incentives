@@ -93,7 +93,7 @@ describe("provider documentation workflow", () => {
       paymentPolicyStatus: "paid",
       incentiveStatus: "paid",
       paymentStatus: "auto_executed",
-      incentiveValue: 5,
+      incentiveValue: 3,
       currency: "HBAR",
       reason: "Completed requested DTR"
     });
@@ -102,7 +102,7 @@ describe("provider documentation workflow", () => {
       paymentPolicyControls: expect.arrayContaining([
         expect.objectContaining({ id: "businessEvaluationAttestation", label: "Business evaluation attestation", status: "passed" }),
         expect.objectContaining({ id: "paymentToken", label: "Payment token", status: "passed", expected: "HBAR", actual: "HBAR" }),
-        expect.objectContaining({ id: "maxPaymentPerRequest", label: "Max payment per request", status: "passed", expected: "<= 7 HBAR", actual: "5 HBAR" }),
+        expect.objectContaining({ id: "maxPaymentPerRequest", label: "Max payment per request", status: "passed", expected: "<= 7 HBAR", actual: "3 HBAR" }),
         expect.objectContaining({ id: "duplicatePaymentPrevention", label: "Duplicate payment prevention", status: "passed" }),
         expect.objectContaining({ id: "paymentEnvelopeIntegrity", label: "Payment envelope integrity", status: "passed" })
       ])
@@ -120,7 +120,7 @@ describe("provider documentation workflow", () => {
         "Request type limited to Outpatient Service",
         "Service code limited to policy scope",
         "DTR requested and completed",
-        "5 HBAR per eligible request",
+        "3 HBAR per eligible request",
         "500 HBAR monthly cap"
       ])
     );
@@ -174,7 +174,7 @@ describe("provider documentation workflow", () => {
       paymentPolicyId: submitted.planId,
       businessPolicyId: rows[0]!.policyId,
       policyId: rows[0]!.policyId,
-      amount: 5,
+      amount: 3,
       currency: "HBAR",
       walletId: "0.0.9049549"
     });
@@ -625,7 +625,7 @@ describe("provider documentation workflow", () => {
     });
 
     await expect(workflow.getIncentiveRow(first.caseId)).resolves.toMatchObject({
-      incentiveValue: 5,
+      incentiveValue: 3,
       currency: "HBAR"
     });
     await expect(workflow.getIncentiveRow(second.caseId)).resolves.toMatchObject({
@@ -675,11 +675,20 @@ describe("provider documentation workflow", () => {
   it("marks the incentive as payment failed when Hedera plan controls reject an approved payout above the request max", async () => {
     executePolicyBoundPaymentMock.mockRejectedValueOnce(new Error("HEDERA_PAYMENT_AMOUNT_EXCEEDS_PLAN_MAX"));
     const paymentPolicyEvidenceStore = createCapturingPaymentPolicyEvidenceStore();
+    const policyStore = createInMemoryPolicyStore({
+      provider_documentation_summit_outpatient: {
+        ...defaultIncentivePolicies.provider_documentation_summit_outpatient,
+        payout: {
+          ...defaultIncentivePolicies.provider_documentation_summit_outpatient.payout,
+          amountPerEligibleRequest: 20
+        }
+      }
+    });
 
     const workflow = createProviderDocumentationWorkflow(
       undefined,
       undefined,
-      undefined,
+      policyStore,
       undefined,
       undefined,
       paymentPolicyEvidenceStore
@@ -1241,7 +1250,7 @@ describe("provider documentation workflow", () => {
       submittedAt: record.submittedAt,
       incentiveStatus: "paid",
       paymentStatus: "auto_executed",
-      incentiveValue: 5,
+      incentiveValue: 3,
       reason: "Completed requested DTR",
       reasonCodes: []
     });
@@ -1357,7 +1366,7 @@ describe("provider documentation workflow", () => {
       outcomeStatus: paidRow!.outcomeStatus,
       incentiveStatus: "paid",
       paymentStatus: "auto_executed",
-      incentiveValue: 5,
+      incentiveValue: 3,
       paymentIntentId: paidRow!.paymentIntentId,
       transactionId: paidRow!.transactionId
     });
@@ -1387,7 +1396,7 @@ describe("provider documentation workflow", () => {
       slaStatus: "within_sla",
       incentiveStatus: "paid",
       paymentStatus: "auto_executed",
-      incentiveValue: 5,
+      incentiveValue: 3,
       currency: "HBAR",
       settlementToken: { symbol: "HBAR" },
       reason: "Determination completed within SLA",
@@ -1542,7 +1551,7 @@ describe("provider documentation workflow", () => {
       outcomeStatus: paidRow!.outcomeStatus,
       incentiveStatus: "paid",
       paymentStatus: "auto_executed",
-      incentiveValue: 5,
+      incentiveValue: 3,
       reason: "Completed requested DTR",
       reasonCodes: [],
       paymentIntentId: paidRow!.paymentIntentId,
@@ -1816,7 +1825,7 @@ describe("provider documentation workflow", () => {
       incentiveStatus: "paid",
       paymentStatus: "auto_executed",
       policyId: "plcy_5R1T8W3Y6B0D9F2H4K7M",
-      incentiveValue: 5
+      incentiveValue: 6
     });
     expect(rows[0]!.policyCriteria).toEqual(
       expect.arrayContaining([

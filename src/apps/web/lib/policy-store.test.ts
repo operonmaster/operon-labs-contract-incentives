@@ -26,6 +26,28 @@ describe("policy store", () => {
     expect(delegatePolicies).toHaveLength(4);
     expect(specialtyRxPolicies).toHaveLength(2);
     expect(appealsPolicies).toHaveLength(4);
+    expect(payoutsByPolicyId(policies)).toEqual({
+      plcy_8K2M4Q6R9T1V3X5Z7B0C: 3,
+      plcy_2N7P5R8T0V4X6Z1B3D9F: 4,
+      plcy_9Q3S6V1X8Z2B5D7F0H4K: 5,
+      plcy_5R1T8W3Y6B0D9F2H4K7M: 6
+    });
+    expect(payoutsByPolicyId(delegatePolicies)).toEqual({
+      "delegate-um-sla-bonus-v1": 3,
+      "delegate-um-acme-outpatient-sla-bonus-v1": 4,
+      "delegate-um-summit-pharmacy-sla-bonus-v1": 5,
+      "delegate-um-summit-outpatient-sla-bonus-v1": 6
+    });
+    expect(payoutsByPolicyId(specialtyRxPolicies)).toEqual({
+      "specialty-rx-fulfillment-sla-v1": 4,
+      "specialty-rx-summit-fulfillment-sla-v1": 6
+    });
+    expect(payoutsByPolicyId(appealsPolicies)).toEqual({
+      "appeals-packet-quality-v1": 3,
+      "appeals-acme-riverside-packet-quality-v1": 4,
+      "appeals-summit-packet-quality-v1": 5,
+      "appeals-summit-riverside-packet-quality-v1": 6
+    });
     expect(appealsPolicies.map((policy) => policy.policyId)).toEqual([
       "appeals-packet-quality-v1",
       "appeals-acme-riverside-packet-quality-v1",
@@ -47,7 +69,7 @@ describe("policy store", () => {
         },
         payout: {
           token: "HBAR",
-          amountPerEligibleRequest: 6,
+          amountPerEligibleRequest: 3,
           monthlyCap: 700
         },
         settlement: {
@@ -107,7 +129,7 @@ describe("policy store", () => {
           },
           payout: {
             token: "HBAR",
-            amountPerEligibleRequest: 5,
+            amountPerEligibleRequest: 4,
             monthlyCap: 700
           },
           settlement: {
@@ -130,7 +152,7 @@ describe("policy store", () => {
           },
           payout: {
             token: "HBAR",
-            amountPerEligibleRequest: 5,
+            amountPerEligibleRequest: 6,
             monthlyCap: 700
           }
         })
@@ -158,7 +180,7 @@ describe("policy store", () => {
           },
           payout: {
             token: "HBAR",
-            amountPerEligibleRequest: 5,
+            amountPerEligibleRequest: 3,
             monthlyCap: 500
           },
           settlement: {
@@ -224,7 +246,7 @@ describe("policy store", () => {
           }),
           payout: {
             token: "HBAR",
-            amountPerEligibleRequest: 5,
+            amountPerEligibleRequest: 6,
             monthlyCap: 500
           },
           settlement: {
@@ -239,6 +261,60 @@ describe("policy store", () => {
     expect((await firestore.collection("incentivePolicies").get()).docs).toHaveLength(14);
     expect(firestore.collectionNames()).toEqual(expect.arrayContaining(["incentivePolicies"]));
     expect(firestore.collectionNames()).not.toEqual(expect.arrayContaining(["policies", "policyYaml"]));
+  });
+
+  it("refreshes payout terms for already-seeded demo policy documents", async () => {
+    const firestore = createFakeFirestore();
+    await firestore.collection("incentivePolicies").doc("plcy_8K2M4Q6R9T1V3X5Z7B0C").set({
+      ...defaultIncentivePolicies.provider_documentation_acme_outpatient,
+      updatedBy: "operon-labs-contract-incentives",
+      payout: {
+        ...defaultIncentivePolicies.provider_documentation_acme_outpatient.payout,
+        amountPerEligibleRequest: 5
+      }
+    });
+    await firestore.collection("incentivePolicies").doc("delegate-um-sla-bonus-v1").set({
+      ...defaultIncentivePolicies.delegate_um_acme_sla_bonus,
+      updatedBy: "operon-labs-contract-incentives",
+      payout: {
+        ...defaultIncentivePolicies.delegate_um_acme_sla_bonus.payout,
+        amountPerEligibleRequest: 5
+      }
+    });
+    await firestore.collection("incentivePolicies").doc("specialty-rx-fulfillment-sla-v1").set({
+      ...defaultIncentivePolicies.specialty_rx_acme_fulfillment_sla,
+      updatedBy: "operon-labs-contract-incentives",
+      payout: {
+        ...defaultIncentivePolicies.specialty_rx_acme_fulfillment_sla.payout,
+        amountPerEligibleRequest: 5
+      }
+    });
+    await firestore.collection("incentivePolicies").doc("appeals-packet-quality-v1").set({
+      ...defaultIncentivePolicies.appeals_acme_packet_quality,
+      updatedBy: "operon-labs-contract-incentives",
+      payout: {
+        ...defaultIncentivePolicies.appeals_acme_packet_quality.payout,
+        amountPerEligibleRequest: 6
+      }
+    });
+    const store = createFirestorePolicyStore(
+      {
+        projectId: "operon-labs-nonprod",
+        databaseId: "(default)"
+      },
+      firestore
+    );
+
+    const policies = await store.listPolicies();
+    const refreshedProviderPolicy = await firestore.collection("incentivePolicies").doc("plcy_8K2M4Q6R9T1V3X5Z7B0C").get();
+
+    expect(payoutsByPolicyId(policies)).toMatchObject({
+      plcy_8K2M4Q6R9T1V3X5Z7B0C: 3,
+      "delegate-um-sla-bonus-v1": 3,
+      "specialty-rx-fulfillment-sla-v1": 4,
+      "appeals-packet-quality-v1": 3
+    });
+    expect((refreshedProviderPolicy.data() as { payout: { amountPerEligibleRequest: number } }).payout.amountPerEligibleRequest).toBe(3);
   });
 
   it("finds current policies by evaluation type, plan/provider pair, and optional request type", async () => {
@@ -403,6 +479,7 @@ describe("policy store", () => {
     });
     const changed = {
       ...first!,
+      updatedBy: "operator-edit",
       payout: {
         ...first!.payout,
         amountPerEligibleRequest: 2
@@ -666,7 +743,7 @@ describe("policy store", () => {
     expect(policy).toMatchObject({
       evaluationType: "provider_documentation_completeness",
       payout: {
-        amountPerEligibleRequest: 5,
+        amountPerEligibleRequest: 3,
         token: "HBAR"
       }
     });
@@ -752,6 +829,10 @@ function getSortableValue(value: unknown, field: string): unknown {
   }
 
   return (value as Record<string, unknown>)[field];
+}
+
+function payoutsByPolicyId(policies: Array<{ policyId: string; payout: { amountPerEligibleRequest: number } }>) {
+  return Object.fromEntries(policies.map((policy) => [policy.policyId, policy.payout.amountPerEligibleRequest]));
 }
 
 function hasConfiguredServiceCodes(value: { cpt?: string[]; ndc?: string[] } | undefined): boolean {

@@ -16,10 +16,49 @@ function readRepoFile(path: string) {
   return readFileSync(resolve(process.cwd(), path), "utf8");
 }
 
+function normalizeWhitespace(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
 describe("provider portal content", () => {
   it("uses a four-step portal flow with patient and plan collapsed into one step", () => {
     expect(wizardSteps.map((step) => step.label)).toEqual(["Patient & Plan", "Service", "Coverage", "Review"]);
     expect(stepContextByStep.setup.title).toBe("Select patient and plan");
+  });
+
+  it("uses provider-facing current step guidance for the prior authorization workflow", () => {
+    expect(stepContextByStep.setup).toEqual({
+      title: "Select patient and plan",
+      body: "Select the patient and active health plan for this prior authorization request.",
+      bullets: ["The plan list is tied to the selected patient.", "The selected values become read-only in later steps."]
+    });
+    expect(stepContextByStep.service).toEqual({
+      title: "Select request type and item",
+      body: "Choose whether this is an outpatient service or pharmacy benefit request, then select the requested service or medication.",
+      bullets: ["Outpatient services use CPT-style procedure codes.", "Pharmacy benefit requests use NDC-coded medication options."]
+    });
+    expect(stepContextByStep.coverage).toEqual({
+      title: "Check coverage and requirements",
+      body: "Review the plan response and complete any required documentation assessment before moving to review.",
+      bullets: ["Covered requests may require additional documentation before submission.", "Not-covered requests require acknowledgement before review."]
+    });
+    expect(stepContextByStep.review).toEqual({
+      title: "Review and submit",
+      body: "Confirm the request details before submitting the prior authorization to the health plan.",
+      bullets: ["Submission creates a PA ID.", "The request will be pending health plan review after submission."]
+    });
+  });
+
+  it("keeps the provider portal hero and submitted-state guidance focused on submitting a PA", () => {
+    const source = readRepoFile("src/apps/web/components/provider-documentation/ProviderDocumentationWizard.tsx");
+    const normalizedSource = normalizeWhitespace(source);
+
+    expect(source).toContain('title="New prior authorization"');
+    expect(normalizedSource).toContain(
+      "Submit a prior authorization request with the patient, plan, requested item, coverage response, and required documentation the health plan needs for review."
+    );
+    expect(source).toContain('"Use the Health Plan View to inspect the submitted request."');
+    expect(source).not.toContain("Plan-side incentives are evaluated outside this provider flow.");
   });
 
   it("requires patient selection before health plan selection and setup progression", () => {

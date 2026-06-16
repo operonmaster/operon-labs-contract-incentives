@@ -47,6 +47,12 @@ interface LoadedFirestoreDocument {
   value: unknown;
 }
 
+type NormalizedStoredPolicy = {
+  policy: IncentivePolicy | null;
+  rewrite: boolean;
+  updatedBy?: string;
+};
+
 type LegacyWrappedPolicy = {
   evaluationType?: string;
   policyId?: string;
@@ -72,6 +78,8 @@ const DEFAULT_GCP_PROJECT_ID = "operon-labs-nonprod";
 const DEFAULT_FIRESTORE_DATABASE_ID = "(default)";
 const INCENTIVE_POLICIES_COLLECTION = "incentivePolicies";
 const POLICY_SEED_ACTOR = "operon-labs-contract-incentives";
+const POLICY_MIGRATION_ACTOR = `${POLICY_SEED_ACTOR}-migration`;
+const POLICY_LEGACY_MIGRATION_ACTOR = `${POLICY_SEED_ACTOR}-legacy-migration`;
 const PROVIDER_ID = "lakeside-provider-admin";
 const PROVIDER_WALLET_ID = "0.0.9049549";
 const APPEALS_SUBMITTER_ID = "lakeside-provider-admin";
@@ -91,7 +99,8 @@ export const defaultIncentivePolicies: Record<string, IncentivePolicy> = {
     includedServiceCodes: {
       cpt: ["73721"],
       ndc: []
-    }
+    },
+    amountPerEligibleRequest: 3
   }),
   provider_documentation_acme_pharmacy: providerDocumentationPolicy({
     policyId: "plcy_2N7P5R8T0V4X6Z1B3D9F",
@@ -101,7 +110,8 @@ export const defaultIncentivePolicies: Record<string, IncentivePolicy> = {
     includedServiceCodes: {
       cpt: [],
       ndc: ["0169-4525-14", "0074-0554-02"]
-    }
+    },
+    amountPerEligibleRequest: 4
   }),
   provider_documentation_summit_outpatient: providerDocumentationPolicy({
     policyId: "plcy_9Q3S6V1X8Z2B5D7F0H4K",
@@ -112,7 +122,7 @@ export const defaultIncentivePolicies: Record<string, IncentivePolicy> = {
       cpt: ["73721"],
       ndc: []
     },
-    amountPerEligibleRequest: 20
+    amountPerEligibleRequest: 5
   }),
   provider_documentation_summit_pharmacy: providerDocumentationPolicy({
     policyId: "plcy_5R1T8W3Y6B0D9F2H4K7M",
@@ -122,53 +132,64 @@ export const defaultIncentivePolicies: Record<string, IncentivePolicy> = {
     includedServiceCodes: {
       cpt: [],
       ndc: ["0169-4525-14", "0074-0554-02"]
-    }
+    },
+    amountPerEligibleRequest: 6
   }),
   delegate_um_acme_sla_bonus: delegateUmSlaBonusPolicy({
     policyId: "delegate-um-sla-bonus-v1",
     planId: "acme-health-ppo",
-    requestType: "pharmacy_benefit"
+    requestType: "pharmacy_benefit",
+    amountPerEligibleRequest: 3
   }),
   delegate_um_acme_outpatient_sla_bonus: delegateUmSlaBonusPolicy({
     policyId: "delegate-um-acme-outpatient-sla-bonus-v1",
     planId: "acme-health-ppo",
-    requestType: "outpatient_service"
+    requestType: "outpatient_service",
+    amountPerEligibleRequest: 4
   }),
   delegate_um_summit_pharmacy_sla_bonus: delegateUmSlaBonusPolicy({
     policyId: "delegate-um-summit-pharmacy-sla-bonus-v1",
     planId: "summit-health-hmo",
-    requestType: "pharmacy_benefit"
+    requestType: "pharmacy_benefit",
+    amountPerEligibleRequest: 5
   }),
   delegate_um_summit_outpatient_sla_bonus: delegateUmSlaBonusPolicy({
     policyId: "delegate-um-summit-outpatient-sla-bonus-v1",
     planId: "summit-health-hmo",
-    requestType: "outpatient_service"
+    requestType: "outpatient_service",
+    amountPerEligibleRequest: 6
   }),
   specialty_rx_acme_fulfillment_sla: specialtyRxFulfillmentSlaPolicy({
     policyId: "specialty-rx-fulfillment-sla-v1",
-    planId: "acme-health-ppo"
+    planId: "acme-health-ppo",
+    amountPerEligibleRequest: 4
   }),
   specialty_rx_summit_fulfillment_sla: specialtyRxFulfillmentSlaPolicy({
     policyId: "specialty-rx-summit-fulfillment-sla-v1",
-    planId: "summit-health-hmo"
+    planId: "summit-health-hmo",
+    amountPerEligibleRequest: 6
   }),
   appeals_acme_packet_quality: appealsPacketQualityPolicy({
     policyId: "appeals-packet-quality-v1",
-    planId: "acme-health-ppo"
+    planId: "acme-health-ppo",
+    amountPerEligibleRequest: 3
   }),
   appeals_acme_riverside_packet_quality: appealsPacketQualityPolicy({
     policyId: "appeals-acme-riverside-packet-quality-v1",
     planId: "acme-health-ppo",
-    submitterId: SECONDARY_APPEALS_SUBMITTER_ID
+    submitterId: SECONDARY_APPEALS_SUBMITTER_ID,
+    amountPerEligibleRequest: 4
   }),
   appeals_summit_packet_quality: appealsPacketQualityPolicy({
     policyId: "appeals-summit-packet-quality-v1",
-    planId: "summit-health-hmo"
+    planId: "summit-health-hmo",
+    amountPerEligibleRequest: 5
   }),
   appeals_summit_riverside_packet_quality: appealsPacketQualityPolicy({
     policyId: "appeals-summit-riverside-packet-quality-v1",
     planId: "summit-health-hmo",
-    submitterId: SECONDARY_APPEALS_SUBMITTER_ID
+    submitterId: SECONDARY_APPEALS_SUBMITTER_ID,
+    amountPerEligibleRequest: 6
   })
 };
 
@@ -301,7 +322,7 @@ class FirestorePolicyStore implements PolicyStore {
 
     if (normalized.rewrite) {
       await this.savePolicy(normalized.policy, {
-        updatedBy: `${POLICY_SEED_ACTOR}-migration`
+        updatedBy: normalized.updatedBy ?? POLICY_MIGRATION_ACTOR
       });
     }
 
@@ -369,7 +390,7 @@ class FirestorePolicyStore implements PolicyStore {
       policies.push(normalized.policy);
       if (normalized.rewrite || doc.id !== normalized.policy.policyId) {
         await this.savePolicy(normalized.policy, {
-          updatedBy: `${POLICY_SEED_ACTOR}-migration`
+          updatedBy: normalized.updatedBy ?? POLICY_MIGRATION_ACTOR
         });
         if (doc.id !== normalized.policy.policyId) {
           await this.deletePolicyDocument(doc.id);
@@ -412,7 +433,7 @@ class FirestorePolicyStore implements PolicyStore {
 
 export const policyStore = createPolicyStoreFromEnv();
 
-function normalizeStoredPolicy(value: unknown): { policy: IncentivePolicy | null; rewrite: boolean } {
+function normalizeStoredPolicy(value: unknown): NormalizedStoredPolicy {
   if (isDeprecatedCombinedProviderDocumentationPolicy(value)) {
     return { policy: null, rewrite: true };
   }
@@ -446,21 +467,24 @@ function normalizeStoredPolicy(value: unknown): { policy: IncentivePolicy | null
       }
     };
 
-    return { policy, rewrite: true };
+    return { policy, rewrite: true, updatedBy: POLICY_LEGACY_MIGRATION_ACTOR };
   }
 
   return { policy: null, rewrite: true };
 }
 
-function normalizeRootIncentivePolicy(value: unknown): { policy: IncentivePolicy; rewrite: boolean } | null {
+function normalizeRootIncentivePolicy(value: unknown): NormalizedStoredPolicy | null {
   if (!isIncentivePolicyShape(value)) {
     return null;
   }
 
   const candidate = copyPolicy(value);
+  const scoped = normalizePolicyScope(candidate);
+  const seededPayout = shouldRefreshSeededPolicy(value) ? syncDefaultSeedPayout(scoped) : { policy: scoped, rewrite: false };
+
   return {
-    policy: normalizePolicyScope(candidate),
-    rewrite: needsPolicyRewrite(candidate)
+    policy: seededPayout.policy,
+    rewrite: needsPolicyRewrite(candidate) || seededPayout.rewrite
   };
 }
 
@@ -482,6 +506,38 @@ function normalizePolicyScope(policy: IncentivePolicy): IncentivePolicy {
 function needsPolicyRewrite(policy: IncentivePolicy): boolean {
   const normalized = normalizePolicyScope(policy);
   return JSON.stringify(policy) !== JSON.stringify(normalized);
+}
+
+function shouldRefreshSeededPolicy(value: unknown): boolean {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const updatedBy = (value as Partial<StoredIncentivePolicy>).updatedBy;
+  return updatedBy !== "operator-edit" && updatedBy !== POLICY_LEGACY_MIGRATION_ACTOR;
+}
+
+function syncDefaultSeedPayout(policy: IncentivePolicy): { policy: IncentivePolicy; rewrite: boolean } {
+  const defaultPolicy = Object.values(defaultIncentivePolicies).find((candidate) => candidate.policyId === policy.policyId);
+  if (!defaultPolicy) {
+    return { policy, rewrite: false };
+  }
+
+  if (
+    policy.payout.token === defaultPolicy.payout.token &&
+    policy.payout.amountPerEligibleRequest === defaultPolicy.payout.amountPerEligibleRequest &&
+    policy.payout.monthlyCap === defaultPolicy.payout.monthlyCap
+  ) {
+    return { policy, rewrite: false };
+  }
+
+  return {
+    policy: {
+      ...policy,
+      payout: { ...defaultPolicy.payout }
+    },
+    rewrite: true
+  };
 }
 
 function isIncentivePolicyShape(value: unknown): value is IncentivePolicy {
@@ -556,8 +612,10 @@ function isPolicyEffective(policy: IncentivePolicy, submittedAt?: string): boole
 }
 
 function copyPolicy(policy: IncentivePolicy): IncentivePolicy {
-  const copy = structuredClone(policy) as IncentivePolicy & { displayName?: string };
+  const copy = structuredClone(policy) as IncentivePolicy & { displayName?: string; updatedAt?: string; updatedBy?: string };
   delete copy.displayName;
+  delete copy.updatedAt;
+  delete copy.updatedBy;
   return copy;
 }
 
@@ -670,9 +728,11 @@ function delegateUmSlaBonusPolicy({
 }
 
 function specialtyRxFulfillmentSlaPolicy({
+  amountPerEligibleRequest,
   planId,
   policyId
 }: {
+  amountPerEligibleRequest: number;
   policyId: string;
   planId: string;
 }): IncentivePolicy {
@@ -705,7 +765,7 @@ function specialtyRxFulfillmentSlaPolicy({
     },
     payout: {
       token: "HBAR",
-      amountPerEligibleRequest: 5,
+      amountPerEligibleRequest,
       monthlyCap: 700
     },
     settlement: {
@@ -717,10 +777,12 @@ function specialtyRxFulfillmentSlaPolicy({
 }
 
 function appealsPacketQualityPolicy({
+  amountPerEligibleRequest,
   planId,
   policyId,
   submitterId = APPEALS_SUBMITTER_ID
 }: {
+  amountPerEligibleRequest: number;
   policyId: string;
   planId: string;
   submitterId?: string;
@@ -746,7 +808,7 @@ function appealsPacketQualityPolicy({
       requiresAppealPacketQualityAudit: true,
       prohibitsAppealOutcomeIncentive: true
     },
-    payout: { token: "HBAR", amountPerEligibleRequest: 6, monthlyCap: 700 },
+    payout: { token: "HBAR", amountPerEligibleRequest, monthlyCap: 700 },
     settlement: { mode: "auto", recipientWalletId: APPEALS_SUBMITTER_WALLET_ID, requiresHumanApproval: false }
   };
 }

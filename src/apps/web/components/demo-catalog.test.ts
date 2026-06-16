@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { demoScenarios, getScenario } from "./demo-catalog";
 
@@ -40,8 +40,33 @@ describe("demo catalog", () => {
   it("labels the homepage for the Hedera AI Agent Bounty Campaign", () => {
     const homePage = readFileSync(path.join(process.cwd(), "src/apps/web/app/page.tsx"), "utf8");
 
-    expect(homePage).toContain('meta="Hedera AI Agent Bounty Campaign"');
+    expect(homePage).toContain("Hedera AI Agent Bounty Campaign");
     expect(homePage).not.toMatch(/hackat(h)?on/i);
+  });
+
+  it("frames the homepage around policy-based incentive use cases instead of testnet plumbing", () => {
+    const homePage = readFileSync(path.join(process.cwd(), "src/apps/web/app/page.tsx"), "utf8");
+    const styles = readFileSync(path.join(process.cwd(), "src/apps/web/app/styles.css"), "utf8");
+
+    expect(homePage).toContain('title="Policy-driven incentives for measurable healthcare operations"');
+    expect(homePage).not.toContain("Policy-driven incentives for measurable healthcare operations.");
+    expect(homePage).toContain("The demo use cases below show how healthcare teams can earn contract incentives");
+    expect(homePage).not.toContain("These use cases show");
+    expect(homePage).toContain("Business policies decide whether work qualifies.");
+    expect(homePage).toContain("Payment policies enforce financial controls");
+    expect(homePage).toContain('title="Incentive use cases"');
+    expect(homePage).toContain('meta="Evidence -> business policy -> payment control -> audit"');
+    expect(homePage).not.toContain("testnet payments");
+    expect(styles).toMatch(/\.home-page \.op-hero h1 \{[^}]*max-width: none;/);
+    expect(styles).toMatch(/\.home-page \.op-hero-copy,\s*\.home-page \.op-hero-copy p \{[^}]*max-width: none;/);
+    expect(styles).toMatch(/\.op-hero h1,\s*\.hero h1 \{[^}]*max-width: 1020px;/);
+    expect(styles).toMatch(/\.op-hero-copy,\s*\.hero p,\s*\.op-hero-copy p \{[^}]*max-width: 820px;/);
+  });
+
+  it("does not ship the retired Labs website routes in this demo repo", () => {
+    expect(existsSync(path.join(process.cwd(), "src/apps/web/app/labs"))).toBe(false);
+    expect(existsSync(path.join(process.cwd(), "src/apps/web/app/labs_v2"))).toBe(false);
+    expect(existsSync(path.join(process.cwd(), "src/apps/web/components/labs-site"))).toBe(false);
   });
 
   it("keeps Firestore-backed demo policy pages dynamically rendered", () => {

@@ -5,14 +5,18 @@ import { demoScenarios } from "../components/demo-catalog";
 export default function HomePage() {
   return (
     <LabsPageShell className="home-page">
-      <LabsHero eyebrow="Operon Labs" title={<>Contract incentives for measurable healthcare operations <em>quality.</em></>}>
+      <LabsHero eyebrow="Operon Labs" title="Policy-driven incentives for measurable healthcare operations">
         <p>
-          Business workflows submit synthetic evidence, deterministic policies decide whether
-          incentives are earned, and Hedera executes testnet payments inside explicit policy controls.
+          The demo use cases below show how healthcare teams can earn contract incentives only when policy-safe evidence
+          proves quality, timeliness, completeness, and audit readiness.
+        </p>
+        <p>
+          Business policies decide whether work qualifies. Payment policies enforce financial controls: approved
+          recipients, caps, tokens, human-review rules, prohibited metrics, and audit-safe settlement.
         </p>
       </LabsHero>
 
-      <LabsProductFrame title="Operon Labs demo catalog" meta="Hedera AI Agent Bounty Campaign">
+      <LabsProductFrame title="Incentive use cases" meta="Evidence -> business policy -> payment control -> audit">
         <section className="grid" aria-label="Demo workflows">
           {demoScenarios.map((scenario) => (
             <Link className="card" href={`/${scenario.slug}`} key={scenario.slug}>
@@ -23,6 +27,10 @@ export default function HomePage() {
             </Link>
           ))}
         </section>
+        <p className="catalog-note">
+          Built for the Hedera AI Agent Bounty Campaign using synthetic healthcare data and controlled settlement
+          policies.
+        </p>
       </LabsProductFrame>
     </LabsPageShell>
   );

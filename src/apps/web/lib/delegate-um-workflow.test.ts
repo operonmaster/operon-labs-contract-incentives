@@ -145,7 +145,7 @@ describe("delegate UM workflow", () => {
       paymentPolicyStatus: "paid",
       incentiveStatus: "paid",
       paymentStatus: "auto_executed",
-      incentiveValue: 5,
+      incentiveValue: 3,
       reasonCodes: []
     });
     expect(row.policyControls).toEqual([
@@ -220,7 +220,7 @@ describe("delegate UM workflow", () => {
         paymentPolicyId: umRequest.planId,
         policyId: businessPolicyId,
         triggerEvent: "UM_REQUEST_DETERMINED",
-        amount: 5,
+        amount: 3,
         walletId: "0.0.9049549"
       }),
       expect.any(Object)
@@ -272,7 +272,7 @@ describe("delegate UM workflow", () => {
       outcome: "paid",
       failureCode: null,
       requestedPayment: {
-        amount: 5,
+        amount: 3,
         token: "HBAR",
         recipientWalletId: "0.0.9049549"
       },
@@ -294,7 +294,7 @@ describe("delegate UM workflow", () => {
           label: "Max payment per request",
           status: "passed",
           expected: "<= 7 HBAR",
-          actual: "5 HBAR"
+          actual: "3 HBAR"
         }),
         expect.objectContaining({
           id: "duplicatePaymentPrevention",
@@ -374,7 +374,7 @@ describe("delegate UM workflow", () => {
           id: "maxPaymentPerRequest",
           status: "passed",
           expected: "<= 7 HBAR",
-          actual: "5 HBAR"
+          actual: "3 HBAR"
         })
       ])
     );
@@ -888,7 +888,7 @@ function buildPaidDelegateRow(request: UMRequest): DelegatePlanAuditRow {
     paymentPolicyStatus: "paid",
     incentiveStatus: "paid",
     paymentStatus: "auto_executed",
-    incentiveValue: 5,
+    incentiveValue: 3,
     currency: "HBAR",
     settlementToken: { symbol: "HBAR" },
     reason: "Concurrent payment already settled",
@@ -921,7 +921,7 @@ function buildPaidDelegateRow(request: UMRequest): DelegatePlanAuditRow {
         label: "Max payment per request",
         status: "passed",
         expected: "<= 7 HBAR",
-        actual: "5 HBAR"
+        actual: "3 HBAR"
       },
       {
         id: "duplicatePaymentPrevention",

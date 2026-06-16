@@ -148,7 +148,7 @@ describe("specialty rx workflow", () => {
       clearToFillAt: "2026-06-18T16:00:00.000Z",
       businessPolicyStatus: "approved",
       paymentPolicyStatus: "paid",
-      incentiveValue: 5,
+      incentiveValue: 4,
       reasonCodes: []
     });
     expect(row!.policyControls).toContain("Clear-to-fill timestamp starts Fulfillment SLA");
@@ -159,7 +159,7 @@ describe("specialty rx workflow", () => {
         caseId: umRequest.id,
         businessPolicyId: "specialty-rx-fulfillment-sla-v1",
         triggerEvent: "SPECIALTY_FULFILLMENT_COMPLETED",
-        amount: 5,
+        amount: 4,
         walletId: "0.0.9049549"
       }),
       expect.any(Object)
@@ -228,7 +228,7 @@ describe("specialty rx workflow", () => {
       paymentPolicyStatus: "paid",
       incentiveStatus: "paid",
       paymentStatus: "auto_executed",
-      incentiveValue: 5,
+      incentiveValue: 4,
       reasonCodes: []
     });
     expect(row!.policyCriteria).toEqual(
@@ -244,7 +244,7 @@ describe("specialty rx workflow", () => {
       expect.objectContaining({
         umRequestId: umRequest.id,
         triggerEvent: "SPECIALTY_FULFILLMENT_COMPLETED",
-        amount: 5,
+        amount: 4,
         walletId: "0.0.9049549"
       }),
       expect.any(Object)
@@ -348,7 +348,7 @@ describe("specialty rx workflow", () => {
       paymentPolicyStatus: "paid",
       incentiveStatus: "paid",
       paymentStatus: "auto_executed",
-      incentiveValue: 5,
+      incentiveValue: 4,
       reasonCodes: []
     });
     expect(row).not.toHaveProperty("deliverySlaStatus");
@@ -357,7 +357,7 @@ describe("specialty rx workflow", () => {
       expect.objectContaining({
         umRequestId: umRequest.id,
         triggerEvent: "SPECIALTY_FULFILLMENT_COMPLETED",
-        amount: 5,
+        amount: 4,
         walletId: "0.0.9049549"
       }),
       expect.any(Object)
@@ -516,7 +516,7 @@ describe("specialty rx workflow", () => {
       policyVersion: "v1",
       triggerEvent: "SPECIALTY_FULFILLMENT_COMPLETED",
       token: "HBAR",
-      amount: 5,
+      amount: 4,
       sourceAccountId: "0.0.6870566",
       recipientAccountId: "0.0.9049549",
       transactionMemo: umRequest.id,
@@ -626,7 +626,7 @@ describe("specialty rx workflow", () => {
     const lowMaxPaymentPolicyStore = createInMemoryPaymentPolicyStore({
       "acme-health-ppo": {
         ...defaultPaymentPlanPolicies["acme-health-ppo"],
-        maxPaymentAmount: 4
+        maxPaymentAmount: 3
       }
     });
     const { workflow } = await createApprovedSpecialtyRxCase(
@@ -653,15 +653,15 @@ describe("specialty rx workflow", () => {
       paymentPolicyStatus: "blocked",
       incentiveStatus: "payment_failed",
       paymentStatus: "execution_failed",
-      incentiveValue: 5
+      incentiveValue: 4
     });
     expect(row!.paymentPolicyControls).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           id: "maxPaymentPerRequest",
           status: "failed",
-          expected: "<= 4 HBAR",
-          actual: "5 HBAR",
+          expected: "<= 3 HBAR",
+          actual: "4 HBAR",
           failureCode: "HEDERA_PAYMENT_AMOUNT_EXCEEDS_PLAN_MAX"
         })
       ])

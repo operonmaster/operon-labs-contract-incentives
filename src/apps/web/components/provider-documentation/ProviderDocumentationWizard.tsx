@@ -78,7 +78,7 @@ export function ProviderDocumentationWizard() {
     ? {
         title: "Submission received",
         body: "The prior authorization request has been submitted to the plan and is now pending review.",
-        bullets: ["The provider portal workflow is complete.", "Plan-side incentives are evaluated outside this provider flow."]
+        bullets: ["The provider portal workflow is complete.", "Use the Health Plan View to inspect the submitted request."]
       }
     : stepContextByStep[step];
 
@@ -436,7 +436,10 @@ export function ProviderDocumentationWizard() {
       </div>
 
       <LabsHero className="provider-hero" compact eyebrow="Provider portal" title="New prior authorization">
-        <p>Select patient coverage, search the requested service, check requirements, and submit the request.</p>
+        <p>
+          Submit a prior authorization request with the patient, plan, requested item, coverage response, and required
+          documentation the health plan needs for review.
+        </p>
       </LabsHero>
 
       <section className="wizard-shell provider-shell">

@@ -65,14 +65,14 @@ describe("policy view model", () => {
     expect(detailItems).not.toContain("Excluded service codes: CPT 76498");
     expect(detailItems).toContain("Applies only to covered benefits: Yes");
     expect(detailItems).toContain("Requires DTR completion when requested: Yes");
-    expect(detailItems).toContain("Amount per eligible request: 5 HBAR");
+    expect(detailItems).toContain("Amount per eligible request: 3 HBAR");
     expect(detailItems).toContain("Monthly cap: 500 HBAR");
     expect(detailItems).toContain("Token: HBAR");
     expect(detailItems).toContain("Settlement mode: Auto");
     expect(detailItems).toContain("Recipient wallet ID: 0.0.9049549");
     expect(detailItems).toContain("Human approval required: No");
     expect(detailItems.join(" ")).not.toContain("CRD");
-    expect(acmeOutpatient.payoutOrControl).toBe("5 HBAR per eligible PA request");
+    expect(acmeOutpatient.payoutOrControl).toBe("3 HBAR per eligible PA request");
     expect(acmeOutpatient.status).toBe("Active");
     expect(acmeOutpatient.previewItems).toEqual([
       { label: "Policy ID", value: "plcy_8K2M4Q6R9T1V3X5Z7B0C" },
@@ -80,7 +80,7 @@ describe("policy view model", () => {
       { label: "Provider", value: "Lakeside Provider Admin" },
       { label: "Eligible request types", value: "Outpatient Service" },
       { label: "Included service codes", value: "CPT 73721" },
-      { label: "Payout", value: "5 HBAR" }
+      { label: "Payout", value: "3 HBAR" }
     ]);
   });
 
@@ -115,7 +115,7 @@ describe("policy view model", () => {
       { label: "Provider", value: "Lakeside Provider Admin" },
       { label: "Excluded request types", value: "Inpatient Admission" },
       { label: "Excluded service codes", value: "CPT 76498" },
-      { label: "Payout", value: "5 HBAR" }
+      { label: "Payout", value: "3 HBAR" }
     ]);
     expect(summary.detailSections.flatMap((section) => section.items)).toEqual(
       expect.arrayContaining([
@@ -148,7 +148,7 @@ describe("policy view model", () => {
           id: "delegate-um-sla-bonus-v1",
           title: "Delegate UM SLA Bonus",
           appliesTo: "Delegate UM SLA Bonus",
-          payoutOrControl: "5 HBAR per eligible UM request",
+          payoutOrControl: "3 HBAR per eligible UM request",
           previewItems: expect.arrayContaining([
             { label: "Plan", value: "Acme Health PPO" },
             { label: "Delegate", value: "Northstar UM" },
@@ -207,7 +207,7 @@ describe("policy view model", () => {
             { label: "Plan", value: "Summit Health HMO" },
             { label: "Pharmacy", value: "Atlas Specialty Rx" },
             { label: "Eligible request types", value: "Pharmacy Benefit" },
-            { label: "Payout", value: "5 HBAR" }
+            { label: "Payout", value: "6 HBAR" }
           ])
         })
       ])
@@ -238,6 +238,8 @@ describe("policy view model", () => {
     });
     expect(JSON.stringify(cards)).toContain("packet-readiness SLA");
     expect(JSON.stringify(cards)).toContain("No appeal outcome incentive");
+    expect(cards[0]?.payoutOrControl).toBe("3 HBAR per eligible appeal packet");
+    expect(cards[0]?.previewItems).toContainEqual({ label: "Payout", value: "3 HBAR" });
   });
 
   it("does not build Appeals Packet Quality cards for unrelated policy types", () => {
