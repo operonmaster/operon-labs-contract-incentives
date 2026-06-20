@@ -33,6 +33,7 @@ src/
 
 ## Bounty Submission Links
 
+- Maintainer: Pavel Grebenshikov (`operonmaster`)
 - Public repository: https://github.com/operonmaster/operon-labs-contract-incentives
 - Live demo: https://contract-incentives.demo.labs.operon.cloud/
 - Hedera Agent Kit feedback: https://github.com/hashgraph/hedera-agent-kit-js/issues/944
