@@ -92,11 +92,7 @@ src/
 - Live demo: https://contract-incentives.demo.labs.operon.cloud/
 - Hedera Agent Kit feedback: https://github.com/hashgraph/hedera-agent-kit-js/issues/944
 
-## License
-
-Source code and documentation in this repository are licensed under the Apache License 2.0. Operon names, logos, private infrastructure, secrets, deployment materials, and production customer implementations are not included in that license grant.
-
-### Provider Documentation Two-Page Demo
+## Provider Documentation Two-Page Demo
 
 Open two browser pages:
 
@@ -199,15 +195,6 @@ The UM reference adapter auto-seeds these demo reference collections when they a
 
 Full FHIR bundles stay server-side. The incentive agent receives policy-safe evidence only.
 
-For development resets after the settlement identity model changes, use:
-
-```bash
-node scripts/purge-demo-settlement-state.mjs --dry-run
-node scripts/purge-demo-settlement-state.mjs --confirm
-```
-
-The purge script deletes only `umRequests`, `pasClaims`, `auditEvents`, `incentiveEvaluations`, `paymentPolicyEvidences`, and `paymentIntents`. It does not touch `incentivePolicies`, `paymentPolicies`, or reference-data collections.
-
 ## Local Development
 
 For local UI work without cloud persistence or Hedera transfers:
@@ -234,3 +221,7 @@ npm run typecheck
 npm test
 npm run build
 ```
+
+## License
+
+Source code and documentation in this repository are licensed under the Apache License 2.0. Operon names, logos, private infrastructure, secrets, deployment materials, and production customer implementations are not included in that license grant.
