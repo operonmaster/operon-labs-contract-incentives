@@ -386,6 +386,54 @@ describe("appeals workflow", () => {
     expect(paymentIntentStore.getIntent).toHaveBeenCalledWith(paymentIntentId);
   });
 
+  it("blocks settlement with audit detail when multiple appeals policies match", async () => {
+    const platform = createInMemoryUmPlatform({ generateCaseId: () => "PA-260618-0902-DUPPOL1" });
+    const denied = determineRequest(
+      platform,
+      platform.submitPriorAuth({ requestType: "pharmacy_benefit", serviceCode: "wegovy_semaglutide" }),
+      "denied"
+    );
+    const duplicatePolicy: IncentivePolicy = {
+      ...appealsPolicy,
+      policyId: "appeals-packet-quality-v1-duplicate"
+    };
+    const workflow = createAppealsWorkflow(
+      platform,
+      undefined,
+      createInMemoryAppealsCaseStore(),
+      createInMemoryPolicyStore({
+        appeals_acme_packet_quality: appealsPolicy,
+        appeals_acme_packet_quality_duplicate: duplicatePolicy
+      }),
+      undefined,
+      createInMemoryPaymentPolicyStore(defaultPaymentPlanPolicies)
+    );
+    const appeal = await workflow.startAppeal(denied.id, { expedited: false }, new Date("2026-06-18T16:00:00.000Z"));
+
+    await completeAppealPacket(workflow, appeal.id, {
+      acknowledgedAt: new Date("2026-06-18T17:00:00.000Z"),
+      packetReadyAt: new Date("2026-06-19T15:00:00.000Z")
+    });
+
+    const [row] = await workflow.listPlanRows();
+
+    expect(row).toMatchObject({
+      appealId: appeal.id,
+      businessPolicyStatus: "rejected",
+      paymentPolicyStatus: "blocked",
+      incentiveStatus: "not_eligible",
+      paymentStatus: "blocked_by_policy",
+      incentiveValue: 0,
+      reasonCodes: ["MULTIPLE_POLICY_MATCHES"],
+      policyId: appealsPolicy.policyId,
+      transactionId: null
+    });
+    expect(row!.audit).not.toBeNull();
+    expect(row!.policyCriteria.length).toBeGreaterThan(0);
+    expect(row!.policyControls.length).toBeGreaterThan(0);
+    expect(executePolicyBoundPaymentMock).not.toHaveBeenCalled();
+  });
+
   it("retains the deterministic payment intent id on failed execution rows", async () => {
     executePolicyBoundPaymentMock.mockRejectedValueOnce(new Error("HEDERA_PAYMENT_AMOUNT_EXCEEDS_PLAN_MAX"));
     const { workflow, denied } = await createDeniedAppealFixture("PA-260618-0902-PAYFAIL1");

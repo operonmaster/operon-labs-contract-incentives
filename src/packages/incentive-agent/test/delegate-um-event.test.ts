@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import type { IncentivePolicy } from "@operon-labs/policy-engine";
-import { evaluateDelegateUmSlaEvent, type DelegateUmSlaEvidence } from "../src/index";
+import {
+  buildDelegateUmSlaRequestObject,
+  evaluateDelegateUmSlaEvent,
+  type DelegateUmSlaEvidence
+} from "../src/index";
 
 const policy: IncentivePolicy = {
   policyId: "delegate-um-sla-bonus-v1",
@@ -44,6 +48,22 @@ const evidence: DelegateUmSlaEvidence = {
 };
 
 describe("evaluateDelegateUmSlaEvent", () => {
+  it("builds the policy-facing delegate UM SLA request object", () => {
+    const requestObject = buildDelegateUmSlaRequestObject(evidence);
+
+    expect(requestObject).toMatchObject({
+      umRequestId: evidence.umRequestId,
+      id: evidence.id,
+      delegateVendorId: "northstar-um",
+      outcomeStatus: "denied",
+      outcomeStatusPresent: true,
+      completedWithinSla: true,
+      auditReady: true
+    });
+    expect(requestObject).not.toHaveProperty("containsPhi");
+    expect(requestObject).not.toHaveProperty("outcomeStatusUsedForPayment");
+  });
+
   it("pulls delegate evidence by umRequestId and approves denied determinations without using outcome value", () => {
     const getEvidence = vi.fn(() => evidence);
 

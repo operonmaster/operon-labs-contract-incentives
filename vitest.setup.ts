@@ -23,6 +23,8 @@ function normalizeBackend(value: string | undefined): string {
 testBackendEnvNames.forEach(forceTestBackend);
 process.env.HEDERA_SETTLEMENT_MODE = "simulated";
 
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
 // Guard: if any store factory still resolves to firestore in tests (e.g. a new
 // *_STORE_BACKEND was added without a memory default above), fail loudly instead
 // of hanging on a real network call. Constructing the real client requires

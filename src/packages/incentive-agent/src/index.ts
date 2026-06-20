@@ -19,6 +19,23 @@ export interface ProviderDocumentationEvaluationDependencies {
   monthToDateAmount?: number;
 }
 
+export type ProviderDocumentationRequestObject = Record<string, unknown> & {
+  id: string;
+  umRequestId: string;
+  caseId: string;
+  planId: string;
+  providerId: string;
+  requestType: string;
+  serviceCode: string;
+  codingSystem: string;
+  billingCode: string;
+  coveredBenefit: boolean;
+  dtrRequested: boolean;
+  dtrCompleted: boolean;
+  dtrTemplateCompleted: boolean;
+  containsPhi: false;
+};
+
 export interface DelegateUmSlaEvidence {
   umRequestId: string;
   id: string;
@@ -42,6 +59,24 @@ export interface DelegateUmSlaEvaluationDependencies {
   policy: IncentivePolicy;
   monthToDateAmount?: number;
 }
+
+export type DelegateUmSlaRequestObject = Record<string, unknown> & {
+  umRequestId: string;
+  id: string;
+  planId: string;
+  delegateVendorId: string;
+  requestType: string;
+  state: string;
+  outcomeStatus: "approved" | "denied";
+  outcomeStatusPresent: boolean;
+  completedWithinSla: boolean;
+  slaHours: 24;
+  clinicalDocumentationReviewed: boolean;
+  medicalNecessityCriteriaMet: boolean;
+  planPolicyRequirementsChecked: boolean;
+  decisionRationaleDocumented: boolean;
+  auditReady: boolean;
+};
 
 export interface SpecialtyRxFulfillmentEvidence {
   fulfillmentCaseId: string;
@@ -79,6 +114,36 @@ export interface SpecialtyRxFulfillmentEvaluationDependencies {
   monthToDateAmount?: number;
 }
 
+export type SpecialtyRxFulfillmentRequestObject = Record<string, unknown> & {
+  fulfillmentCaseId: string;
+  umRequestId: string;
+  planId: string;
+  pharmacyId: string;
+  requestType: string;
+  paOutcomeStatus: "approved" | "denied";
+  state: "intake_triage" | "clear_to_fill" | "shipment_scheduled" | "fulfilled" | "exception";
+  fulfillmentSlaStartedAt: string | null;
+  clearToFillAt: string | null;
+  shipmentScheduledAt: string | null;
+  deliveryConfirmedAt: string | null;
+  scheduleSlaHours: 24;
+  intakeComplete: boolean;
+  clearToFillComplete: boolean;
+  shipmentScheduledWithinSla: boolean;
+  remsRequired: boolean;
+  remsAuthorizationConfirmed: boolean;
+  coldChainRequired: boolean;
+  coldChainPackoutValidated: boolean;
+  temperatureLogValid: boolean;
+  avoidableFulfillmentException: boolean;
+  externalBlockerDocumented: boolean;
+  drugChoiceMetricUsed: boolean;
+  fillVolumeMetricUsed: boolean;
+  pharmacySteeringMetricUsed: boolean;
+  patientAdherenceMetricUsed: boolean;
+  containsPhi: boolean;
+};
+
 export interface AppealsPacketEvidence {
   appealId: string;
   umRequestId: string;
@@ -109,6 +174,31 @@ export interface AppealsPacketEvaluationDependencies {
   policy: IncentivePolicy;
   monthToDateAmount?: number;
 }
+
+export type AppealsPacketRequestObject = Record<string, unknown> & {
+  appealId: string;
+  umRequestId: string;
+  planId: string;
+  submitterId: string;
+  requestType: string;
+  originalOutcomeStatus: "denied" | "approved";
+  appealReceivedAt: string;
+  acknowledgedAt: string | null;
+  packetReadyAt: string | null;
+  acknowledgedWithinSla: boolean;
+  packetReadyWithinSla: boolean;
+  requiredDocumentsPresent: boolean;
+  clinicalRationaleIncluded: boolean;
+  policyCitationIncluded: boolean;
+  priorDecisionSummaryIncluded: boolean;
+  evidenceIndexComplete: boolean;
+  qualityAuditPassed: boolean;
+  noReworkRequired: boolean;
+  appealOutcomeUsed: boolean;
+  costSavingsMetricUsed: boolean;
+  denialReversalMetricUsed: boolean;
+  containsPhi: boolean;
+};
 
 export function evaluateDemoScenario(evaluationType: string, policy: IncentivePolicy): DemoEvaluation {
   const request = getDemoEvaluationRequest(evaluationType);
@@ -150,6 +240,109 @@ export function explainDecision(result: PolicyEvaluationResult): string {
   return `Policy ${result.policyId} blocked payment because ${result.reasonCodes.join(", ")}.`;
 }
 
+export function buildProviderDocumentationRequestObject(
+  evidence: ProviderDocumentationEvidence
+): ProviderDocumentationRequestObject {
+  return {
+    id: evidence.id,
+    umRequestId: evidence.umRequestId,
+    caseId: evidence.caseId,
+    planId: evidence.planId,
+    providerId: evidence.providerId,
+    requestType: evidence.requestType,
+    serviceCode: evidence.serviceCode,
+    codingSystem: evidence.codingSystem,
+    billingCode: evidence.billingCode,
+    coveredBenefit: evidence.coveredBenefit,
+    dtrRequested: evidence.dtrRequested,
+    dtrCompleted: evidence.dtrCompleted,
+    // Existing policies read dtrTemplateCompleted; map it from canonical completion evidence.
+    dtrTemplateCompleted: evidence.dtrCompleted,
+    containsPhi: false
+  };
+}
+
+export function buildDelegateUmSlaRequestObject(evidence: DelegateUmSlaEvidence): DelegateUmSlaRequestObject {
+  return {
+    umRequestId: evidence.umRequestId,
+    id: evidence.id,
+    planId: evidence.planId,
+    delegateVendorId: evidence.delegateVendorId,
+    requestType: evidence.requestType,
+    state: evidence.state,
+    outcomeStatus: evidence.outcomeStatus,
+    outcomeStatusPresent: evidence.outcomeStatusPresent,
+    completedWithinSla: evidence.completedWithinSla,
+    slaHours: evidence.slaHours,
+    clinicalDocumentationReviewed: evidence.clinicalDocumentationReviewed,
+    medicalNecessityCriteriaMet: evidence.medicalNecessityCriteriaMet,
+    planPolicyRequirementsChecked: evidence.planPolicyRequirementsChecked,
+    decisionRationaleDocumented: evidence.decisionRationaleDocumented,
+    auditReady: evidence.auditReady
+  };
+}
+
+export function buildSpecialtyRxFulfillmentRequestObject(
+  evidence: SpecialtyRxFulfillmentEvidence
+): SpecialtyRxFulfillmentRequestObject {
+  return {
+    fulfillmentCaseId: evidence.fulfillmentCaseId,
+    umRequestId: evidence.umRequestId,
+    planId: evidence.planId,
+    pharmacyId: evidence.pharmacyId,
+    requestType: evidence.requestType,
+    paOutcomeStatus: evidence.paOutcomeStatus,
+    state: evidence.state,
+    fulfillmentSlaStartedAt: evidence.fulfillmentSlaStartedAt,
+    clearToFillAt: evidence.clearToFillAt,
+    shipmentScheduledAt: evidence.shipmentScheduledAt,
+    deliveryConfirmedAt: evidence.deliveryConfirmedAt,
+    scheduleSlaHours: evidence.scheduleSlaHours,
+    intakeComplete: evidence.intakeComplete,
+    clearToFillComplete: evidence.clearToFillComplete,
+    shipmentScheduledWithinSla: evidence.shipmentScheduledWithinSla,
+    remsRequired: evidence.remsRequired,
+    remsAuthorizationConfirmed: evidence.remsAuthorizationConfirmed,
+    coldChainRequired: evidence.coldChainRequired,
+    coldChainPackoutValidated: evidence.coldChainPackoutValidated,
+    temperatureLogValid: evidence.temperatureLogValid,
+    avoidableFulfillmentException: evidence.avoidableFulfillmentException,
+    externalBlockerDocumented: evidence.externalBlockerDocumented,
+    drugChoiceMetricUsed: evidence.drugChoiceMetricUsed,
+    fillVolumeMetricUsed: evidence.fillVolumeMetricUsed,
+    pharmacySteeringMetricUsed: evidence.pharmacySteeringMetricUsed,
+    patientAdherenceMetricUsed: evidence.patientAdherenceMetricUsed,
+    containsPhi: evidence.containsPhi
+  };
+}
+
+export function buildAppealsPacketRequestObject(evidence: AppealsPacketEvidence): AppealsPacketRequestObject {
+  return {
+    appealId: evidence.appealId,
+    umRequestId: evidence.umRequestId,
+    planId: evidence.planId,
+    submitterId: evidence.submitterId,
+    requestType: evidence.requestType,
+    originalOutcomeStatus: evidence.originalOutcomeStatus,
+    appealReceivedAt: evidence.appealReceivedAt,
+    acknowledgedAt: evidence.acknowledgedAt,
+    packetReadyAt: evidence.packetReadyAt,
+    acknowledgedWithinSla: evidence.acknowledgedWithinSla,
+    packetReadyWithinSla: evidence.packetReadyWithinSla,
+    requiredDocumentsPresent: evidence.requiredDocumentsPresent,
+    clinicalRationaleIncluded: evidence.clinicalRationaleIncluded,
+    policyCitationIncluded: evidence.policyCitationIncluded,
+    priorDecisionSummaryIncluded: evidence.priorDecisionSummaryIncluded,
+    evidenceIndexComplete: evidence.evidenceIndexComplete,
+    qualityAuditPassed: evidence.qualityAuditPassed,
+    noReworkRequired: evidence.noReworkRequired,
+    appealOutcomeUsed: evidence.appealOutcomeUsed,
+    costSavingsMetricUsed: evidence.costSavingsMetricUsed,
+    denialReversalMetricUsed: evidence.denialReversalMetricUsed,
+    containsPhi: evidence.containsPhi
+  };
+}
+
 export function evaluateProviderDocumentationEvent(
   event: { eventType: string; umRequestId: string; caseId?: string },
   dependencies: ProviderDocumentationEvaluationDependencies
@@ -170,22 +363,7 @@ export function evaluateProviderDocumentationEvent(
   const request: EvaluationRequest = {
     evaluationType: "provider_documentation_completeness",
     submitter: evidence.submitter,
-    requestObject: {
-      id: evidence.id,
-      umRequestId: evidence.umRequestId,
-      caseId: evidence.caseId,
-      planId: evidence.planId,
-      providerId: evidence.providerId,
-      requestType: evidence.requestType,
-      serviceCode: evidence.serviceCode,
-      codingSystem: evidence.codingSystem,
-      billingCode: evidence.billingCode,
-      coveredBenefit: evidence.coveredBenefit,
-      dtrRequested: evidence.dtrRequested,
-      dtrCompleted: evidence.dtrCompleted,
-      dtrTemplateCompleted: evidence.dtrCompleted,
-      containsPhi: false
-    }
+    requestObject: buildProviderDocumentationRequestObject(evidence)
   };
 
   const result = evaluatePolicy({
@@ -221,23 +399,7 @@ export function evaluateDelegateUmSlaEvent(
   const request: EvaluationRequest = {
     evaluationType: "delegate_um_sla_bonus",
     submitter: { id: evidence.delegateVendorId },
-    requestObject: {
-      umRequestId: evidence.umRequestId,
-      id: evidence.id,
-      planId: evidence.planId,
-      delegateVendorId: evidence.delegateVendorId,
-      requestType: evidence.requestType,
-      state: evidence.state,
-      outcomeStatus: evidence.outcomeStatus,
-      outcomeStatusPresent: evidence.outcomeStatusPresent,
-      completedWithinSla: evidence.completedWithinSla,
-      slaHours: evidence.slaHours,
-      clinicalDocumentationReviewed: evidence.clinicalDocumentationReviewed,
-      medicalNecessityCriteriaMet: evidence.medicalNecessityCriteriaMet,
-      planPolicyRequirementsChecked: evidence.planPolicyRequirementsChecked,
-      decisionRationaleDocumented: evidence.decisionRationaleDocumented,
-      auditReady: evidence.auditReady
-    }
+    requestObject: buildDelegateUmSlaRequestObject(evidence)
   };
 
   const result = evaluatePolicy({
@@ -272,35 +434,7 @@ export function evaluateSpecialtyRxFulfillmentEvent(
   const request: EvaluationRequest = {
     evaluationType: "specialty_rx_fulfillment_sla",
     submitter: { id: evidence.pharmacyId },
-    requestObject: {
-      fulfillmentCaseId: evidence.fulfillmentCaseId,
-      umRequestId: evidence.umRequestId,
-      planId: evidence.planId,
-      pharmacyId: evidence.pharmacyId,
-      requestType: evidence.requestType,
-      paOutcomeStatus: evidence.paOutcomeStatus,
-      state: evidence.state,
-      fulfillmentSlaStartedAt: evidence.fulfillmentSlaStartedAt,
-      clearToFillAt: evidence.clearToFillAt,
-      shipmentScheduledAt: evidence.shipmentScheduledAt,
-      deliveryConfirmedAt: evidence.deliveryConfirmedAt,
-      scheduleSlaHours: evidence.scheduleSlaHours,
-      intakeComplete: evidence.intakeComplete,
-      clearToFillComplete: evidence.clearToFillComplete,
-      shipmentScheduledWithinSla: evidence.shipmentScheduledWithinSla,
-      remsRequired: evidence.remsRequired,
-      remsAuthorizationConfirmed: evidence.remsAuthorizationConfirmed,
-      coldChainRequired: evidence.coldChainRequired,
-      coldChainPackoutValidated: evidence.coldChainPackoutValidated,
-      temperatureLogValid: evidence.temperatureLogValid,
-      avoidableFulfillmentException: evidence.avoidableFulfillmentException,
-      externalBlockerDocumented: evidence.externalBlockerDocumented,
-      drugChoiceMetricUsed: evidence.drugChoiceMetricUsed,
-      fillVolumeMetricUsed: evidence.fillVolumeMetricUsed,
-      pharmacySteeringMetricUsed: evidence.pharmacySteeringMetricUsed,
-      patientAdherenceMetricUsed: evidence.patientAdherenceMetricUsed,
-      containsPhi: evidence.containsPhi
-    }
+    requestObject: buildSpecialtyRxFulfillmentRequestObject(evidence)
   };
 
   const result = evaluatePolicy({
@@ -335,30 +469,7 @@ export function evaluateAppealsPacketEvent(
   const request: EvaluationRequest = {
     evaluationType: "appeals_packet_quality",
     submitter: { id: evidence.submitterId },
-    requestObject: {
-      appealId: evidence.appealId,
-      umRequestId: evidence.umRequestId,
-      planId: evidence.planId,
-      submitterId: evidence.submitterId,
-      requestType: evidence.requestType,
-      originalOutcomeStatus: evidence.originalOutcomeStatus,
-      appealReceivedAt: evidence.appealReceivedAt,
-      acknowledgedAt: evidence.acknowledgedAt,
-      packetReadyAt: evidence.packetReadyAt,
-      acknowledgedWithinSla: evidence.acknowledgedWithinSla,
-      packetReadyWithinSla: evidence.packetReadyWithinSla,
-      requiredDocumentsPresent: evidence.requiredDocumentsPresent,
-      clinicalRationaleIncluded: evidence.clinicalRationaleIncluded,
-      policyCitationIncluded: evidence.policyCitationIncluded,
-      priorDecisionSummaryIncluded: evidence.priorDecisionSummaryIncluded,
-      evidenceIndexComplete: evidence.evidenceIndexComplete,
-      qualityAuditPassed: evidence.qualityAuditPassed,
-      noReworkRequired: evidence.noReworkRequired,
-      appealOutcomeUsed: evidence.appealOutcomeUsed,
-      costSavingsMetricUsed: evidence.costSavingsMetricUsed,
-      denialReversalMetricUsed: evidence.denialReversalMetricUsed,
-      containsPhi: evidence.containsPhi
-    }
+    requestObject: buildAppealsPacketRequestObject(evidence)
   };
 
   const result = evaluatePolicy({
@@ -450,102 +561,126 @@ function assertAppealsPacketEvidenceMatchesEvent(
   }
 }
 
+const demoDelegateUmSlaEvidence: DelegateUmSlaEvidence = {
+  umRequestId: "PA-260526-0900-DELEGATE",
+  id: "PA-260526-0900-DELEGATE",
+  planId: "acme-health-ppo",
+  delegateVendorId: "northstar-um",
+  requestType: "pharmacy_benefit",
+  state: "determined",
+  outcomeStatus: "approved",
+  outcomeStatusPresent: true,
+  completedWithinSla: true,
+  slaHours: 24,
+  clinicalDocumentationReviewed: true,
+  medicalNecessityCriteriaMet: true,
+  planPolicyRequirementsChecked: true,
+  decisionRationaleDocumented: true,
+  auditReady: true
+};
+
+const demoProviderDocumentationEvidence: ProviderDocumentationEvidence = {
+  id: "PA-260524-2102-AAAA1111",
+  umRequestId: "PA-260524-2102-AAAA1111",
+  caseId: "PA-260524-2102-AAAA1111",
+  planId: "acme-health-ppo",
+  submitter: { id: "lakeside-provider-admin" },
+  providerId: "lakeside-provider-admin",
+  requestType: "outpatient_service",
+  serviceCode: "knee_mri",
+  codingSystem: "CPT",
+  billingCode: "73721",
+  coverageStatusConfirmed: true,
+  coveredBenefit: true,
+  dtrRequested: true,
+  dtrCompleted: true,
+  crdCoverageChecked: true,
+  crdCoveredBenefit: true,
+  dtrTemplateCompleted: true,
+  attachmentChecklistComplete: true,
+  fhirFieldsPresent: true,
+  pasSubmitted: true,
+  submittedBeforeInitialDecision: true,
+  paResultUsedForPositivePayment: false,
+  approvalOutcomeUsed: false,
+  referralVolumeMetricUsed: false,
+  containsPhi: false
+};
+
+const demoAppealsPacketEvidence: AppealsPacketEvidence = {
+  appealId: "APL-260526-0900-DENIED01",
+  umRequestId: "PA-260526-0900-DENIED01",
+  planId: "acme-health-ppo",
+  submitterId: "lakeside-provider-admin",
+  requestType: "pharmacy_benefit",
+  originalOutcomeStatus: "denied",
+  appealReceivedAt: "2026-06-18T16:00:00.000Z",
+  acknowledgedAt: "2026-06-18T17:00:00.000Z",
+  packetReadyAt: "2026-06-19T15:00:00.000Z",
+  acknowledgedWithinSla: true,
+  packetReadyWithinSla: true,
+  requiredDocumentsPresent: true,
+  clinicalRationaleIncluded: true,
+  policyCitationIncluded: true,
+  priorDecisionSummaryIncluded: true,
+  evidenceIndexComplete: true,
+  qualityAuditPassed: true,
+  noReworkRequired: true,
+  appealOutcomeUsed: false,
+  costSavingsMetricUsed: false,
+  denialReversalMetricUsed: false,
+  containsPhi: false
+};
+
+const demoSpecialtyRxFulfillmentEvidence: SpecialtyRxFulfillmentEvidence = {
+  fulfillmentCaseId: "RXF-260526-0900-DELEGATE",
+  umRequestId: "PA-260526-0900-DELEGATE",
+  planId: "acme-health-ppo",
+  pharmacyId: "atlas-specialty-rx",
+  requestType: "pharmacy_benefit",
+  paOutcomeStatus: "approved",
+  state: "fulfilled",
+  fulfillmentSlaStartedAt: "2026-06-18T15:00:00.000Z",
+  clearToFillAt: "2026-06-18T16:00:00.000Z",
+  shipmentScheduledAt: "2026-06-19T09:30:00.000Z",
+  deliveryConfirmedAt: "2026-06-20T14:00:00.000Z",
+  scheduleSlaHours: 24,
+  intakeComplete: true,
+  clearToFillComplete: true,
+  shipmentScheduledWithinSla: true,
+  remsRequired: false,
+  remsAuthorizationConfirmed: true,
+  coldChainRequired: true,
+  coldChainPackoutValidated: true,
+  temperatureLogValid: true,
+  avoidableFulfillmentException: false,
+  externalBlockerDocumented: false,
+  drugChoiceMetricUsed: false,
+  fillVolumeMetricUsed: false,
+  pharmacySteeringMetricUsed: false,
+  patientAdherenceMetricUsed: false,
+  containsPhi: false
+};
+
 const demoRequests: Record<string, EvaluationRequest> = {
   delegate_um_sla_bonus: {
     evaluationType: "delegate_um_sla_bonus",
-    submitter: { id: "northstar-um" },
-    requestObject: {
-      umRequestId: "PA-260526-0900-DELEGATE",
-      planId: "acme-health-ppo",
-      delegateVendorId: "northstar-um",
-      requestType: "pharmacy_benefit",
-      state: "determined",
-      outcomeStatusPresent: true,
-      outcomeStatus: "approved",
-      completedWithinSla: true,
-      slaHours: 24,
-      clinicalDocumentationReviewed: true,
-      medicalNecessityCriteriaMet: true,
-      planPolicyRequirementsChecked: true,
-      decisionRationaleDocumented: true,
-      auditReady: true
-    }
+    submitter: { id: demoDelegateUmSlaEvidence.delegateVendorId },
+    requestObject: buildDelegateUmSlaRequestObject(demoDelegateUmSlaEvidence)
   },
   provider_documentation_completeness: {
     evaluationType: "provider_documentation_completeness",
-    submitter: { id: "lakeside-provider-admin" },
-    requestObject: {
-      caseId: "PA-260524-2102-AAAA1111",
-      planId: "acme-health-ppo",
-      providerId: "lakeside-provider-admin",
-      requestType: "outpatient_service",
-      serviceCode: "knee_mri",
-      codingSystem: "CPT",
-      billingCode: "73721",
-      coveredBenefit: true,
-      dtrRequested: true,
-      dtrTemplateCompleted: true
-    }
+    submitter: demoProviderDocumentationEvidence.submitter,
+    requestObject: buildProviderDocumentationRequestObject(demoProviderDocumentationEvidence)
   },
   appeals_packet_quality: {
     evaluationType: "appeals_packet_quality",
-    submitter: { id: "lakeside-provider-admin" },
-    requestObject: {
-      appealId: "APL-260526-0900-DENIED01",
-      umRequestId: "PA-260526-0900-DENIED01",
-      planId: "acme-health-ppo",
-      submitterId: "lakeside-provider-admin",
-      requestType: "pharmacy_benefit",
-      originalOutcomeStatus: "denied",
-      appealReceivedAt: "2026-06-18T16:00:00.000Z",
-      acknowledgedAt: "2026-06-18T17:00:00.000Z",
-      packetReadyAt: "2026-06-19T15:00:00.000Z",
-      acknowledgedWithinSla: true,
-      packetReadyWithinSla: true,
-      requiredDocumentsPresent: true,
-      clinicalRationaleIncluded: true,
-      policyCitationIncluded: true,
-      priorDecisionSummaryIncluded: true,
-      evidenceIndexComplete: true,
-      qualityAuditPassed: true,
-      noReworkRequired: true,
-      appealOutcomeUsed: false,
-      costSavingsMetricUsed: false,
-      denialReversalMetricUsed: false,
-      containsPhi: false
-    }
+    submitter: { id: demoAppealsPacketEvidence.submitterId },
+    requestObject: buildAppealsPacketRequestObject(demoAppealsPacketEvidence)
   },
   specialty_rx_fulfillment_sla: {
     evaluationType: "specialty_rx_fulfillment_sla",
-    submitter: { id: "atlas-specialty-rx" },
-    requestObject: {
-      fulfillmentCaseId: "RXF-260526-0900-DELEGATE",
-      umRequestId: "PA-260526-0900-DELEGATE",
-      planId: "acme-health-ppo",
-      pharmacyId: "atlas-specialty-rx",
-      requestType: "pharmacy_benefit",
-      paOutcomeStatus: "approved",
-      state: "fulfilled",
-      fulfillmentSlaStartedAt: "2026-06-18T15:00:00.000Z",
-      clearToFillAt: "2026-06-18T16:00:00.000Z",
-      shipmentScheduledAt: "2026-06-19T09:30:00.000Z",
-      deliveryConfirmedAt: "2026-06-20T14:00:00.000Z",
-      scheduleSlaHours: 24,
-      intakeComplete: true,
-      clearToFillComplete: true,
-      shipmentScheduledWithinSla: true,
-      remsRequired: false,
-      remsAuthorizationConfirmed: true,
-      coldChainRequired: true,
-      coldChainPackoutValidated: true,
-      temperatureLogValid: true,
-      avoidableFulfillmentException: false,
-      externalBlockerDocumented: false,
-      drugChoiceMetricUsed: false,
-      fillVolumeMetricUsed: false,
-      pharmacySteeringMetricUsed: false,
-      patientAdherenceMetricUsed: false,
-      containsPhi: false
-    }
+    submitter: { id: demoSpecialtyRxFulfillmentEvidence.pharmacyId },
+    requestObject: buildSpecialtyRxFulfillmentRequestObject(demoSpecialtyRxFulfillmentEvidence)
   }
 };

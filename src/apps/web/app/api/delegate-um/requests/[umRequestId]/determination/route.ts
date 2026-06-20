@@ -1,6 +1,7 @@
 import type { CompleteClinicalReviewInput } from "@operon-labs/um-platform";
 import { NextResponse } from "next/server";
 import { delegateUmWorkflow } from "../../../../../../lib/delegate-um-workflow";
+import { enforcePublicDemoMutationRateLimit } from "../../../../../../lib/public-demo-mutation-rate-limit";
 
 export async function POST(request: Request, context: { params: Promise<{ umRequestId: string }> }) {
   const body = await request.json().catch(() => null);
@@ -8,6 +9,11 @@ export async function POST(request: Request, context: { params: Promise<{ umRequ
 
   if (!input) {
     return NextResponse.json({ error: "INVALID_DETERMINATION" }, { status: 400 });
+  }
+
+  const rateLimitResponse = enforcePublicDemoMutationRateLimit(request);
+  if (rateLimitResponse) {
+    return rateLimitResponse;
   }
 
   const { umRequestId } = await context.params;

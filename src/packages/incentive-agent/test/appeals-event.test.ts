@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { IncentivePolicy } from "@operon-labs/policy-engine";
 import {
+  buildAppealsPacketRequestObject,
   evaluateAppealsPacketEvent,
   getDemoEvaluationRequest,
   type AppealsPacketEvidence
@@ -57,6 +58,22 @@ const evidence: AppealsPacketEvidence = {
 };
 
 describe("evaluateAppealsPacketEvent", () => {
+  it("builds the policy-facing appeals packet request object", () => {
+    const requestObject = buildAppealsPacketRequestObject(evidence);
+
+    expect(requestObject).toMatchObject({
+      appealId: evidence.appealId,
+      umRequestId: evidence.umRequestId,
+      originalOutcomeStatus: "denied",
+      packetReadyWithinSla: true,
+      appealOutcomeUsed: false,
+      costSavingsMetricUsed: false,
+      denialReversalMetricUsed: false,
+      containsPhi: false
+    });
+    expect(requestObject).not.toHaveProperty("paymentAmount");
+  });
+
   it("pulls policy-safe appeal packet evidence by appealId", () => {
     const getEvidenceByAppealId = vi.fn(() => evidence);
 

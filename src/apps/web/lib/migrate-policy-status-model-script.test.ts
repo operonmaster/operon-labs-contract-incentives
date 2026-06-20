@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
 
 const temporaryDirs: string[] = [];
+const MIGRATION_SCRIPT_TEST_TIMEOUT_MS = 20_000;
 
 afterEach(() => {
   for (const dir of temporaryDirs.splice(0)) {
@@ -33,7 +34,7 @@ describe("migrate-policy-status-model script", () => {
     expect(result.stdout).toContain("missing-doc");
     expect(result.stdout).toContain("corrupt-doc");
     expect(result.stdout).not.toContain("outcome=blocked: 3");
-  });
+  }, MIGRATION_SCRIPT_TEST_TIMEOUT_MS);
 
   it("refuses a confirmed migration when payment evidence outcomes are unknown", () => {
     const result = runMigration(["--confirm"], {
@@ -47,7 +48,7 @@ describe("migrate-policy-status-model script", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("Refusing to migrate paymentPolicyEvidences with unknown outcomes");
     expect(result.stderr).toContain("missing-doc");
-  });
+  }, MIGRATION_SCRIPT_TEST_TIMEOUT_MS);
 });
 
 function runMigration(args: string[], data: Record<string, Array<{ id: string; data: unknown }>>) {

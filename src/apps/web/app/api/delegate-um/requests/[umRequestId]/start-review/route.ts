@@ -1,10 +1,15 @@
 import { NextResponse } from "next/server";
 import { delegateUmWorkflow } from "../../../../../../lib/delegate-um-workflow";
+import { enforcePublicDemoMutationRateLimit } from "../../../../../../lib/public-demo-mutation-rate-limit";
 
 export async function POST(request: Request, context: { params: Promise<{ umRequestId: string }> }) {
   const { umRequestId } = await context.params;
   const body = await request.json().catch(() => ({}));
   const reviewerId = getReviewerId(body);
+  const rateLimitResponse = enforcePublicDemoMutationRateLimit(request);
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
 
   try {
     return NextResponse.json(await delegateUmWorkflow.startReview(umRequestId, reviewerId));

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { IncentivePolicy } from "@operon-labs/policy-engine";
 import {
+  buildSpecialtyRxFulfillmentRequestObject,
   evaluateSpecialtyRxFulfillmentEvent,
   getDemoEvaluationRequest,
   type SpecialtyRxFulfillmentEvidence
@@ -67,6 +68,21 @@ const evidence: SpecialtyRxFulfillmentEvidence = {
 };
 
 describe("evaluateSpecialtyRxFulfillmentEvent", () => {
+  it("builds the policy-facing specialty Rx fulfillment request object", () => {
+    const requestObject = buildSpecialtyRxFulfillmentRequestObject(evidence);
+
+    expect(requestObject).toMatchObject({
+      fulfillmentCaseId: evidence.fulfillmentCaseId,
+      umRequestId: evidence.umRequestId,
+      pharmacyId: "atlas-specialty-rx",
+      shipmentScheduledWithinSla: true,
+      coldChainPackoutValidated: true,
+      containsPhi: false
+    });
+    expect(requestObject).not.toHaveProperty("deliverySlaHours");
+    expect(requestObject).not.toHaveProperty("deliveryConfirmedWithinSla");
+  });
+
   it("pulls evidence by fulfillmentCaseId and builds the policy request", () => {
     const getEvidence = vi.fn(() => evidence);
 

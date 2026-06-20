@@ -78,11 +78,16 @@ HEDERA_NETWORK=testnet
 HEDERA_OPERATOR_ACCOUNT_ID=<Secret Manager value>
 HEDERA_OPERATOR_PRIVATE_KEY=<Secret Manager value>
 HEDERA_BLOCKED_RECIPIENT_ACCOUNT_IDS=
+PUBLIC_DEMO_MUTATION_RATE_LIMIT=enabled
 ```
 
 The Hedera Agent Kit execution policy is intentionally narrower than the healthcare business policy. CRD/DTR/PAS eligibility is evaluated before settlement and recorded in Firestore. Settlement-facing documents use deterministic opaque ids: `incentiveEvaluations/{businessEvaluationId}` where `businessEvaluationId = ie_sha256(umRequestId | businessPolicyId)`, and `paymentIntents/{paymentIntentId}` / `paymentPolicyEvidences/{paymentIntentId}` where `paymentIntentId = pi_sha256(umRequestId | businessPolicyId | paymentPolicyId)`. The readable PA/UM request id remains in `umRequestId`, `caseId`, and the Hedera transaction memo.
 
 Provider Documentation and Delegate UM can both pay for the same UM request because they use different `businessPolicyId` values. Duplicate prevention blocks only a repeat of the same `umRequestId + businessPolicyId + paymentPolicyId` settlement triplet.
+
+Public demo mutation routes include a process-local guard for basic abuse control: one accepted mutation per client per second and ten accepted mutations per client per rolling minute. It is intended to reduce uncontrolled demo data creation; use an external shared limiter if the hosted service needs hard global limits across multiple Cloud Run instances.
+
+Monthly caps remain part of the policy model and UI language. Persisted month-to-date aggregation across paid rows is intentionally future production hardening rather than a current demo feature.
 
 For tests or offline demos only:
 

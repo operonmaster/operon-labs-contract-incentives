@@ -100,7 +100,6 @@ function LabsFooter() {
                 <span>© 2026 Operon, LLC. All rights reserved.</span>
               </div>
               <nav className="labs-corporate-footer__links" aria-label="Operon links">
-                <a href="https://www.operon.cloud">Company</a>
                 <a href="https://labs.operon.cloud">Operon Labs</a>
                 <a href="https://www.operon.cloud/book-a-call">Contact</a>
               </nav>

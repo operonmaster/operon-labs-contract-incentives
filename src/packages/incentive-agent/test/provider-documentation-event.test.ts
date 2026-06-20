@@ -2,9 +2,46 @@ import { describe, expect, it, vi } from "vitest";
 import type { IncentivePolicy } from "@operon-labs/policy-engine";
 import { createInMemoryUmPlatform } from "@operon-labs/um-platform";
 import type { ProviderDocumentationEvidence } from "@operon-labs/um-platform";
-import { evaluateDemoScenario, evaluateProviderDocumentationEvent } from "../src/index";
+import {
+  buildProviderDocumentationRequestObject,
+  evaluateDemoScenario,
+  evaluateProviderDocumentationEvent
+} from "../src/index";
 
 describe("evaluateProviderDocumentationEvent", () => {
+  it("builds the policy-facing provider documentation request object", () => {
+    const evidence = {
+      id: "PA-260524-2102-BUILDER1",
+      umRequestId: "PA-260524-2102-BUILDER1",
+      caseId: "PA-260524-2102-BUILDER1",
+      planId: "acme-health-ppo",
+      submitter: { id: "lakeside-provider-admin" },
+      providerId: "lakeside-provider-admin",
+      requestType: "outpatient_service",
+      serviceCode: "knee_mri",
+      codingSystem: "CPT",
+      billingCode: "73721",
+      coveredBenefit: true,
+      dtrRequested: true,
+      dtrCompleted: true,
+      dtrTemplateCompleted: false,
+      outcomeStatus: "denied",
+      outcomeStatusUsedForPayment: true
+    } as unknown as ProviderDocumentationEvidence;
+
+    const requestObject = buildProviderDocumentationRequestObject(evidence);
+
+    expect(requestObject).toMatchObject({
+      id: evidence.id,
+      umRequestId: evidence.umRequestId,
+      dtrCompleted: true,
+      dtrTemplateCompleted: true,
+      containsPhi: false
+    });
+    expect(requestObject).not.toHaveProperty("outcomeStatus");
+    expect(requestObject).not.toHaveProperty("outcomeStatusUsedForPayment");
+  });
+
   it("evaluates a demo scenario using the caller supplied pair-specific Firestore policy", () => {
     const policy = createProviderDocumentationPolicy(2);
     const evaluation = evaluateDemoScenario("provider_documentation_completeness", policy);

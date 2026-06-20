@@ -1,6 +1,7 @@
 import type { PriorAuthSubmissionInput } from "@operon-labs/um-platform";
 import { NextResponse } from "next/server";
 import { providerDocumentationWorkflow } from "../../../../lib/provider-documentation-workflow";
+import { enforcePublicDemoMutationRateLimit } from "../../../../lib/public-demo-mutation-rate-limit";
 import { umReferenceDataStore } from "../../../../lib/um-reference-data";
 
 export async function GET() {
@@ -18,6 +19,11 @@ export async function POST(request: Request) {
     const input = await enrichPriorAuthSubmission(body);
     if (!input) {
       return NextResponse.json({ error: "INVALID_PATIENT_PLAN_SELECTION" }, { status: 400 });
+    }
+
+    const rateLimitResponse = enforcePublicDemoMutationRateLimit(request);
+    if (rateLimitResponse) {
+      return rateLimitResponse;
     }
 
     const submitted = await providerDocumentationWorkflow.submitPriorAuth(input);

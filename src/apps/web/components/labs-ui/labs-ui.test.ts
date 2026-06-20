@@ -143,8 +143,8 @@ describe("Operon Labs design system", () => {
     const markup = renderToStaticMarkup(LabsPageShell({ children: "Demo content" }));
 
     expect(markup).toContain("© 2026 Operon, LLC. All rights reserved.");
-    expect(markup).toContain('href="https://www.operon.cloud"');
-    expect(markup).toContain(">Company</a>");
+    expect(markup).not.toContain('href="https://www.operon.cloud"');
+    expect(markup).not.toContain(">Company</a>");
     expect(markup).toContain('href="https://labs.operon.cloud"');
     expect(markup).toContain(">Operon Labs</a>");
     expect(markup).toContain('href="https://www.operon.cloud/book-a-call"');

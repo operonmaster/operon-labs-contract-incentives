@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { parseResolveMissingInfoInput } from "../../../../../../lib/appeals-input";
 import { appealsWorkflow } from "../../../../../../lib/appeals-workflow";
+import { enforcePublicDemoMutationRateLimit } from "../../../../../../lib/public-demo-mutation-rate-limit";
 
 interface RouteContext {
   params: Promise<{ appealId: string }>;
@@ -10,6 +11,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const input = parseResolveMissingInfoInput(await request.json().catch(() => null));
   if (!input) {
     return NextResponse.json({ error: "INVALID_APPEAL_MISSING_INFO" }, { status: 400 });
+  }
+
+  const rateLimitResponse = enforcePublicDemoMutationRateLimit(request);
+  if (rateLimitResponse) {
+    return rateLimitResponse;
   }
 
   try {
