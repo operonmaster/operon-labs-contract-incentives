@@ -18,7 +18,6 @@
 src/apps/web/.next/
 src/apps/web/out/
 .superpowers/
-docs/superpowers/
 
 # Environment files
 /.env

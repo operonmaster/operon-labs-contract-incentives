@@ -75,9 +75,6 @@ Demo links:
 ## Structure
 
 ```text
-docs/
-  Operon_Labs_Contract_Incentives_Hedera_Bounty_Scope.md
-  standards/nextjs-standard.md
 src/
   apps/web/                  Next.js demo app and API routes
   mock-data/                 Demo payloads for each incentive workflow
@@ -163,7 +160,7 @@ For tests or offline demos only:
 HEDERA_SETTLEMENT_MODE=simulated
 ```
 
-No wallet private keys, secret names, Terraform variables, service-account keys, or private deployment scripts belong in this public repo. See https://github.com/operonmaster/operon-labs-contract-incentives/blob/main/docs/hedera-settlement-runtime-scope.md for the public runtime contract.
+No wallet private keys, secret names, Terraform variables, service-account keys, or private deployment scripts belong in this public repo. Deployment and operator-runbook details are intentionally kept outside this public bounty repository.
 
 ## PAS Persistence
 
