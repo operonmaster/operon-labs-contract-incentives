@@ -31,6 +31,12 @@ src/
 - `/specialty-rx/plan` - health-plan audit console for specialty fulfillment incentives
 - `/specialty-rx/policies` - specialty fulfillment business and payment policy catalog
 
+## Bounty Submission Links
+
+- Public repository: https://github.com/operonmaster/operon-labs-contract-incentives
+- Live demo: https://contract-incentives.demo.labs.operon.cloud/
+- Hedera Agent Kit feedback: https://github.com/hashgraph/hedera-agent-kit-js/issues/944
+
 ### Provider Documentation Two-Page Demo
 
 Open two browser pages:
