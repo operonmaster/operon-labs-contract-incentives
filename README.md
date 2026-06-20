@@ -6,14 +6,43 @@ Those handoffs are usually governed by contracts, portals, spreadsheets, and ret
 
 Operon Labs Contract Incentives demonstrates a policy-gated agent for these multi-party healthcare workflows. Each demo flow turns a synthetic healthcare event into policy-safe evidence, evaluates whether a contract incentive was earned, and then allows a Hedera Agent Kit policy to either execute bounded HBAR testnet settlement or block payment with an audit reason.
 
-The demo includes four incentive use cases:
-
-- Provider Documentation Completeness: reward complete documentation before prior-authorization submission.
-- Delegate UM SLA Bonus: reward timely delegated utilization-management determinations.
-- Specialty Rx Fulfillment SLA: reward clean post-approval specialty pharmacy fulfillment.
-- Appeals Packet Quality: reward complete appeal packets without tying payment to the final appeal outcome.
-
 The repo uses synthetic data only and keeps the public submission focused on app code, mock policies, Hedera Agent Kit policy integration, and Hedera testnet settlement.
+
+## Policy Model
+
+The demo separates contract eligibility from payment execution with a two-policy model.
+
+The business policy decides whether a healthcare workflow event earned an incentive. It reads policy-safe evidence, such as whether required documentation was completed, whether a delegated review happened within the SLA, or whether an appeal packet is ready. It computes the incentive amount, token symbol, policy reason codes, and the intended recipient.
+
+The payment policy decides whether the agent is allowed to execute settlement. It is implemented as a Hedera Agent Kit `AbstractPolicy` around the HBAR transfer tool. It checks runtime controls such as allowed recipient, source account, exact amount, plan-level maximum, single-recipient transfer shape, duplicate-payment prevention, testnet-only execution, and non-PHI memo content.
+
+This split is intentional. A workflow can pass the business policy but still be blocked by the payment policy if the transfer would violate a payment guardrail. The plan audit console shows both layers so reviewers can see whether a case failed because the work did not qualify, or because the payment controls stopped execution.
+
+## Use Cases
+
+### Provider Documentation Completeness
+
+Prior authorization often stalls because required clinical documentation is missing, incomplete, or submitted after the fact. That creates avoidable rework for providers, plans, and patients.
+
+In this flow, a provider selects a patient, plan, and requested service, checks coverage requirements, completes payer-requested documentation, and submits a synthetic PAS-style prior authorization. The business policy rewards complete, covered requests and blocks missing documentation or non-covered benefits. The payment policy then enforces HBAR settlement limits, including a plan-level maximum that can block a business-approved incentive when the requested transfer is too large.
+
+### Delegate UM SLA Bonus
+
+Health plans often delegate pharmacy utilization-management work to external vendors, but the operational incentive should be tied to timely, audit-ready completion, not to whether the request is approved or denied.
+
+In this flow, eligible pharmacy prior-authorization work moves into a delegated UM workqueue. The vendor starts the review, records the determination, and the business policy checks whether the review was completed within the SLA with the required audit trail. The incentive is outcome-agnostic: the demo rewards compliant review execution, not denial volume or cost avoidance. Settlement still has to pass the Hedera payment policy.
+
+### Specialty Rx Fulfillment SLA
+
+Approval is not the end of a specialty medication workflow. After a pharmacy-benefit PA is approved, delays can still occur during intake, benefits checks, prescription validation, shipment scheduling, delivery confirmation, or exception handling.
+
+In this flow, an approved pharmacy PA becomes a specialty fulfillment case. The specialty pharmacy progresses through intake, clear-to-fill, shipment, and fulfillment checkpoints. The business policy rewards clean post-approval fulfillment execution and documents external blockers separately from avoidable exceptions. Payment is only attempted for qualifying fulfillment events and remains subject to the same HBAR transfer guardrails.
+
+### Appeals Packet Quality
+
+Appeals are time-sensitive and document-heavy. A provider or appeals team can create real value by assembling a complete, well-indexed appeal package, but the incentive should not depend on whether the appeal is ultimately won or lost.
+
+In this flow, the provider appeals console starts from a denied prior authorization. The workflow validates the appeal request, confirms member and service alignment, retrieves the original decision context, resolves missing information, assembles the packet, and indexes the evidence. The business policy rewards packet readiness and excludes the final appeal outcome from payout logic. The payment policy then determines whether the resulting HBAR settlement is allowed.
 
 ## Structure
 
