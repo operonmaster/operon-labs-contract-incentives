@@ -1,11 +1,14 @@
 import Link from "next/link";
 import { LabsHero, LabsPageShell, LabsProductFrame } from "../components/labs-ui";
 import { demoScenarios } from "../components/demo-catalog";
+import { buildPageMetadata } from "../lib/site-seo";
+
+export const metadata = buildPageMetadata("/");
 
 export default function HomePage() {
   return (
     <LabsPageShell className="home-page">
-      <LabsHero eyebrow="Operon Labs" title="Policy-driven incentives for measurable healthcare operations">
+      <LabsHero eyebrow="Operon Labs" title="Contract incentives for measurable healthcare operations">
         <p>
           The demo use cases below show how healthcare teams can earn contract incentives only when policy-safe evidence
           proves quality, timeliness, completeness, and audit readiness.

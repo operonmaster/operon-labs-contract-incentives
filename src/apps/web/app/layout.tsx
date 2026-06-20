@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
+import { AnalyticsScripts } from "../components/AnalyticsScripts";
+import { buildPageMetadata, siteMetadata } from "../lib/site-seo";
 import "./styles.css";
 
 const geistSans = Geist({
@@ -18,14 +20,20 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Operon Labs Contract Incentives",
-  description: "Policy-gated healthcare operations incentives demo using Hedera."
+  ...buildPageMetadata("/"),
+  title: {
+    default: siteMetadata.title,
+    template: `%s | ${siteMetadata.title}`
+  }
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`}>
-      <body>{children}</body>
+      <body>
+        <AnalyticsScripts />
+        {children}
+      </body>
     </html>
   );
 }

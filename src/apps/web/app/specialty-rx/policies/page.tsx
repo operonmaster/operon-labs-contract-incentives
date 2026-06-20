@@ -1,4 +1,3 @@
-import type { Metadata } from "next";
 import { PolicyConsole } from "../../../components/provider-documentation/PolicyConsole";
 import { SpecialtyRxUseCaseNavigation } from "../../../components/specialty-rx/SpecialtyRxUseCaseNavigation";
 import {
@@ -8,13 +7,10 @@ import {
 } from "../../../lib/policy-view-model";
 import { paymentPolicyStore } from "../../../lib/payment-policy-store";
 import { policyStore } from "../../../lib/policy-store";
+import { buildPageMetadata } from "../../../lib/site-seo";
 
 export const dynamic = "force-dynamic";
-
-export const metadata: Metadata = {
-  title: "Specialty Rx Fulfillment SLA policies",
-  description: "Read-only specialty pharmacy fulfillment SLA and Hedera Agent Kit policy catalog."
-};
+export const metadata = buildPageMetadata("/specialty-rx/policies");
 
 export default async function SpecialtyRxPoliciesPage() {
   const businessPolicies = await policyStore.listPolicies(specialtyRxFulfillmentBusinessPolicyType);

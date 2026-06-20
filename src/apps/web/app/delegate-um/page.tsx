@@ -1,12 +1,8 @@
-import type { Metadata } from "next";
 import { DelegateVendorConsole } from "../../components/delegate-um/DelegateVendorConsole";
+import { buildPageMetadata } from "../../lib/site-seo";
 
 export const dynamic = "force-dynamic";
-
-export const metadata: Metadata = {
-  title: "Delegate UM Vendor Console",
-  description: "Delegated pharmacy prior authorization workqueue for completing clinical reviews and determinations."
-};
+export const metadata = buildPageMetadata("/delegate-um");
 
 export default function DelegateUmPage() {
   return <DelegateVendorConsole />;

@@ -1,4 +1,3 @@
-import type { Metadata } from "next";
 import { DelegateUseCaseNavigation } from "../../../components/delegate-um/DelegateUseCaseNavigation";
 import { PolicyConsole } from "../../../components/provider-documentation/PolicyConsole";
 import {
@@ -8,13 +7,10 @@ import {
 } from "../../../lib/policy-view-model";
 import { paymentPolicyStore } from "../../../lib/payment-policy-store";
 import { policyStore } from "../../../lib/policy-store";
+import { buildPageMetadata } from "../../../lib/site-seo";
 
 export const dynamic = "force-dynamic";
-
-export const metadata: Metadata = {
-  title: "Delegate UM Policy Catalog",
-  description: "Read-only delegate UM SLA bonus and Hedera Agent Kit policy catalog for delegated UM determinations."
-};
+export const metadata = buildPageMetadata("/delegate-um/policies");
 
 export default async function DelegateUmPoliciesPage() {
   const businessPolicies = await policyStore.listPolicies(delegateUmSlaBonusBusinessPolicyType);

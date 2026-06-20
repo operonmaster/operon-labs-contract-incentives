@@ -1,10 +1,7 @@
-import type { Metadata } from "next";
 import { PlanIncentivesConsole } from "../../../components/provider-documentation/PlanIncentivesConsole";
+import { buildPageMetadata } from "../../../lib/site-seo";
 
-export const metadata: Metadata = {
-  title: "Plan Incentives Console",
-  description: "Plan-side audit console for reviewing provider documentation incentive events and policy-bound testnet payments."
-};
+export const metadata = buildPageMetadata("/provider-documentation/incentives");
 
 export default async function ProviderDocumentationIncentivesPage({
   searchParams

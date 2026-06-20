@@ -1,12 +1,8 @@
-import type { Metadata } from "next";
 import { AppealsPlanConsole } from "../../../components/appeals/AppealsPlanConsole";
+import { buildPageMetadata } from "../../../lib/site-seo";
 
 export const dynamic = "force-dynamic";
-
-export const metadata: Metadata = {
-  title: "Appeals Plan Console",
-  description: "Plan-side audit view for appeals packet SLA events and settlement outcomes."
-};
+export const metadata = buildPageMetadata("/appeals/plan");
 
 export default async function AppealsPlanPage({ searchParams }: { searchParams?: Promise<{ appealId?: string }> }) {
   const params = await searchParams;

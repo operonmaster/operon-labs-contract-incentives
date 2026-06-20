@@ -1,4 +1,3 @@
-import type { Metadata } from "next";
 import { PolicyConsole } from "../../../components/provider-documentation/PolicyConsole";
 import { AppealsUseCaseNavigation } from "../../../components/appeals/AppealsUseCaseNavigation";
 import {
@@ -7,13 +6,10 @@ import {
 } from "../../../lib/policy-view-model";
 import { paymentPolicyStore } from "../../../lib/payment-policy-store";
 import { policyStore } from "../../../lib/policy-store";
+import { buildPageMetadata } from "../../../lib/site-seo";
 
 export const dynamic = "force-dynamic";
-
-export const metadata: Metadata = {
-  title: "Appeals Packet Quality Policies",
-  description: "Read-only appeals packet SLA and Hedera Agent Kit policy catalog."
-};
+export const metadata = buildPageMetadata("/appeals/policies");
 
 export default async function AppealsPoliciesPage() {
   const businessPolicies = await policyStore.listPolicies("appeals_packet_quality");

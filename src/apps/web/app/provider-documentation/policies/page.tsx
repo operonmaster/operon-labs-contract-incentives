@@ -1,4 +1,3 @@
-import type { Metadata } from "next";
 import { PolicyConsole } from "../../../components/provider-documentation/PolicyConsole";
 import {
   buildHederaAgentKitPlanPolicyCards,
@@ -7,13 +6,10 @@ import {
 } from "../../../lib/policy-view-model";
 import { paymentPolicyStore } from "../../../lib/payment-policy-store";
 import { policyStore } from "../../../lib/policy-store";
+import { buildPageMetadata } from "../../../lib/site-seo";
 
 export const dynamic = "force-dynamic";
-
-export const metadata: Metadata = {
-  title: "Provider Documentation Policy Catalog",
-  description: "Read-only business incentive and Hedera Agent Kit policy catalog for the provider documentation use case."
-};
+export const metadata = buildPageMetadata("/provider-documentation/policies");
 
 export default async function ProviderDocumentationPoliciesPage({
   searchParams

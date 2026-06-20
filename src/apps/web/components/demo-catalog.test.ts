@@ -48,8 +48,8 @@ describe("demo catalog", () => {
     const homePage = readFileSync(path.join(process.cwd(), "src/apps/web/app/page.tsx"), "utf8");
     const styles = readFileSync(path.join(process.cwd(), "src/apps/web/app/styles.css"), "utf8");
 
-    expect(homePage).toContain('title="Policy-driven incentives for measurable healthcare operations"');
-    expect(homePage).not.toContain("Policy-driven incentives for measurable healthcare operations.");
+    expect(homePage).toContain('title="Contract incentives for measurable healthcare operations"');
+    expect(homePage).not.toContain("Contract incentives for measurable healthcare operations.");
     expect(homePage).toContain("The demo use cases below show how healthcare teams can earn contract incentives");
     expect(homePage).not.toContain("These use cases show");
     expect(homePage).toContain("Business policies decide whether work qualifies.");
