@@ -1,6 +1,19 @@
 # Operon Labs Contract Incentives
 
-Policy-gated healthcare operations incentive demo for the Hedera AI Agent Bounty Campaign. The demo keeps the public repo focused on app code, mock policies, Hedera Agent Kit integration points, and Hedera testnet settlement without exposing private infrastructure or wallet keys.
+Healthcare operations often depend on work performed by one organization that creates value for another. A provider completes prior-authorization documentation that helps a health plan avoid rework. A delegated UM vendor makes a timely determination on a pharmacy request. A specialty pharmacy coordinates fulfillment after approval. An appeals team assembles a complete packet before a filing deadline.
+
+Those handoffs are usually governed by contracts, portals, spreadsheets, and retrospective audits. The incentive logic is hard to verify in real time: who did the work, whether the work met the contract rules, whether payment is allowed, and whether the payment stayed inside agreed limits.
+
+Operon Labs Contract Incentives demonstrates a policy-gated agent for these multi-party healthcare workflows. Each demo flow turns a synthetic healthcare event into policy-safe evidence, evaluates whether a contract incentive was earned, and then allows a Hedera Agent Kit policy to either execute bounded HBAR testnet settlement or block payment with an audit reason.
+
+The demo includes four incentive use cases:
+
+- Provider Documentation Completeness: reward complete documentation before prior-authorization submission.
+- Delegate UM SLA Bonus: reward timely delegated utilization-management determinations.
+- Specialty Rx Fulfillment SLA: reward clean post-approval specialty pharmacy fulfillment.
+- Appeals Packet Quality: reward complete appeal packets without tying payment to the final appeal outcome.
+
+The repo uses synthetic data only and keeps the public submission focused on app code, mock policies, Hedera Agent Kit policy integration, and Hedera testnet settlement.
 
 ## Structure
 
