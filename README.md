@@ -30,6 +30,7 @@ Demo links:
 
 - https://contract-incentives.demo.labs.operon.cloud/provider-documentation - provider prior-authorization workflow
 - https://contract-incentives.demo.labs.operon.cloud/provider-documentation/incentives - plan audit console
+- https://contract-incentives.demo.labs.operon.cloud/provider-documentation/policies - policy catalog
 
 ### Delegate UM SLA Bonus
 
@@ -41,6 +42,7 @@ Demo links:
 
 - https://contract-incentives.demo.labs.operon.cloud/delegate-um - delegated UM workqueue
 - https://contract-incentives.demo.labs.operon.cloud/delegate-um/plan - plan audit console
+- https://contract-incentives.demo.labs.operon.cloud/delegate-um/policies - policy catalog
 
 ### Specialty Rx Fulfillment SLA
 
@@ -52,6 +54,7 @@ Demo links:
 
 - https://contract-incentives.demo.labs.operon.cloud/specialty-rx - specialty pharmacy workflow
 - https://contract-incentives.demo.labs.operon.cloud/specialty-rx/plan - plan audit console
+- https://contract-incentives.demo.labs.operon.cloud/specialty-rx/policies - policy catalog
 
 ### Appeals Packet Quality
 
@@ -63,6 +66,7 @@ Demo links:
 
 - https://contract-incentives.demo.labs.operon.cloud/appeals - provider appeals console
 - https://contract-incentives.demo.labs.operon.cloud/appeals/plan - plan audit console
+- https://contract-incentives.demo.labs.operon.cloud/appeals/policies - policy catalog
 
 ## Structure
 
@@ -79,19 +83,6 @@ src/
   packages/policy-engine/    Deterministic policy evaluator
   packages/um-platform/      Synthetic CRD/DTR/PAS prior-auth platform
 ```
-
-## Demo Surfaces
-
-- https://contract-incentives.demo.labs.operon.cloud/ - demo catalog
-- https://contract-incentives.demo.labs.operon.cloud/delegate-um - delegated utilization management SLA bonus
-- https://contract-incentives.demo.labs.operon.cloud/provider-documentation - provider documentation completeness incentive
-- https://contract-incentives.demo.labs.operon.cloud/provider-documentation/incentives - health-plan audit console for provider documentation incentives
-- https://contract-incentives.demo.labs.operon.cloud/appeals - provider appeals console for starting one appeal per denied PA and preparing packet evidence
-- https://contract-incentives.demo.labs.operon.cloud/appeals/plan - health-plan audit console for appeals packet readiness incentives
-- https://contract-incentives.demo.labs.operon.cloud/appeals/policies - Appeals Packet Quality business and payment policy catalog
-- https://contract-incentives.demo.labs.operon.cloud/specialty-rx - specialty pharmacy fulfillment SLA workflow
-- https://contract-incentives.demo.labs.operon.cloud/specialty-rx/plan - health-plan audit console for specialty fulfillment incentives
-- https://contract-incentives.demo.labs.operon.cloud/specialty-rx/policies - specialty fulfillment business and payment policy catalog
 
 ## Bounty Submission Links
 
