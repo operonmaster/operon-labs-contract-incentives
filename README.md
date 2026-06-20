@@ -26,11 +26,21 @@ Prior authorization often stalls because required clinical documentation is miss
 
 In this flow, a provider selects a patient, plan, and requested service, checks coverage requirements, completes payer-requested documentation, and submits a synthetic PAS-style prior authorization. The business policy rewards complete, covered requests and blocks missing documentation or non-covered benefits. The payment policy then enforces HBAR settlement limits, including a plan-level maximum that can block a business-approved incentive when the requested transfer is too large.
 
+Demo links:
+
+- https://contract-incentives.demo.labs.operon.cloud/provider-documentation - provider prior-authorization workflow
+- https://contract-incentives.demo.labs.operon.cloud/provider-documentation/incentives - plan audit console
+
 ### Delegate UM SLA Bonus
 
 Health plans often delegate pharmacy utilization-management work to external vendors, but the operational incentive should be tied to timely, audit-ready completion, not to whether the request is approved or denied.
 
 In this flow, eligible pharmacy prior-authorization work moves into a delegated UM workqueue. The vendor starts the review, records the determination, and the business policy checks whether the review was completed within the SLA with the required audit trail. The incentive is outcome-agnostic: the demo rewards compliant review execution, not denial volume or cost avoidance. Settlement still has to pass the Hedera payment policy.
+
+Demo links:
+
+- https://contract-incentives.demo.labs.operon.cloud/delegate-um - delegated UM workqueue
+- https://contract-incentives.demo.labs.operon.cloud/delegate-um/plan - plan audit console
 
 ### Specialty Rx Fulfillment SLA
 
@@ -38,11 +48,21 @@ Approval is not the end of a specialty medication workflow. After a pharmacy-ben
 
 In this flow, an approved pharmacy PA becomes a specialty fulfillment case. The specialty pharmacy progresses through intake, clear-to-fill, shipment, and fulfillment checkpoints. The business policy rewards clean post-approval fulfillment execution and documents external blockers separately from avoidable exceptions. Payment is only attempted for qualifying fulfillment events and remains subject to the same HBAR transfer guardrails.
 
+Demo links:
+
+- https://contract-incentives.demo.labs.operon.cloud/specialty-rx - specialty pharmacy workflow
+- https://contract-incentives.demo.labs.operon.cloud/specialty-rx/plan - plan audit console
+
 ### Appeals Packet Quality
 
 Appeals are time-sensitive and document-heavy. A provider or appeals team can create real value by assembling a complete, well-indexed appeal package, but the incentive should not depend on whether the appeal is ultimately won or lost.
 
 In this flow, the provider appeals console starts from a denied prior authorization. The workflow validates the appeal request, confirms member and service alignment, retrieves the original decision context, resolves missing information, assembles the packet, and indexes the evidence. The business policy rewards packet readiness and excludes the final appeal outcome from payout logic. The payment policy then determines whether the resulting HBAR settlement is allowed.
+
+Demo links:
+
+- https://contract-incentives.demo.labs.operon.cloud/appeals - provider appeals console
+- https://contract-incentives.demo.labs.operon.cloud/appeals/plan - plan audit console
 
 ## Structure
 
