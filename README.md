@@ -62,16 +62,16 @@ src/
 
 ## Demo Surfaces
 
-- `/` - demo catalog
-- `/delegate-um` - delegated utilization management SLA bonus
-- `/provider-documentation` - provider documentation completeness incentive
-- `/provider-documentation/incentives` - health-plan audit console for provider documentation incentives
-- `/appeals` - provider appeals console for starting one appeal per denied PA and preparing packet evidence
-- `/appeals/plan` - health-plan audit console for appeals packet readiness incentives
-- `/appeals/policies` - Appeals Packet Quality business and payment policy catalog
-- `/specialty-rx` - specialty pharmacy fulfillment SLA workflow
-- `/specialty-rx/plan` - health-plan audit console for specialty fulfillment incentives
-- `/specialty-rx/policies` - specialty fulfillment business and payment policy catalog
+- https://contract-incentives.demo.labs.operon.cloud/ - demo catalog
+- https://contract-incentives.demo.labs.operon.cloud/delegate-um - delegated utilization management SLA bonus
+- https://contract-incentives.demo.labs.operon.cloud/provider-documentation - provider documentation completeness incentive
+- https://contract-incentives.demo.labs.operon.cloud/provider-documentation/incentives - health-plan audit console for provider documentation incentives
+- https://contract-incentives.demo.labs.operon.cloud/appeals - provider appeals console for starting one appeal per denied PA and preparing packet evidence
+- https://contract-incentives.demo.labs.operon.cloud/appeals/plan - health-plan audit console for appeals packet readiness incentives
+- https://contract-incentives.demo.labs.operon.cloud/appeals/policies - Appeals Packet Quality business and payment policy catalog
+- https://contract-incentives.demo.labs.operon.cloud/specialty-rx - specialty pharmacy fulfillment SLA workflow
+- https://contract-incentives.demo.labs.operon.cloud/specialty-rx/plan - health-plan audit console for specialty fulfillment incentives
+- https://contract-incentives.demo.labs.operon.cloud/specialty-rx/policies - specialty fulfillment business and payment policy catalog
 
 ## Bounty Submission Links
 
@@ -88,8 +88,8 @@ Source code and documentation in this repository are licensed under the Apache L
 
 Open two browser pages:
 
-- `/provider-documentation` - provider portal prior-auth wizard
-- `/provider-documentation/incentives` - health-plan audit console
+- https://contract-incentives.demo.labs.operon.cloud/provider-documentation - provider portal prior-auth wizard
+- https://contract-incentives.demo.labs.operon.cloud/provider-documentation/incentives - health-plan audit console
 
 Demo sequence:
 
@@ -148,7 +148,7 @@ For tests or offline demos only:
 HEDERA_SETTLEMENT_MODE=simulated
 ```
 
-No wallet private keys, secret names, Terraform variables, service-account keys, or private deployment scripts belong in this public repo. See `docs/hedera-settlement-runtime-scope.md` for the public runtime contract.
+No wallet private keys, secret names, Terraform variables, service-account keys, or private deployment scripts belong in this public repo. See https://github.com/operonmaster/operon-labs-contract-incentives/blob/main/docs/hedera-settlement-runtime-scope.md for the public runtime contract.
 
 ## PAS Persistence
 
