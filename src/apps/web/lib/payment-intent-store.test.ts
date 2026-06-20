@@ -4,10 +4,8 @@ import { createFirestorePaymentIntentStore, createPaymentIntentStoreFromEnv } fr
 import type { FirestoreDatabase } from "./pas-persistence";
 
 describe("payment intent store", () => {
-  it("uses Firestore by default for durable settlement controls", () => {
-    const store = createPaymentIntentStoreFromEnv({});
-
-    expect(store?.backend).toBe("firestore");
+  it("requires an explicit GCP project before selecting Firestore", () => {
+    expect(() => createPaymentIntentStoreFromEnv({})).toThrow("GCP_PROJECT_ID_REQUIRED");
   });
 
   it("allows memory mode for isolated tests", () => {
@@ -18,7 +16,7 @@ describe("payment intent store", () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePaymentIntentStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
@@ -57,7 +55,7 @@ describe("payment intent store", () => {
   it("rejects noncanonical UM ids and tuple-derived payment intent mismatches", async () => {
     const store = createFirestorePaymentIntentStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       createFakeFirestore()
@@ -125,7 +123,7 @@ describe("payment intent store", () => {
     };
     const store = createFirestorePaymentIntentStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       noCreateFirestore
@@ -166,7 +164,7 @@ describe("payment intent store", () => {
     };
     const store = createFirestorePaymentIntentStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       unavailableFirestore
@@ -178,7 +176,7 @@ describe("payment intent store", () => {
   it("persists the failure reason code when a reserved intent fails settlement", async () => {
     const store = createFirestorePaymentIntentStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       createFakeFirestore()

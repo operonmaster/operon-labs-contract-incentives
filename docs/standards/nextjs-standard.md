@@ -111,7 +111,7 @@ Do not use `next lint`; Next.js 16 removed that command. Do not bypass lint/type
 
 Unit and route-handler tests use Vitest.
 
-Required checks before merging or deploying:
+Required checks before merging:
 
 ```bash
 npm run lint
@@ -120,10 +120,10 @@ npm run typecheck
 npm run build
 ```
 
-When deployment assets change, also run:
+When container packaging changes, also run:
 
 ```bash
-docker build --platform linux/amd64 --build-arg ENVIRONMENT=nonprod -t contract-incentives-web:check .
+docker build --platform linux/amd64 --build-arg ENVIRONMENT=demo -t contract-incentives-web:check .
 docker run --rm -p 18080:8080 -e PORT=8080 contract-incentives-web:check
 curl -fsS -I http://localhost:18080/
 ```
@@ -148,38 +148,13 @@ The runtime image must:
 
 Do not copy local `.next`, `node_modules`, `.env`, credentials, Terraform files, or docs-only output into the image. Maintain `.dockerignore` for that boundary.
 
-## Cloud Run And CI/CD
+## Deployment Boundary
 
-Use the platform-style split:
-
-- `make ci-validate` validates source.
-- `make ci-build` builds and pushes the image.
-- `make deploy` updates the image on an existing Terraform-managed Cloud Run service.
-- `make ci-all ENV=nonprod` runs the full local pipeline.
-
-`ENV=prod` is invalid for this repo. The only environment is `nonprod` because the public Hedera AI Agent Bounty Campaign app is backed by `operon-labs-nonprod`.
-
-Image publishing uses two tags: the immutable build tag plus generic `latest`. This repo is environment-scoped by GCP project, so `latest` is unambiguous inside `operon-labs-nonprod`. Deployments use the `latest` tag while the immutable tag remains available for traceability.
-
-The deployment script must pass `--cpu-throttling` and must not set infrastructure flags. It may update the image and Terraform-aligned labels only. It must fail if the Cloud Run service does not already exist, because Terraform owns service creation.
-
-Terraform must ignore Cloud Run image drift for this service so CI/CD can own revision images while Terraform owns service shape. The infra layer should preserve the platform pattern:
-
-```hcl
-lifecycle {
-  ignore_changes = [
-    client,
-    client_version,
-    scaling,
-    template[0].containers[0].image,
-    template[0].revision
-  ]
-}
-```
+This public repository intentionally excludes private deployment automation, cloud-build definitions, Terraform state, environment-specific project IDs, and operator startup scripts. Keep those files outside the repository and provide cloud configuration through the runtime environment.
 
 ## Runtime Configuration
 
-Runtime env vars are owned by Terraform, not the app repo deploy script.
+Runtime env vars are owned by the deployment environment, not by public source files.
 
 Required deployed env vars:
 
@@ -192,16 +167,16 @@ POLICY_STORE_BACKEND=firestore
 PAYMENT_POLICY_STORE_BACKEND=firestore
 PAYMENT_POLICY_EVIDENCE_STORE_BACKEND=firestore
 PAYMENT_INTENT_STORE_BACKEND=firestore
-GCP_PROJECT_ID=operon-labs-nonprod
+GCP_PROJECT_ID=<your-gcp-project-id>
 FIRESTORE_DATABASE_ID=(default)
 HEDERA_SETTLEMENT_MODE=real
 HEDERA_NETWORK=testnet
-HEDERA_OPERATOR_ACCOUNT_ID=<Secret Manager value>
-HEDERA_OPERATOR_PRIVATE_KEY=<Secret Manager value>
+HEDERA_OPERATOR_ACCOUNT_ID=<operator-account-id>
+HEDERA_OPERATOR_PRIVATE_KEY=<operator-private-key>
 HEDERA_BLOCKED_RECIPIENT_ACCOUNT_IDS=
 ```
 
-Local development and deployed Cloud Run default to Firestore. Use `PAS_STORE_BACKEND=memory`, `UM_REFERENCE_STORE_BACKEND=memory`, `POLICY_STORE_BACKEND=memory`, `PAYMENT_POLICY_STORE_BACKEND=memory`, `PAYMENT_POLICY_EVIDENCE_STORE_BACKEND=memory`, and `PAYMENT_INTENT_STORE_BACKEND=memory` only for isolated tests or offline demos.
+Firestore mode requires an explicit `GCP_PROJECT_ID` or `GOOGLE_CLOUD_PROJECT`. Use `PAS_STORE_BACKEND=memory`, `UM_REFERENCE_STORE_BACKEND=memory`, `POLICY_STORE_BACKEND=memory`, `PAYMENT_POLICY_STORE_BACKEND=memory`, `PAYMENT_POLICY_EVIDENCE_STORE_BACKEND=memory`, and `PAYMENT_INTENT_STORE_BACKEND=memory` only for isolated tests or offline demos.
 
 Hedera settlement defaults to real testnet execution. Use `HEDERA_SETTLEMENT_MODE=simulated` only for isolated tests or offline demos. The public repo must never contain Hedera private keys.
 

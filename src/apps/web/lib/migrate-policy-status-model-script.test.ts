@@ -64,6 +64,7 @@ function runMigration(args: string[], data: Record<string, Array<{ id: string; d
     encoding: "utf8",
     env: {
       ...process.env,
+      GCP_PROJECT_ID: "example-gcp-project",
       MOCK_FIRESTORE_DATA: JSON.stringify(data)
     }
   });

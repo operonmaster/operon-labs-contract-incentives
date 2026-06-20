@@ -12,7 +12,7 @@ describe("payment policy store", () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePaymentPolicyStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
@@ -57,7 +57,7 @@ describe("payment policy store", () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePaymentPolicyStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
@@ -83,7 +83,7 @@ describe("payment policy store", () => {
     });
     const store = createFirestorePaymentPolicyStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
@@ -108,7 +108,7 @@ describe("payment policy store", () => {
     });
     const store = createFirestorePaymentPolicyStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
@@ -130,7 +130,7 @@ describe("payment policy store", () => {
     });
     const store = createFirestorePaymentPolicyStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore

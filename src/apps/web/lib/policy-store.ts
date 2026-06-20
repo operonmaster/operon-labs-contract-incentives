@@ -1,4 +1,5 @@
 import type { IncentivePolicy } from "@operon-labs/policy-engine";
+import { resolveFirestoreConfig } from "./firestore-config";
 import type { FirestoreDatabase } from "./pas-persistence";
 
 export type PolicyStoreBackend = "firestore" | "memory";
@@ -74,8 +75,6 @@ type LegacyWrappedPolicy = {
 };
 
 const DEFAULT_POLICY_STORE_BACKEND = "firestore";
-const DEFAULT_GCP_PROJECT_ID = "operon-labs-nonprod";
-const DEFAULT_FIRESTORE_DATABASE_ID = "(default)";
 const INCENTIVE_POLICIES_COLLECTION = "incentivePolicies";
 const POLICY_SEED_ACTOR = "operon-labs-contract-incentives";
 const POLICY_MIGRATION_ACTOR = `${POLICY_SEED_ACTOR}-migration`;
@@ -204,10 +203,7 @@ export function createPolicyStoreFromEnv(env: PolicyStoreEnv = process.env): Pol
     throw new Error(`UNSUPPORTED_POLICY_STORE_BACKEND:${backend}`);
   }
 
-  return createFirestorePolicyStore({
-    projectId: env.GCP_PROJECT_ID?.trim() || env.GOOGLE_CLOUD_PROJECT?.trim() || DEFAULT_GCP_PROJECT_ID,
-    databaseId: env.FIRESTORE_DATABASE_ID?.trim() || DEFAULT_FIRESTORE_DATABASE_ID
-  });
+  return createFirestorePolicyStore(resolveFirestoreConfig(env));
 }
 
 export function createInMemoryPolicyStore(policies: Record<string, IncentivePolicy>): PolicyStore {

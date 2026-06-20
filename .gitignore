@@ -18,10 +18,21 @@
 src/apps/web/.next/
 src/apps/web/out/
 .superpowers/
+docs/superpowers/
 
 # Environment files
 /.env
 /.env.local
+
+# Private deployment/operator files
+/Makefile
+/cloudbuild-*.yaml
+/run-local-server.sh
+/scripts/ci/
+*.tfvars
+*.tfstate
+*.tfstate.*
+.terraform/
 
 # Angular CLI and build artefacts
 /.angular-cli.json

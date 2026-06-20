@@ -11,7 +11,7 @@ describe("policy store", () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePolicyStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
@@ -299,7 +299,7 @@ describe("policy store", () => {
     });
     const store = createFirestorePolicyStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
@@ -321,7 +321,7 @@ describe("policy store", () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePolicyStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
@@ -466,7 +466,7 @@ describe("policy store", () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePolicyStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
@@ -502,7 +502,7 @@ describe("policy store", () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePolicyStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
@@ -552,7 +552,7 @@ describe("policy store", () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePolicyStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
@@ -585,7 +585,7 @@ describe("policy store", () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePolicyStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
@@ -616,7 +616,7 @@ describe("policy store", () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePolicyStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
@@ -698,7 +698,7 @@ describe("policy store", () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePolicyStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore

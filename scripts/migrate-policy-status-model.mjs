@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import { Firestore } from "@google-cloud/firestore";
 
-const DEFAULT_PROJECT_ID = "operon-labs-nonprod";
 const DEFAULT_DATABASE_ID = "(default)";
 const STATUS_COLLECTIONS = ["incentiveEvaluations", "paymentPolicyEvidences"];
 
@@ -10,13 +9,17 @@ const projectId =
   args.projectId ??
   process.env.GCP_PROJECT_ID ??
   process.env.GOOGLE_CLOUD_PROJECT ??
-  process.env.GCLOUD_PROJECT ??
-  DEFAULT_PROJECT_ID;
+  process.env.GCLOUD_PROJECT;
 const databaseId = args.databaseId ?? process.env.FIRESTORE_DATABASE_ID ?? DEFAULT_DATABASE_ID;
 
 if (args.help) {
   printUsage();
   process.exit(0);
+}
+
+if (!projectId) {
+  console.error("GCP_PROJECT_ID_REQUIRED: pass --project-id or set GCP_PROJECT_ID, GOOGLE_CLOUD_PROJECT, or GCLOUD_PROJECT.");
+  process.exit(1);
 }
 
 printTarget(projectId, databaseId);
@@ -330,7 +333,7 @@ function printUsage() {
 Options:
   --dry-run              Print the target, counts, planned updates, and samples without updating.
   --confirm              Required for live status migration.
-  --project-id=<id>      Override GCP project. Defaults to GCP_PROJECT_ID, GOOGLE_CLOUD_PROJECT, GCLOUD_PROJECT, or ${DEFAULT_PROJECT_ID}.
+  --project-id=<id>      GCP project. Defaults to GCP_PROJECT_ID, GOOGLE_CLOUD_PROJECT, or GCLOUD_PROJECT.
   --database-id=<id>     Override Firestore database. Defaults to FIRESTORE_DATABASE_ID or ${DEFAULT_DATABASE_ID}.
 
 Only these top-level collections are updated:

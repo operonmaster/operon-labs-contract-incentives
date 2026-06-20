@@ -1,10 +1,10 @@
-# Operon Labs Infra Scope: Hedera Testnet Settlement
+# Hedera Settlement Runtime Scope
 
 ## Purpose
 
-`operon-labs-contract-incentives` now supports real Hedera Agent Kit settlement for policy-approved incentive payments. Terraform and secret operations remain outside this public repo, in `operon-labs-infra`.
+`operon-labs-contract-incentives` supports Hedera Agent Kit settlement for policy-approved HBAR testnet incentive payments.
 
-This document describes the GCP and Hedera prerequisites needed for the deployed Cloud Run service to execute current policy-approved HBAR testnet payments from the plan/operator wallet to the approved recipient wallet.
+This public document describes the runtime contract only. Private deployment automation, cloud project IDs, service-account emails, secret resource names, Terraform variables, and wallet private keys must stay outside this repository.
 
 ## Runtime Behavior
 
@@ -74,55 +74,34 @@ The operator account must be funded with enough HBAR for demo transfers and fees
 500 HBAR monthly cap
 ```
 
-The policy model can represent other token symbols such as `USDC`, `OPER`, or `OPRN`, but the deployed real settlement adapter in this scope is HBAR-only. Non-HBAR real settlement requires a future HTS token-transfer executor and token-specific infra values.
+The policy model can represent other token symbols such as `USDC`, `OPER`, or `OPRN`, but the submitted real settlement adapter in this scope is HBAR-only. Non-HBAR real settlement requires a future HTS token-transfer executor and token-specific runtime configuration.
 
-## Secret Manager
+## Secret Injection
 
-Create these Secret Manager secrets in `operon-labs-nonprod`:
-
-```text
-contract-incentives-hedera-operator-account-id
-contract-incentives-hedera-operator-private-key
-contract-incentives-hedera-allowed-recipient-account-ids
-```
-
-Recommended contents:
+Inject these values from the deployment environment or a managed secret store:
 
 ```text
-contract-incentives-hedera-operator-account-id = 0.0.<operator>
-contract-incentives-hedera-operator-private-key = <operator private key>
-contract-incentives-hedera-allowed-recipient-account-ids = 0.0.<provider recipient>
+HEDERA_OPERATOR_ACCOUNT_ID=0.0.<operator>
+HEDERA_OPERATOR_PRIVATE_KEY=<operator-private-key>
+HEDERA_ALLOWED_RECIPIENT_ACCOUNT_IDS=0.0.<provider-recipient>
 ```
 
-Do not commit secret payloads, `.env` files, wallet private keys, or Terraform variable files containing wallet private keys to any repo. Prefer creating secret versions out-of-band through `gcloud secrets versions add`, CI secret injection, or another approved secret-loading process.
+Do not commit secret payloads, `.env` files, wallet private keys, cloud secret names, service-account keys, or Terraform variable files to this repository.
 
-## Cloud Run Service Account IAM
+## Runtime Identity
 
-Grant the existing Cloud Run runtime service account permission to read only these Hedera secrets:
+Use a runtime identity with the least privilege needed to read only the settlement secrets and Firestore collections required by the app. Do not use service-account key files.
 
-```text
-roles/secretmanager.secretAccessor
-```
+The same runtime identity still needs the Firestore access described in `docs/firestore-persistence-runtime-scope.md`.
 
-Scope the binding to the two specific secrets when practical. Do not grant broad project-level secret access unless the existing Operon Labs Terraform module already standardizes on that pattern.
+## Runtime Environment Variables
 
-The same Cloud Run service account still needs the Firestore access described in `docs/operon-labs-infra-pas-firestore-scope.md`.
-
-## Cloud Run Environment Variables
-
-Set these env vars on the `contract-incentives-web` Cloud Run service:
+Set these non-secret env vars in the deployment environment:
 
 ```text
 HEDERA_SETTLEMENT_MODE=real
 HEDERA_NETWORK=testnet
 HEDERA_BLOCKED_RECIPIENT_ACCOUNT_IDS=
-```
-
-Inject these from Secret Manager:
-
-```text
-HEDERA_OPERATOR_ACCOUNT_ID=<secret: contract-incentives-hedera-operator-account-id>
-HEDERA_OPERATOR_PRIVATE_KEY=<secret: contract-incentives-hedera-operator-private-key>
 ```
 
 Keep the existing Firestore env vars:
@@ -134,7 +113,7 @@ POLICY_STORE_BACKEND=firestore
 PAYMENT_POLICY_STORE_BACKEND=firestore
 PAYMENT_POLICY_EVIDENCE_STORE_BACKEND=firestore
 PAYMENT_INTENT_STORE_BACKEND=firestore
-GCP_PROJECT_ID=operon-labs-nonprod
+GCP_PROJECT_ID=<your-gcp-project-id>
 FIRESTORE_DATABASE_ID=(default)
 ```
 
@@ -153,28 +132,13 @@ The app blocks real HBAR settlement before network execution when:
 
 The Hedera Agent Kit runner also attaches a custom Agent Kit `AbstractPolicy` for the HBAR transfer tool. The policy rejects transfer calls that do not match the approved payment intent: recorded business evaluation, no duplicate payment intent for the same settlement triplet, single expected recipient, expected source account, expected amount/token, max plan payment amount, and expected PA/UM request memo.
 
-## Terraform Implementation Notes
+## Deployment Boundary
 
-Recommended Terraform shape:
-
-- Create Secret Manager secrets without committing secret versions.
-- Grant the Cloud Run service account secret accessor on the two secrets.
-- Add literal env vars for settlement mode, network, Firestore-backed Hedera policy storage, and optional recipient blocklist.
-- Add secret env vars for operator account ID and private key.
-- Keep service creation in Terraform; keep image deployment in the app repo deploy script.
-
-Suggested naming:
-
-```text
-service account: operon-labs-contract-incentives-web
-Cloud Run service: contract-incentives-web
-region: us-central1
-project: operon-labs-nonprod
-```
+Deployment tooling should live outside this public repo. Keep project IDs, service-account identifiers, managed secret names, IAM bindings, Terraform state, and CI/CD release scripts in private operational systems.
 
 ## Deployment Verification
 
-After Terraform and deployment:
+After deployment:
 
 1. Submit an eligible `Knee MRI after injury` PA in `/provider-documentation`.
 2. Open `/provider-documentation/incentives`.

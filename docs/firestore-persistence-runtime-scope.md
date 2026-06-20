@@ -1,10 +1,10 @@
-# Operon Labs Infra Scope: Firestore PAS Persistence
+# Firestore Persistence Runtime Scope
 
 ## Purpose
 
-`operon-labs-contract-incentives` currently stores submitted prior authorization requests and incentive rows in the Next.js process memory. For the first deployed Operon Labs use case, the app should keep its simple one-service shape but persist submitted PAS-style prior authorization requests in Firestore.
+`operon-labs-contract-incentives` can persist submitted prior authorization requests, policy-safe evidence, policy outcomes, and settlement controls in Firestore.
 
-This document is the infra handoff for `operon-labs-infra`. It describes the GCP resources, IAM, runtime configuration, and app contract needed by the public application repo. Terraform implementation should live in `operon-labs-infra`, not in this public app repo.
+This public document describes the app/runtime contract only. Private deployment automation, cloud project IDs, service-account emails, IAM bindings, Terraform variables, and release scripts must stay outside this repository.
 
 ## Recommended Architecture
 
@@ -18,16 +18,11 @@ Keep one public Next.js Cloud Run service for the demo:
 
 Do not add a separate backend API service for this first version. A separate API service can be introduced later if multiple apps need the same backend, if service-to-service authentication becomes a useful demo point, or if we want the public Next app to become UI-only.
 
-## Target GCP Project
+## Runtime Project Configuration
 
-Use the existing Operon Labs non-production project:
+Firestore mode requires an explicit project supplied by `GCP_PROJECT_ID` or `GOOGLE_CLOUD_PROJECT`. The app intentionally has no hardcoded public default project.
 
-- Project ID: `operon-labs-nonprod`
-- Environment: nonprod/demo
-- Repo that declares infra: `operon-labs-infra`
-- App repo that consumes infra: `operon-labs-contract-incentives`
-
-## GCP Resources To Declare
+## Runtime Resources
 
 ### Firestore Database
 
@@ -37,7 +32,7 @@ Recommended starting point:
 
 - Firestore mode: Native mode
 - Database ID: `(default)`
-- Location: choose the same standard location used by the project, preferably aligned with the Cloud Run region or existing Operon Labs standards
+- Location: choose the same standard location used by the deployment environment
 
 Notes:
 
@@ -45,17 +40,9 @@ Notes:
 - Terraform can manage Firestore databases with `google_firestore_database`.
 - Use Native mode for this app-style document persistence use case.
 
-### Cloud Run Service Account
+### Runtime Identity
 
-Create a dedicated user-managed service account for the app Cloud Run service.
-
-Suggested service account:
-
-- Account ID: `operon-labs-contract-incentives-web`
-- Display name: `Operon Labs Contract Incentives Web`
-- Purpose: runtime identity for the public Next.js Cloud Run service
-
-Cloud Run should run as this service account. Do not use service account keys.
+Use a dedicated runtime identity for the app service. Do not use service-account key files.
 
 ### IAM
 
@@ -67,7 +54,7 @@ Required:
 
 Pragmatic demo role:
 
-- `roles/datastore.user` on project `operon-labs-nonprod`
+- a Firestore read/write role scoped to the deployment project
 
 Stricter future option:
 
@@ -75,9 +62,9 @@ Stricter future option:
 
 Do not grant browser clients direct Firestore access. All Firestore access must go through server-side Next.js route handlers or server-only modules.
 
-### Cloud Run Runtime Environment Variables
+### Runtime Environment Variables
 
-The infra deployment should set these env vars on the Next.js Cloud Run service:
+The deployment environment should set these env vars on the Next.js service:
 
 ```bash
 PAS_STORE_BACKEND=firestore
@@ -86,7 +73,7 @@ POLICY_STORE_BACKEND=firestore
 PAYMENT_POLICY_STORE_BACKEND=firestore
 PAYMENT_POLICY_EVIDENCE_STORE_BACKEND=firestore
 PAYMENT_INTENT_STORE_BACKEND=firestore
-GCP_PROJECT_ID=operon-labs-nonprod
+GCP_PROJECT_ID=<your-gcp-project-id>
 FIRESTORE_DATABASE_ID=(default)
 ```
 
@@ -103,25 +90,25 @@ Do not set `GOOGLE_APPLICATION_CREDENTIALS` in Cloud Run. Google client librarie
 
 The app will add a server-side store abstraction with two implementations:
 
-- `firestore`: default local and deployed persistence/reference data
+- `firestore`: cloud-backed persistence/reference data
 - `memory`: explicit local/test fallback
 
 The app will choose transactional persistence using `PAS_STORE_BACKEND`, patient/CRD/DTR reference storage using `UM_REFERENCE_STORE_BACKEND`, business policy storage using `POLICY_STORE_BACKEND`, payment policy storage using `PAYMENT_POLICY_STORE_BACKEND`, payment-policy evidence storage using `PAYMENT_POLICY_EVIDENCE_STORE_BACKEND`, and Hedera payment-intent reservation using `PAYMENT_INTENT_STORE_BACKEND`.
 
 Expected app behavior:
 
-- If `PAS_STORE_BACKEND` is missing, use Firestore in `operon-labs-nonprod`.
+- If `PAS_STORE_BACKEND` is missing, use Firestore and require an explicit project id.
 - If `PAS_STORE_BACKEND=memory`, use in-process memory for isolated tests or offline demos.
-- If `PAS_STORE_BACKEND=firestore`, use `GCP_PROJECT_ID` when set, otherwise default to `operon-labs-nonprod`.
-- If `UM_REFERENCE_STORE_BACKEND` is missing, use Firestore in `operon-labs-nonprod`.
+- If `PAS_STORE_BACKEND=firestore`, use `GCP_PROJECT_ID` or `GOOGLE_CLOUD_PROJECT`; otherwise fail with `GCP_PROJECT_ID_REQUIRED`.
+- If `UM_REFERENCE_STORE_BACKEND` is missing, use Firestore and require an explicit project id.
 - If `UM_REFERENCE_STORE_BACKEND=memory`, use seeded in-process patient, CRD, and DTR reference data for isolated tests or offline demos.
-- If `POLICY_STORE_BACKEND` is missing, use Firestore in `operon-labs-nonprod`.
+- If `POLICY_STORE_BACKEND` is missing, use Firestore and require an explicit project id.
 - If `POLICY_STORE_BACKEND=memory`, use seeded in-process policies for isolated tests only.
-- If `PAYMENT_POLICY_STORE_BACKEND` is missing, use Firestore in `operon-labs-nonprod`.
+- If `PAYMENT_POLICY_STORE_BACKEND` is missing, use Firestore and require an explicit project id.
 - If `PAYMENT_POLICY_STORE_BACKEND=memory`, use seeded in-process payment policies for isolated tests only.
-- If `PAYMENT_POLICY_EVIDENCE_STORE_BACKEND` is missing, use Firestore in `operon-labs-nonprod`.
+- If `PAYMENT_POLICY_EVIDENCE_STORE_BACKEND` is missing, use Firestore and require an explicit project id.
 - If `PAYMENT_POLICY_EVIDENCE_STORE_BACKEND=memory`, skip durable payment-policy evidence writes for isolated tests only.
-- If `PAYMENT_INTENT_STORE_BACKEND` is missing, use Firestore in `operon-labs-nonprod`.
+- If `PAYMENT_INTENT_STORE_BACKEND` is missing, use Firestore and require an explicit project id.
 - If `PAYMENT_INTENT_STORE_BACKEND=memory`, skip durable payment-intent reservation for isolated tests only.
 - Use `FIRESTORE_DATABASE_ID` when provided, otherwise default to `(default)`.
 - Never require service account key files in deployed Cloud Run.
@@ -452,103 +439,34 @@ Public app repo:
 - may contain collection names and env var names
 - must not contain Terraform state, service account keys, secrets, private project bootstrapping details, or privileged IAM bindings
 
-Private infra repo:
+Private deployment environment:
 
 - owns Firestore database declaration
-- owns Cloud Run service account declaration
+- owns runtime identity declaration
 - owns IAM bindings
 - owns runtime env var configuration
 - owns deployment wiring
 
 Runtime:
 
-- Cloud Run service identity authenticates to Firestore.
+- runtime identity authenticates to Firestore.
 - No browser-to-Firestore access.
 - No service account key file.
 - No PHI should be sent to the incentive agent or Hedera-facing policy/payment layer.
 
-## Terraform Work Items For `operon-labs-infra`
+## Deployment Boundary
 
-1. Add an app/runtime service account for `operon-labs-contract-incentives`.
-2. Enable required APIs if not already enabled:
-   - Firestore API
-   - Cloud Run API
-   - IAM API
-   - Artifact Registry API if this repo deploys app images through GCP build/deploy flow
-3. Declare Firestore Native database or verify existing `(default)` database is managed/imported.
-4. Grant the app runtime service account `roles/datastore.user`.
-5. Configure the Cloud Run service to run as that service account.
-6. Set runtime env vars:
-   - `PAS_STORE_BACKEND=firestore`
-   - `UM_REFERENCE_STORE_BACKEND=firestore`
-   - `POLICY_STORE_BACKEND=firestore`
-   - `PAYMENT_POLICY_STORE_BACKEND=firestore`
-   - `PAYMENT_POLICY_EVIDENCE_STORE_BACKEND=firestore`
-   - `PAYMENT_INTENT_STORE_BACKEND=firestore`
-   - `GCP_PROJECT_ID=operon-labs-nonprod`
-   - `FIRESTORE_DATABASE_ID=(default)`
-7. Add outputs useful to the app/deploy pipeline:
-   - app service account email
-   - Firestore database ID
-   - project ID
-   - Cloud Run service name/URL, if Cloud Run is declared here
-
-## Suggested Terraform Resource Names
-
-These names are suggestions; align them with existing `operon-labs-infra` conventions if different.
-
-```hcl
-resource "google_service_account" "contract_incentives_web" {
-  account_id   = "operon-labs-contract-incentives-web"
-  display_name = "Operon Labs Contract Incentives Web"
-}
-
-resource "google_firestore_database" "default" {
-  project     = var.project_id
-  name        = "(default)"
-  location_id = var.firestore_location
-  type        = "FIRESTORE_NATIVE"
-}
-
-resource "google_project_iam_member" "contract_incentives_firestore_user" {
-  project = var.project_id
-  role    = "roles/datastore.user"
-  member  = "serviceAccount:${google_service_account.contract_incentives_web.email}"
-}
-```
-
-Cloud Run resource/module should attach:
-
-```hcl
-service_account_name = google_service_account.contract_incentives_web.email
-
-env = {
-  PAS_STORE_BACKEND            = "firestore"
-  UM_REFERENCE_STORE_BACKEND   = "firestore"
-  POLICY_STORE_BACKEND         = "firestore"
-  PAYMENT_POLICY_STORE_BACKEND          = "firestore"
-  PAYMENT_POLICY_EVIDENCE_STORE_BACKEND = "firestore"
-  PAYMENT_INTENT_STORE_BACKEND = "firestore"
-  GCP_PROJECT_ID               = var.project_id
-  FIRESTORE_DATABASE_ID        = "(default)"
-}
-```
+Keep Terraform, project IDs, service-account identifiers, IAM bindings, managed secret names, Cloud Build definitions, Makefiles, and deployment scripts outside this public repository. The public source only needs the env var contract and collection schema.
 
 ## Local Development Contract
 
-Offline local development can explicitly opt out of Firestore:
+Offline local development can explicitly opt out of Firestore and Hedera transfers:
 
 ```bash
-PAS_STORE_BACKEND=memory npm run dev
+npm run dev:simulated
 ```
 
-For fully offline local reference data too:
-
-```bash
-PAS_STORE_BACKEND=memory UM_REFERENCE_STORE_BACKEND=memory npm run dev
-```
-
-Firestore local/dev defaults can be made explicit with:
+Firestore local/dev targets must be explicit:
 
 ```bash
 PAS_STORE_BACKEND=firestore
@@ -557,7 +475,7 @@ POLICY_STORE_BACKEND=firestore
 PAYMENT_POLICY_STORE_BACKEND=firestore
 PAYMENT_POLICY_EVIDENCE_STORE_BACKEND=firestore
 PAYMENT_INTENT_STORE_BACKEND=firestore
-GCP_PROJECT_ID=operon-labs-nonprod
+GCP_PROJECT_ID=<your-gcp-project-id>
 FIRESTORE_DATABASE_ID=(default)
 ```
 
@@ -574,11 +492,11 @@ The utility deletes only `umRequests`, `pasClaims`, `auditEvents`, `incentiveEva
 
 ## Acceptance Criteria
 
-Infra is ready when:
+Runtime persistence is ready when:
 
-1. Firestore Native database exists in `operon-labs-nonprod`.
-2. The app Cloud Run service runs as a dedicated service account.
-3. That service account can create/read/update documents in the planned collections.
+1. Firestore Native database exists in the configured project.
+2. The app service runs as a dedicated runtime identity.
+3. That runtime identity can create/read/update documents in the planned collections.
 4. The deployed app has the Firestore env vars set.
 5. Submitting a PA in the deployed app writes a `pasClaims/{umRequestId}` document.
 6. Restarting/redeploying the app does not lose submitted PAS requests.

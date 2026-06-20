@@ -1,4 +1,5 @@
 import type { FirestoreDatabase } from "./pas-persistence";
+import { resolveFirestoreConfig } from "./firestore-config";
 import type { SpecialtyRxPlanAuditRow, SpecialtyRxSlaStatus } from "./specialty-rx-workflow";
 
 export type SpecialtyRxStoreBackend = "firestore" | "memory";
@@ -94,8 +95,6 @@ interface FirestoreConfig {
 }
 
 const DEFAULT_SPECIALTY_RX_STORE_BACKEND = "firestore";
-const DEFAULT_GCP_PROJECT_ID = "operon-labs-nonprod";
-const DEFAULT_FIRESTORE_DATABASE_ID = "(default)";
 const SPECIALTY_FULFILLMENT_CASES_COLLECTION = "specialtyFulfillmentCases";
 const SPECIALTY_PLAN_AUDIT_ROWS_COLLECTION = "specialtyRxPlanAuditRows";
 
@@ -121,10 +120,7 @@ export function createSpecialtyRxCaseStoreFromEnv(
     throw new Error(`UNSUPPORTED_SPECIALTY_RX_STORE_BACKEND:${backend}`);
   }
 
-  return createFirestoreSpecialtyRxCaseStore({
-    projectId: env.GCP_PROJECT_ID?.trim() || env.GOOGLE_CLOUD_PROJECT?.trim() || DEFAULT_GCP_PROJECT_ID,
-    databaseId: env.FIRESTORE_DATABASE_ID?.trim() || DEFAULT_FIRESTORE_DATABASE_ID
-  });
+  return createFirestoreSpecialtyRxCaseStore(resolveFirestoreConfig(env));
 }
 
 export function createFirestoreSpecialtyRxCaseStore(

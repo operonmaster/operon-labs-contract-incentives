@@ -7,6 +7,7 @@ import {
   type UMPlatformEvent,
   type UMRequest
 } from "@operon-labs/um-platform";
+import { resolveFirestoreConfig } from "./firestore-config";
 import type { IncentiveWorklistRow } from "./provider-documentation-workflow";
 
 export type PasStoreBackend = "firestore";
@@ -70,8 +71,6 @@ export interface FirestoreConfig {
 }
 
 const DEFAULT_PAS_STORE_BACKEND = "firestore";
-const DEFAULT_GCP_PROJECT_ID = "operon-labs-nonprod";
-const DEFAULT_FIRESTORE_DATABASE_ID = "(default)";
 const PAS_CLAIMS_COLLECTION = "pasClaims";
 const UM_REQUESTS_COLLECTION = "umRequests";
 const AUDIT_EVENTS_COLLECTION = "auditEvents";
@@ -133,15 +132,7 @@ export function createPasPersistenceStoreFromEnv(env: PasPersistenceEnv = proces
     throw new Error(`UNSUPPORTED_PAS_STORE_BACKEND:${backend}`);
   }
 
-  const projectId = env.GCP_PROJECT_ID?.trim() || env.GOOGLE_CLOUD_PROJECT?.trim() || DEFAULT_GCP_PROJECT_ID;
-  if (!projectId) {
-    throw new Error("GCP_PROJECT_ID_REQUIRED");
-  }
-
-  return createFirestorePasPersistenceStore({
-    projectId,
-    databaseId: env.FIRESTORE_DATABASE_ID?.trim() || DEFAULT_FIRESTORE_DATABASE_ID
-  });
+  return createFirestorePasPersistenceStore(resolveFirestoreConfig(env));
 }
 
 export function createFirestorePasPersistenceStore(

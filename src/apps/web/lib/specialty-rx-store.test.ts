@@ -82,7 +82,7 @@ describe("specialty rx case store", () => {
   it("strips undefined nested payment policy control fields before saving plan rows to Firestore", async () => {
     const firestore = createFakeFirestore({ rejectUndefinedFields: true });
     const store = createFirestoreSpecialtyRxCaseStore(
-      { projectId: "operon-labs-nonprod", databaseId: "(default)" },
+      { projectId: "example-gcp-project", databaseId: "(default)" },
       firestore
     );
     const row = buildPlanRow({
@@ -124,7 +124,7 @@ describe("specialty rx case store", () => {
   it("normalizes legacy plan-row SLA fields to fulfillmentSlaStatus without returning deliverySlaStatus", async () => {
     const firestore = createFakeFirestore();
     const store = createFirestoreSpecialtyRxCaseStore(
-      { projectId: "operon-labs-nonprod", databaseId: "(default)" },
+      { projectId: "example-gcp-project", databaseId: "(default)" },
       firestore
     );
     const legacyRow = {
@@ -155,7 +155,7 @@ describe("specialty rx case store", () => {
   it("normalizes legacy fulfillment cases without a paid SLA start timestamp", async () => {
     const firestore = createFakeFirestore();
     const store = createFirestoreSpecialtyRxCaseStore(
-      { projectId: "operon-labs-nonprod", databaseId: "(default)" },
+      { projectId: "example-gcp-project", databaseId: "(default)" },
       firestore
     );
     const legacyCase = {
@@ -180,7 +180,7 @@ describe("specialty rx case store", () => {
   it("normalizes legacy clear-to-fill cases with no clear-to-fill timestamp from updatedAt", async () => {
     const firestore = createFakeFirestore();
     const store = createFirestoreSpecialtyRxCaseStore(
-      { projectId: "operon-labs-nonprod", databaseId: "(default)" },
+      { projectId: "example-gcp-project", databaseId: "(default)" },
       firestore
     );
     const legacyCase = {

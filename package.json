@@ -19,8 +19,7 @@
   ],
   "scripts": {
     "dev": "npm --workspace @operon-labs/web run dev",
-    "dev:real": "./run-local-server.sh",
-    "dev:simulated": "HEDERA_SETTLEMENT_MODE=simulated npm run dev",
+    "dev:simulated": "PAS_STORE_BACKEND=memory UM_REFERENCE_STORE_BACKEND=memory POLICY_STORE_BACKEND=memory PAYMENT_POLICY_STORE_BACKEND=memory PAYMENT_POLICY_EVIDENCE_STORE_BACKEND=memory PAYMENT_INTENT_STORE_BACKEND=memory SPECIALTY_RX_STORE_BACKEND=memory APPEALS_STORE_BACKEND=memory HEDERA_SETTLEMENT_MODE=simulated npm run dev",
     "build": "npm --workspace @operon-labs/web run build",
     "lint": "npm --workspace @operon-labs/web run lint",
     "test": "vitest run",

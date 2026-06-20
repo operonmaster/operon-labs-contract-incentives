@@ -77,13 +77,13 @@ Provider-documentation incentives are policy-defined: the business policy owns t
 
 The policy model can represent `HBAR`, `USDC`, `OPER`, `OPRN`, or another token symbol. Real settlement for non-HBAR tokens requires a future HTS token-transfer executor; those policy evaluations should not be treated as settled until that adapter exists.
 
-Required deployed env vars are owned by `operon-labs-infra`:
+Real Hedera settlement requires explicit runtime configuration from the deployment environment:
 
 ```bash
 HEDERA_SETTLEMENT_MODE=real
 HEDERA_NETWORK=testnet
-HEDERA_OPERATOR_ACCOUNT_ID=<Secret Manager value>
-HEDERA_OPERATOR_PRIVATE_KEY=<Secret Manager value>
+HEDERA_OPERATOR_ACCOUNT_ID=<operator-account-id>
+HEDERA_OPERATOR_PRIVATE_KEY=<operator-private-key>
 HEDERA_BLOCKED_RECIPIENT_ACCOUNT_IDS=
 PUBLIC_DEMO_MUTATION_RATE_LIMIT=enabled
 ```
@@ -102,11 +102,11 @@ For tests or offline demos only:
 HEDERA_SETTLEMENT_MODE=simulated
 ```
 
-No wallet private keys belong in this public repo. See `docs/operon-labs-infra-hedera-settlement-scope.md` for the Terraform handoff.
+No wallet private keys, secret names, Terraform variables, service-account keys, or private deployment scripts belong in this public repo. See `docs/hedera-settlement-runtime-scope.md` for the public runtime contract.
 
 ## PAS Persistence
 
-Local development and deployed Cloud Run default to Firestore-backed PAS persistence in `operon-labs-nonprod`:
+Firestore-backed persistence requires an explicit cloud project at runtime. The app does not hardcode a public default project:
 
 ```bash
 PAS_STORE_BACKEND=firestore
@@ -115,7 +115,7 @@ POLICY_STORE_BACKEND=firestore
 PAYMENT_POLICY_STORE_BACKEND=firestore
 PAYMENT_POLICY_EVIDENCE_STORE_BACKEND=firestore
 PAYMENT_INTENT_STORE_BACKEND=firestore
-GCP_PROJECT_ID=operon-labs-nonprod
+GCP_PROJECT_ID=<your-gcp-project-id>
 FIRESTORE_DATABASE_ID=(default)
 ```
 
@@ -152,33 +152,21 @@ The purge script deletes only `umRequests`, `pasClaims`, `auditEvents`, `incenti
 
 ## Local Development
 
+For local UI work without cloud persistence or Hedera transfers:
+
 ```bash
 nvm use
 npm install
+npm run dev:simulated
+```
+
+For a cloud-backed local run, set the required environment variables outside the repo and then run:
+
+```bash
 npm run dev
 ```
 
-Local real-settlement dev follows the Operon website startup-script pattern. It uses GCP Secret Manager values only in the spawned process environment and does not write `.env.local` or any other local secret file:
-
-```bash
-gcloud auth login pavel@operon.cloud
-gcloud auth application-default login
-./run-local-server.sh
-```
-
-Optional custom port:
-
-```bash
-./run-local-server.sh 3001
-```
-
-`npm run dev:real` is a thin alias to the same script.
-
-For local UI work without Hedera transfers:
-
-```bash
-npm run dev:simulated
-```
+Do not commit `.env`, `.env.local`, private keys, cloud project IDs, secret names, or deployment-only scripts. Keep operator-specific startup and deployment automation outside this public repository.
 
 Useful checks:
 
@@ -188,33 +176,3 @@ npm run typecheck
 npm test
 npm run build
 ```
-
-## Container Build And Deployment
-
-The deployment assets follow the Operon platform webapp pattern:
-
-- `Dockerfile` builds a production Next.js standalone server for Cloud Run.
-- `Makefile` is the local/CI entrypoint for validation, image build, image push, and deploy.
-- `scripts/ci/deploy.sh` updates an existing Terraform-managed Cloud Run service with `--cpu-throttling`.
-- `cloudbuild-build.yaml` and `cloudbuild-deploy.yaml` mirror the build/deploy split used by Operon webapps.
-
-Build and push the initial image before applying the `operon-labs-infra` `web-app` layer:
-
-```bash
-make ci-build
-```
-
-That publishes the two image tags expected by the deployment flow:
-
-```text
-us-central1-docker.pkg.dev/operon-labs-nonprod/operon-labs-docker/contract-incentives-web:<git-sha-or-build-id>
-us-central1-docker.pkg.dev/operon-labs-nonprod/operon-labs-docker/contract-incentives-web:latest
-```
-
-After Terraform creates the Cloud Run service, deploy later revisions with:
-
-```bash
-make deploy
-```
-
-The deploy script intentionally fails if `contract-incentives-web` does not already exist, so service creation stays in Terraform.

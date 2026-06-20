@@ -7,6 +7,7 @@ import {
   type RequestType,
   type ServiceCode
 } from "@operon-labs/um-platform";
+import { resolveFirestoreConfig } from "./firestore-config";
 import type { FirestoreDatabase, FirestoreDocumentReference } from "./pas-persistence";
 
 export type UmReferenceStoreBackend = "firestore" | "memory";
@@ -61,8 +62,6 @@ interface StoredCoverageRequirementRule extends CrdServiceOption {
 }
 
 const DEFAULT_REFERENCE_STORE_BACKEND = "firestore";
-const DEFAULT_GCP_PROJECT_ID = "operon-labs-nonprod";
-const DEFAULT_FIRESTORE_DATABASE_ID = "(default)";
 const DEFAULT_PLAN_ID = "acme-health-ppo";
 const SECONDARY_PLAN_ID = "summit-health-hmo";
 const PATIENTS_COLLECTION = "patients";
@@ -130,10 +129,7 @@ export function createUmReferenceDataStoreFromEnv(env: UmReferenceDataEnv = proc
     throw new Error(`UNSUPPORTED_UM_REFERENCE_STORE_BACKEND:${backend}`);
   }
 
-  return createFirestoreUmReferenceDataStore({
-    projectId: env.GCP_PROJECT_ID?.trim() || env.GOOGLE_CLOUD_PROJECT?.trim() || DEFAULT_GCP_PROJECT_ID,
-    databaseId: env.FIRESTORE_DATABASE_ID?.trim() || DEFAULT_FIRESTORE_DATABASE_ID
-  });
+  return createFirestoreUmReferenceDataStore(resolveFirestoreConfig(env));
 }
 
 export function createInMemoryUmReferenceDataStore(): UmReferenceDataStore {

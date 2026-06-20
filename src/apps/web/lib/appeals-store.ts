@@ -1,4 +1,5 @@
 import type { FirestoreDatabase } from "./pas-persistence";
+import { resolveFirestoreConfig } from "./firestore-config";
 import type { AppealsPlanAuditRow } from "./appeals-workflow";
 
 export type AppealsStoreBackend = "firestore" | "memory";
@@ -94,8 +95,6 @@ interface FirestoreConfig {
 }
 
 const DEFAULT_APPEALS_STORE_BACKEND = "firestore";
-const DEFAULT_GCP_PROJECT_ID = "operon-labs-nonprod";
-const DEFAULT_FIRESTORE_DATABASE_ID = "(default)";
 const APPEAL_CASES_COLLECTION = "appealCases";
 const APPEALS_PLAN_AUDIT_ROWS_COLLECTION = "appealsPlanAuditRows";
 
@@ -117,10 +116,7 @@ export function createAppealsCaseStoreFromEnv(env: AppealsStoreEnv = process.env
     throw new Error(`UNSUPPORTED_APPEALS_STORE_BACKEND:${backend}`);
   }
 
-  return createFirestoreAppealsCaseStore({
-    projectId: env.GCP_PROJECT_ID?.trim() || env.GOOGLE_CLOUD_PROJECT?.trim() || DEFAULT_GCP_PROJECT_ID,
-    databaseId: env.FIRESTORE_DATABASE_ID?.trim() || DEFAULT_FIRESTORE_DATABASE_ID
-  });
+  return createFirestoreAppealsCaseStore(resolveFirestoreConfig(env));
 }
 
 export function createFirestoreAppealsCaseStore(

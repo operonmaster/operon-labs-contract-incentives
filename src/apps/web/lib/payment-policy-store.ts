@@ -1,4 +1,5 @@
 import type { HederaAgentPlanPolicy } from "@operon-labs/hedera-executor";
+import { resolveFirestoreConfig } from "./firestore-config";
 import type { FirestoreDatabase } from "./pas-persistence";
 
 export type PaymentPolicyStoreBackend = "firestore" | "memory";
@@ -34,8 +35,6 @@ interface FirestoreConfig {
 }
 
 const DEFAULT_PAYMENT_POLICY_STORE_BACKEND = "firestore";
-const DEFAULT_GCP_PROJECT_ID = "operon-labs-nonprod";
-const DEFAULT_FIRESTORE_DATABASE_ID = "(default)";
 const PAYMENT_POLICIES_COLLECTION = "paymentPolicies";
 const POLICY_SEED_ACTOR = "operon-labs-contract-incentives";
 
@@ -66,10 +65,7 @@ export function createPaymentPolicyStoreFromEnv(
     throw new Error(`UNSUPPORTED_PAYMENT_POLICY_STORE_BACKEND:${backend}`);
   }
 
-  return createFirestorePaymentPolicyStore({
-    projectId: env.GCP_PROJECT_ID?.trim() || env.GOOGLE_CLOUD_PROJECT?.trim() || DEFAULT_GCP_PROJECT_ID,
-    databaseId: env.FIRESTORE_DATABASE_ID?.trim() || DEFAULT_FIRESTORE_DATABASE_ID
-  });
+  return createFirestorePaymentPolicyStore(resolveFirestoreConfig(env));
 }
 
 export function createInMemoryPaymentPolicyStore(

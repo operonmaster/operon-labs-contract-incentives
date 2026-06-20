@@ -7,10 +7,8 @@ import {
 } from "./um-reference-data";
 
 describe("UM reference data store selection", () => {
-  it("uses Firestore by default for patient, CRD, and DTR reference data", () => {
-    const store = createUmReferenceDataStoreFromEnv({});
-
-    expect(store.backend).toBe("firestore");
+  it("requires an explicit GCP project before selecting Firestore", () => {
+    expect(() => createUmReferenceDataStoreFromEnv({})).toThrow("GCP_PROJECT_ID_REQUIRED");
   });
 
   it("allows explicit in-memory reference data for isolated tests", () => {
@@ -84,7 +82,7 @@ describe("UM reference data store", () => {
     const firestore = createFakeFirestore();
     const store = createFirestoreUmReferenceDataStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
@@ -118,7 +116,7 @@ describe("UM reference data store", () => {
     });
     const store = createFirestoreUmReferenceDataStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
@@ -142,7 +140,7 @@ describe("UM reference data store", () => {
     });
     const store = createFirestoreUmReferenceDataStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore

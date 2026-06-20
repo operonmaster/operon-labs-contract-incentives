@@ -1,5 +1,6 @@
 import { buildBusinessEvaluationId, buildPaymentIntentId } from "@operon-labs/hedera-executor";
 import type { Currency } from "@operon-labs/policy-engine";
+import { resolveFirestoreConfig } from "./firestore-config";
 import type { FirestoreDatabase } from "./pas-persistence";
 
 export type PaymentPolicyEvidenceStoreBackend = "firestore" | "memory";
@@ -60,8 +61,6 @@ interface FirestoreConfig {
 }
 
 const DEFAULT_PAYMENT_POLICY_EVIDENCE_STORE_BACKEND = "firestore";
-const DEFAULT_GCP_PROJECT_ID = "operon-labs-nonprod";
-const DEFAULT_FIRESTORE_DATABASE_ID = "(default)";
 const PAYMENT_POLICY_EVIDENCES_COLLECTION = "paymentPolicyEvidences";
 
 export function createPaymentPolicyEvidenceStoreFromEnv(
@@ -79,10 +78,7 @@ export function createPaymentPolicyEvidenceStoreFromEnv(
     throw new Error(`UNSUPPORTED_PAYMENT_POLICY_EVIDENCE_STORE_BACKEND:${backend}`);
   }
 
-  return createFirestorePaymentPolicyEvidenceStore({
-    projectId: env.GCP_PROJECT_ID?.trim() || env.GOOGLE_CLOUD_PROJECT?.trim() || DEFAULT_GCP_PROJECT_ID,
-    databaseId: env.FIRESTORE_DATABASE_ID?.trim() || DEFAULT_FIRESTORE_DATABASE_ID
-  });
+  return createFirestorePaymentPolicyEvidenceStore(resolveFirestoreConfig(env));
 }
 
 export function createFirestorePaymentPolicyEvidenceStore(

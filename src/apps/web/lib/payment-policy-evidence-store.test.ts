@@ -13,8 +13,8 @@ type HashedPaymentPolicyEvidence = PaymentPolicyEvidence & {
 };
 
 describe("payment policy evidence store", () => {
-  it("uses Firestore by default for payment-policy audit evidence", () => {
-    expect(createPaymentPolicyEvidenceStoreFromEnv({})?.backend).toBe("firestore");
+  it("requires an explicit GCP project before selecting Firestore", () => {
+    expect(() => createPaymentPolicyEvidenceStoreFromEnv({})).toThrow("GCP_PROJECT_ID_REQUIRED");
   });
 
   it("allows explicit memory mode for isolated tests", () => {
@@ -25,7 +25,7 @@ describe("payment policy evidence store", () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePaymentPolicyEvidenceStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
@@ -68,7 +68,7 @@ describe("payment policy evidence store", () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePaymentPolicyEvidenceStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
@@ -107,7 +107,7 @@ describe("payment policy evidence store", () => {
   it("rejects noncanonical payment-policy evidence ids and tuple mismatches", async () => {
     const store = createFirestorePaymentPolicyEvidenceStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       createFakeFirestore()

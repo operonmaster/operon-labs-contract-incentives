@@ -16,26 +16,24 @@ import {
 } from "@operon-labs/um-platform";
 
 describe("PAS persistence store selection", () => {
-  it("uses Firestore in operon-labs-nonprod when no PAS store backend is configured", () => {
-    const store = createPasPersistenceStoreFromEnv({});
-
-    expect(store?.backend).toBe("firestore");
+  it("requires an explicit GCP project before selecting Firestore", () => {
+    expect(() => createPasPersistenceStoreFromEnv({})).toThrow("GCP_PROJECT_ID_REQUIRED");
   });
 
   it("allows explicit in-process memory for isolated tests and offline demos", () => {
     expect(createPasPersistenceStoreFromEnv({ PAS_STORE_BACKEND: "memory" })).toBeUndefined();
   });
 
-  it("uses the default GCP project id when Firestore backend is configured without project env", () => {
-    const store = createPasPersistenceStoreFromEnv({ PAS_STORE_BACKEND: "firestore" });
-
-    expect(store?.backend).toBe("firestore");
+  it("requires a project when Firestore backend is explicitly configured", () => {
+    expect(() => createPasPersistenceStoreFromEnv({ PAS_STORE_BACKEND: "firestore" })).toThrow(
+      "GCP_PROJECT_ID_REQUIRED"
+    );
   });
 
   it("creates a Firestore-backed store when backend and project are configured", () => {
     const store = createPasPersistenceStoreFromEnv({
       PAS_STORE_BACKEND: "firestore",
-      GCP_PROJECT_ID: "operon-labs-nonprod",
+      GCP_PROJECT_ID: "example-gcp-project",
       FIRESTORE_DATABASE_ID: "(default)"
     });
 
@@ -46,7 +44,7 @@ describe("PAS persistence store selection", () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
@@ -185,7 +183,7 @@ describe("PAS persistence store selection", () => {
   it("persists incentive rows under the hashed business evaluation id and preserves hashed payment intent ids", async () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(
-      { projectId: "operon-labs-nonprod", databaseId: "(default)" },
+      { projectId: "example-gcp-project", databaseId: "(default)" },
       firestore
     );
     const platform = createInMemoryUmPlatform({ generateCaseId: () => "PA-260526-0900-ROWHASH" });
@@ -229,7 +227,7 @@ describe("PAS persistence store selection", () => {
   it("strips undefined nested payment policy control fields before saving incentive rows", async () => {
     const firestore = createFakeFirestore({ rejectUndefinedFields: true });
     const store = createFirestorePasPersistenceStore(
-      { projectId: "operon-labs-nonprod", databaseId: "(default)" },
+      { projectId: "example-gcp-project", databaseId: "(default)" },
       firestore
     );
     const platform = createInMemoryUmPlatform({ generateCaseId: () => "PA-260526-0900-ROWUNDF" });
@@ -273,7 +271,7 @@ describe("PAS persistence store selection", () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
@@ -316,7 +314,7 @@ describe("PAS persistence store selection", () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
@@ -348,7 +346,7 @@ describe("PAS persistence store selection", () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
@@ -412,7 +410,7 @@ describe("PAS persistence store selection", () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
@@ -445,7 +443,7 @@ describe("PAS persistence store selection", () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
@@ -477,7 +475,7 @@ describe("PAS persistence store selection", () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
@@ -505,7 +503,7 @@ describe("PAS persistence store selection", () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
@@ -526,7 +524,7 @@ describe("PAS persistence store selection", () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
@@ -551,7 +549,7 @@ describe("PAS persistence store selection", () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
@@ -571,7 +569,7 @@ describe("PAS persistence store selection", () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
@@ -616,7 +614,7 @@ describe("PAS persistence store selection", () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
@@ -663,7 +661,7 @@ describe("PAS persistence store selection", () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
@@ -700,7 +698,7 @@ describe("PAS persistence store selection", () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
@@ -732,7 +730,7 @@ describe("PAS persistence store selection", () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
@@ -777,7 +775,7 @@ describe("PAS persistence store selection", () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
@@ -965,7 +963,7 @@ describe("PAS persistence store selection", () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
@@ -1021,7 +1019,7 @@ describe("PAS persistence store selection", () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
@@ -1067,7 +1065,7 @@ describe("PAS persistence store selection", () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
@@ -1114,7 +1112,7 @@ describe("PAS persistence store selection", () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
@@ -1147,7 +1145,7 @@ describe("PAS persistence store selection", () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
@@ -1202,7 +1200,7 @@ describe("PAS persistence store selection", () => {
     const firestore = createFakeFirestore();
     const store = createFirestorePasPersistenceStore(
       {
-        projectId: "operon-labs-nonprod",
+        projectId: "example-gcp-project",
         databaseId: "(default)"
       },
       firestore
