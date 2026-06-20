@@ -80,6 +80,10 @@ src/
 - Live demo: https://contract-incentives.demo.labs.operon.cloud/
 - Hedera Agent Kit feedback: https://github.com/hashgraph/hedera-agent-kit-js/issues/944
 
+## License
+
+Source code and documentation in this repository are licensed under the Apache License 2.0. Operon names, logos, private infrastructure, secrets, deployment materials, and production customer implementations are not included in that license grant.
+
 ### Provider Documentation Two-Page Demo
 
 Open two browser pages:
