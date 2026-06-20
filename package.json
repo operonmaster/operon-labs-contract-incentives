@@ -28,11 +28,17 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && npm --workspace @operon-labs/web run typecheck"
   },
   "overrides": {
+    "@grpc/grpc-js": "1.14.4",
+    "@grpc/proto-loader": "0.8.1",
     "@hiero-ledger/proto": {
-      "protobufjs": "8.4.2"
+      "protobufjs": "8.6.4"
     },
     "@hiero-ledger/sdk": {
-      "protobufjs": "8.4.2"
+      "@grpc/grpc-js": "1.14.4",
+      "protobufjs": "8.6.4"
+    },
+    "next": {
+      "postcss": "8.5.10"
     },
     "ethers": {
       "ws": "8.21.0"
@@ -41,13 +47,13 @@
   "devDependencies": {
     "@eslint/js": "^9.39.4",
     "@types/node": "24.12.4",
-    "@types/react": "19.2.15",
+    "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
     "eslint": "^9.39.4",
-    "eslint-config-next": "16.2.6",
-    "happy-dom": "^20.9.0",
+    "eslint-config-next": "16.2.9",
+    "happy-dom": "^20.10.6",
     "typescript": "6.0.3",
-    "vitest": "4.1.7"
+    "vitest": "4.1.9"
   },
   "engines": {
     "node": ">=24.0.0 <25.0.0",
