@@ -425,7 +425,7 @@ Shape:
 }
 ```
 
-The Agent Kit hook blocks execution when this same intent already exists, when the recorded business evaluation cannot be attested, when the transfer envelope is changed, or when the transfer amount exceeds the plan policy maximum. A Provider Documentation incentive and a Delegate UM incentive can both settle for the same `umRequestId` because their `businessPolicyId` values produce different intent ids.
+The Agent Kit `AbstractPolicy` blocks execution when this same intent already exists, when the recorded business evaluation cannot be attested, when the transfer envelope is changed, or when the transfer amount exceeds the plan policy maximum. A Provider Documentation incentive and a Delegate UM incentive can both settle for the same `umRequestId` because their `businessPolicyId` values produce different intent ids.
 
 ## FHIR/PAS Expectations
 

@@ -479,7 +479,7 @@ const paymentPolicy: PolicySummary = {
   id: "hedera-agent-policy-acme-health-ppo",
   title: "Acme Health PPO Agent Kit Settlement Policy",
   category: "hedera",
-  source: "Firestore paymentPolicies + @hashgraph/hedera-agent-kit hook",
+  source: "Firestore paymentPolicies + @hashgraph/hedera-agent-kit AbstractPolicy",
   appliesTo: "Acme Health PPO autonomous settlements",
   payoutOrControl: "HBAR settlement, max 5 per request",
   status: "Active",

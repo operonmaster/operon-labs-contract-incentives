@@ -1,4 +1,4 @@
-import { AgentMode, HederaAgentAPI, AbstractHook, type Context, type PreToolExecutionParams } from "@hashgraph/hedera-agent-kit";
+import { AgentMode, HederaAgentAPI, AbstractPolicy, type Context, type PreToolExecutionParams } from "@hashgraph/hedera-agent-kit";
 import { coreAccountPlugin, coreAccountPluginToolNames } from "@hashgraph/hedera-agent-kit/plugins";
 import { Client, PrivateKey } from "@hiero-ledger/sdk";
 import { createHash } from "node:crypto";
@@ -163,8 +163,9 @@ export interface BusinessEvaluationAttestationStore {
 export const hederaAgentKitPolicyRuntime = {
   packageName: "@hashgraph/hedera-agent-kit",
   mode: "AUTONOMOUS",
+  policyBaseClass: "AbstractPolicy",
   allowedTools: [coreAccountPluginToolNames.TRANSFER_HBAR_TOOL],
-  hookStages: ["pre-tool execution", "post-parameter normalization", "post-core action", "post-tool execution"],
+  lifecycleStages: ["pre-tool execution", "post-parameter normalization", "post-core action", "post-tool execution"],
   settlementModel: "pre_authorized_policy_auto_settlement"
 } as const;
 
@@ -653,7 +654,7 @@ class DefaultHederaAgentKitTransferRunner implements HederaAgentKitTransferRunne
       accountId: operatorAccountId,
       mode: AgentMode.AUTONOMOUS,
       hooks: [
-        new PolicyBoundHbarTransferHook(
+        new PolicyBoundHbarTransferPolicy(
           input,
           config,
           policyContext?.paymentIntent,
@@ -682,7 +683,7 @@ class DefaultHederaAgentKitTransferRunner implements HederaAgentKitTransferRunne
   }
 }
 
-export class PolicyBoundHbarTransferHook extends AbstractHook {
+export class PolicyBoundHbarTransferPolicy extends AbstractPolicy {
   name = "operon-policy-bound-hbar-transfer";
   description = "Blocks Hedera HBAR transfers that do not match the evaluated Operon Labs incentive policy result.";
   relevantTools = [TRANSFER_HBAR_TOOL];
@@ -699,7 +700,12 @@ export class PolicyBoundHbarTransferHook extends AbstractHook {
     super();
   }
 
-  async preToolExecutionHook(params: PreToolExecutionParams, method: string): Promise<void> {
+  protected async shouldBlockPreToolExecution(params: PreToolExecutionParams, method: string): Promise<boolean> {
+    await this.validatePreToolExecution(params, method);
+    return false;
+  }
+
+  private async validatePreToolExecution(params: PreToolExecutionParams, method: string): Promise<void> {
     if (method !== TRANSFER_HBAR_TOOL) {
       throw new Error("HEDERA_TOOL_NOT_ALLOWED");
     }

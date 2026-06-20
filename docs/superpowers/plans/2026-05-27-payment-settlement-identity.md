@@ -46,7 +46,7 @@ Add imports in `src/packages/hedera-executor/test/index.test.ts`:
 
 ```ts
 import {
-  PolicyBoundHbarTransferHook,
+  PolicyBoundHbarTransferPolicy,
   buildBusinessEvaluationId,
   buildHederaTransactionMemo,
   buildPaymentIntent,
@@ -152,7 +152,7 @@ expect(businessEvaluationStore.getAttestation).toHaveBeenCalledWith({
 });
 ```
 
-Add duplicate-boundary assertions to the hook test:
+Add duplicate-boundary assertions to the policy test:
 
 ```ts
 const providerRequest = {
@@ -1282,7 +1282,7 @@ Also state that Provider Documentation and Delegate UM can both pay for the same
 In `docs/standards/nextjs-standard.md`, replace the PA-tied canonical id standard with:
 
 ```md
-Hedera Agent Kit hooks are the settlement-control boundary, not a duplicate CRD/DTR/PAS eligibility engine. Agent Kit execution policy must use flat plan-level `paymentPolicies/{planId}` documents and deterministic tuple ids: `incentiveEvaluations/{businessEvaluationId}` from `umRequestId + businessPolicyId`, and `paymentIntents/{paymentIntentId}` / `paymentPolicyEvidences/{paymentIntentId}` from `umRequestId + businessPolicyId + paymentPolicyId`. Duplicate prevention blocks only the same triplet.
+Hedera Agent Kit `AbstractPolicy` implementations are the settlement-control boundary, not a duplicate CRD/DTR/PAS eligibility engine. Agent Kit execution policy must use flat plan-level `paymentPolicies/{planId}` documents and deterministic tuple ids: `incentiveEvaluations/{businessEvaluationId}` from `umRequestId + businessPolicyId`, and `paymentIntents/{paymentIntentId}` / `paymentPolicyEvidences/{paymentIntentId}` from `umRequestId + businessPolicyId + paymentPolicyId`. Duplicate prevention blocks only the same triplet.
 ```
 
 In Firestore and Hedera settlement scope docs, update examples to show:

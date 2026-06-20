@@ -151,7 +151,7 @@ The app blocks real HBAR settlement before network execution when:
 - real mode is missing operator credentials.
 - `HEDERA_NETWORK` is anything other than `testnet`.
 
-The Hedera Agent Kit runner also attaches an Agent Kit hook for the HBAR transfer tool. The hook rejects transfer calls that do not match the approved payment intent: recorded business evaluation, no duplicate payment intent for the same settlement triplet, single expected recipient, expected source account, expected amount/token, max plan payment amount, and expected PA/UM request memo.
+The Hedera Agent Kit runner also attaches a custom Agent Kit `AbstractPolicy` for the HBAR transfer tool. The policy rejects transfer calls that do not match the approved payment intent: recorded business evaluation, no duplicate payment intent for the same settlement triplet, single expected recipient, expected source account, expected amount/token, max plan payment amount, and expected PA/UM request memo.
 
 ## Terraform Implementation Notes
 

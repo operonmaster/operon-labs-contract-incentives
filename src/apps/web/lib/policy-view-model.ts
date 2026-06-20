@@ -201,7 +201,7 @@ export function buildHederaAgentKitPlanPolicyCards(policy: HederaAgentPlanPolicy
     id: `hedera-agent-policy-${policy.planId}`,
     title: `${policy.planName} Agent Kit Settlement Policy`,
     category: "hedera",
-    source: "Firestore paymentPolicies + @hashgraph/hedera-agent-kit hook",
+    source: "Firestore paymentPolicies + @hashgraph/hedera-agent-kit AbstractPolicy",
     appliesTo: `${policy.planName} autonomous settlements`,
     payoutOrControl: `${policy.paymentToken} settlement, max ${policy.maxPaymentAmount} per request`,
     status,

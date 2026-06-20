@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
+import { AbstractPolicy } from "@hashgraph/hedera-agent-kit";
 import {
-  PolicyBoundHbarTransferHook,
+  PolicyBoundHbarTransferPolicy,
   buildBusinessEvaluationId,
   buildHederaTransactionMemo,
   buildPaymentIntent,
@@ -552,7 +553,31 @@ describe("Hedera policy-bound payment executor", () => {
     ).toThrow("INCENTIVE_EVALUATION_ID_MISMATCH");
   });
 
-  it("uses the Agent Kit policy hook to reserve an intent and block duplicate transfers", async () => {
+  it("exposes the transfer guard as a literal Agent Kit AbstractPolicy", () => {
+    const config = {
+      mode: "real" as const,
+      network: "testnet" as const,
+      operatorAccountId: "0.0.1001",
+      operatorPrivateKey: "302e020100300506032b657004220420abcdef",
+      allowedRecipientAccountIds: ["0.0.23456"],
+      blockedRecipientAccountIds: [],
+      maxPaymentHbar: 5
+    };
+    const expectedTransfer = {
+      sourceAccountId: "0.0.1001",
+      recipientAccountId: "0.0.23456",
+      amountHbar: 5,
+      transactionMemo: caseId
+    };
+
+    const policy = new PolicyBoundHbarTransferPolicy(expectedTransfer, config);
+
+    expect(policy).toBeInstanceOf(AbstractPolicy);
+    expect(policy.name).toBe("operon-policy-bound-hbar-transfer");
+    expect(policy.relevantTools).toEqual([HEDERA_TRANSFER_HBAR_TOOL]);
+  });
+
+  it("uses the Agent Kit policy to reserve an intent and block duplicate transfers", async () => {
     const store = createInMemoryPaymentIntentStore();
     const config = {
       mode: "real" as const,
@@ -598,13 +623,13 @@ describe("Hedera policy-bound payment executor", () => {
       transactionMemo: expectedTransfer.transactionMemo
     };
 
-    await new PolicyBoundHbarTransferHook(expectedTransfer, config, paymentIntent, store).preToolExecutionHook(
+    await new PolicyBoundHbarTransferPolicy(expectedTransfer, config, paymentIntent, store).preToolExecutionHook(
       { rawParams } as never,
       HEDERA_TRANSFER_HBAR_TOOL
     );
 
     await expect(
-      new PolicyBoundHbarTransferHook(expectedTransfer, config, paymentIntent, store).preToolExecutionHook(
+      new PolicyBoundHbarTransferPolicy(expectedTransfer, config, paymentIntent, store).preToolExecutionHook(
         { rawParams } as never,
         HEDERA_TRANSFER_HBAR_TOOL
       )
@@ -628,14 +653,14 @@ describe("Hedera policy-bound payment executor", () => {
 
     expect(delegatePaymentIntent.id).not.toBe(paymentIntent.id);
     await expect(
-      new PolicyBoundHbarTransferHook(expectedTransfer, config, delegatePaymentIntent, store).preToolExecutionHook(
+      new PolicyBoundHbarTransferPolicy(expectedTransfer, config, delegatePaymentIntent, store).preToolExecutionHook(
         { rawParams } as never,
         HEDERA_TRANSFER_HBAR_TOOL
       )
     ).resolves.toBeUndefined();
   });
 
-  it("uses the Agent Kit policy hook to block wallet, amount, source, and memo tampering", async () => {
+  it("uses the Agent Kit policy to block wallet, amount, source, and memo tampering", async () => {
     const config = {
       mode: "real" as const,
       network: "testnet" as const,
@@ -651,28 +676,28 @@ describe("Hedera policy-bound payment executor", () => {
       amountHbar: 5,
       transactionMemo: caseId
     };
-    const hook = new PolicyBoundHbarTransferHook(expectedTransfer, config);
+    const policy = new PolicyBoundHbarTransferPolicy(expectedTransfer, config);
 
     await expect(
-      hook.preToolExecutionHook(
+      policy.preToolExecutionHook(
         { rawParams: { sourceAccountId: "0.0.9999", transfers: [{ accountId: "0.0.23456", amount: 5 }], transactionMemo: expectedTransfer.transactionMemo } } as never,
         HEDERA_TRANSFER_HBAR_TOOL
       )
     ).rejects.toThrow("HEDERA_POLICY_SOURCE_ACCOUNT_MISMATCH");
     await expect(
-      hook.preToolExecutionHook(
+      policy.preToolExecutionHook(
         { rawParams: { sourceAccountId: "0.0.1001", transfers: [{ accountId: "0.0.99999", amount: 5 }], transactionMemo: expectedTransfer.transactionMemo } } as never,
         HEDERA_TRANSFER_HBAR_TOOL
       )
     ).rejects.toThrow("RECIPIENT_WALLET_BLOCKED");
     await expect(
-      hook.preToolExecutionHook(
+      policy.preToolExecutionHook(
         { rawParams: { sourceAccountId: "0.0.1001", transfers: [{ accountId: "0.0.23456", amount: 6 }], transactionMemo: expectedTransfer.transactionMemo } } as never,
         HEDERA_TRANSFER_HBAR_TOOL
       )
     ).rejects.toThrow("HEDERA_PAYMENT_AMOUNT_EXCEEDS_MAX");
     await expect(
-      hook.preToolExecutionHook(
+      policy.preToolExecutionHook(
         { rawParams: { sourceAccountId: "0.0.1001", transfers: [{ accountId: "0.0.23456", amount: 5 }], transactionMemo: "tampered" } } as never,
         HEDERA_TRANSFER_HBAR_TOOL
       )
