@@ -26,6 +26,8 @@ Prior authorization often stalls because required clinical documentation is miss
 
 In this flow, a provider selects a patient, plan, and requested service, checks coverage requirements, completes payer-requested documentation, and submits a synthetic PAS-style prior authorization. The business policy rewards complete, covered requests and blocks missing documentation or non-covered benefits. The payment policy then enforces HBAR settlement limits, including a plan-level maximum that can block a business-approved incentive when the requested transfer is too large.
 
+Regulatory context: this use case supports 2024 CMS Interoperability and Prior Authorization Final Rule (CMS-0057-F) compliance readiness for non-drug items and services. It demonstrates coverage requirement discovery, documentation requirement collection, PAS-style prior authorization submission, payer-specific denial reasons, and auditable policy evidence that can help organizations operationalize CMS-0057-F prior authorization API workflows.
+
 Demo links:
 
 - https://contract-incentives.demo.labs.operon.cloud/provider-documentation - provider prior-authorization workflow
@@ -49,6 +51,8 @@ Demo links:
 Approval is not the end of a specialty medication workflow. After a pharmacy-benefit PA is approved, delays can still occur during intake, benefits checks, prescription validation, shipment scheduling, delivery confirmation, or exception handling.
 
 In this flow, an approved pharmacy PA becomes a specialty fulfillment case. The specialty pharmacy progresses through intake, clear-to-fill, shipment, and fulfillment checkpoints. The business policy rewards clean post-approval fulfillment execution and documents external blockers separately from avoidable exceptions. Payment is only attempted for qualifying fulfillment events and remains subject to the same HBAR transfer guardrails.
+
+Regulatory context: this use case supports readiness for the 2026 CMS Interoperability Standards and Prior Authorization for Drugs Proposed Rule (CMS-0062-P). It connects drug-related prior authorization, documentation requirements, decision timeframes, denial-reason transparency, and public reporting concepts to a concrete specialty pharmacy workflow with policy-controlled incentives.
 
 Demo links:
 
@@ -84,7 +88,7 @@ src/
   packages/um-platform/      Synthetic CRD/DTR/PAS prior-auth platform
 ```
 
-## Bounty Submission Links
+## Hedera Bounty Submission Links
 
 - Maintainer: Pavel Grebenshikov (`operonmaster`)
 - Public repository: https://github.com/operonmaster/operon-labs-contract-incentives
