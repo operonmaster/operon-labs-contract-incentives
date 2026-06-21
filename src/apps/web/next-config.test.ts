@@ -10,4 +10,22 @@ describe("web dev server config", () => {
     expect(nextConfig.output).toBe("standalone");
     expect(nextConfig.outputFileTracingRoot).toMatch(/operon-labs-contract-incentives$/);
   });
+
+  it("sets baseline HTTP security headers for every route", async () => {
+    expect(nextConfig.poweredByHeader).toBe(false);
+
+    const headerRules = await nextConfig.headers?.();
+    const allRoutesRule = headerRules?.find((rule) => rule.source === "/:path*");
+    const headers = Object.fromEntries((allRoutesRule?.headers ?? []).map((header) => [header.key, header.value]));
+
+    expect(headers).toMatchObject({
+      "X-Content-Type-Options": "nosniff",
+      "Referrer-Policy": "strict-origin-when-cross-origin",
+      "X-Frame-Options": "DENY",
+      "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
+      "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+    });
+    expect(headers["Content-Security-Policy"]).toContain("frame-ancestors 'none'");
+    expect(headers["Content-Security-Policy"]).toContain("object-src 'none'");
+  });
 });

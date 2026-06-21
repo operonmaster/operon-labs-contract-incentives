@@ -21,3 +21,13 @@ yarn-error.log*
 
 docs/superpowers
 .superpowers
+
+.claude/
+Makefile
+cloudbuild-*.yaml
+run-local-server.sh
+scripts/ci/
+*.tfvars
+*.tfstate
+*.tfstate.*
+.terraform/
